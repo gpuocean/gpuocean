@@ -30,9 +30,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import numpy as np
 import gc
 
-from SWESimulators import Common, SimWriter, SimReader
-from SWESimulators import Simulator
-from SWESimulators import WindStress
+from gpuocean.utils import Common, SimWriter, SimReader, WindStress
+from gpuocean.SWEsimulators import Simulator
    
 
 class FBL(Simulator.Simulator):

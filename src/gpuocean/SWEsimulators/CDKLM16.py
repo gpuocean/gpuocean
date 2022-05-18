@@ -31,11 +31,9 @@ import gc
 import logging
 from scipy.interpolate import interp2d
 
-from SWESimulators import Common, SimWriter, SimReader
-from SWESimulators import Simulator
-from SWESimulators import WindStress
-from SWESimulators import OceanStateNoise
-from SWESimulators import OceanographicUtilities
+from gpuocean.utils import Common, SimWriter, SimReader, WindStress
+from gpuocean.SWEsimulators import Simulator, OceanStateNoise
+from gpuocean.utils import OceanographicUtilities
 
 
 # Needed for the random perturbation of the wind forcing:

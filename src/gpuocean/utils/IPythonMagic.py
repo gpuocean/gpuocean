@@ -29,7 +29,7 @@ from IPython.core import magic_arguments
 from IPython.core.magic import line_magic, Magics, magics_class
 import pycuda.driver as cuda
 
-from SWESimulators import Common
+from gpuocean.utils import Common
 
 
 

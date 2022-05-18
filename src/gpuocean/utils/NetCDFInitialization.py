@@ -31,7 +31,7 @@ from netCDF4 import Dataset
 import pyproj
 from scipy.ndimage.morphology import binary_erosion, grey_dilation
 
-from SWESimulators import Common, WindStress, OceanographicUtilities
+from gpuocean.utils import Common, WindStress, OceanographicUtilities
 
 
 def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data):

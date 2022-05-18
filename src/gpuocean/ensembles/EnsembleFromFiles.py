@@ -34,16 +34,10 @@ import os, sys, datetime
 
 import pycuda.driver as cuda
 
-from SWESimulators import BaseOceanStateEnsemble
-from SWESimulators import Common
-from SWESimulators import CDKLM16
-from SWESimulators import Observation
-from SWESimulators import DataAssimilationUtils as dautils
-from SWESimulators import Observation
-from SWESimulators import SimReader 
-from SWESimulators import ParticleInfo
-
-
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.utils import Common, ParticleInfo, Observation, SimReader
+from gpuocean.ensembles import BaseOceanStateEnsemble
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
 try:
     from importlib import reload

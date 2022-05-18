@@ -29,8 +29,6 @@ import numpy as np
 import time
 import logging
 
-#from SWESimulators import Common, OceanStateNoise, config, EnsemblePlot
-
 class EnKFOcean:
     """
     This class implements the Stochastic Ensemble Kalman Filter in square-root formulation

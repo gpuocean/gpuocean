@@ -26,9 +26,8 @@ import numpy as np
 import scipy
 import time
 import logging
-from SWESimulators import DataAssimilationUtils as dautils
 
-#from SWESimulators import Common, OceanStateNoise, config, EnsemblePlot
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
 class ETKFOcean:
     """

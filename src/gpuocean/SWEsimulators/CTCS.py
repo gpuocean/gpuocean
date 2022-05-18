@@ -33,9 +33,8 @@ import numpy as np
 import gc
 import pycuda.driver as cuda
 
-from SWESimulators import Common, SimWriter, SimReader
-from SWESimulators import Simulator
-from SWESimulators import WindStress
+from gpuocean.utils import Common, SimWriter, SimReader, WindStress
+from gpuocean.SWEsimulators import Simulator
 
 import time
 

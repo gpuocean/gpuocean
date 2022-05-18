@@ -31,12 +31,11 @@ import numpy as np
 import time
 import abc
 
-from SWESimulators import CDKLM16
-from SWESimulators import GPUDrifterCollection
-from SWESimulators import BaseOceanStateEnsemble
-from SWESimulators import Common
-from SWESimulators import WindStress
-from SWESimulators import DataAssimilationUtils as dautils
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.drifters import GPUDrifterCollection
+from gpuocean.utils import Common, WindStress
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
+from gpuocean.ensembles import BaseOceanStateEnsemble
 
 
 class WindForcingEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):

@@ -33,12 +33,11 @@ import warnings
 
 import pycuda.driver as cuda
 
-from SWESimulators import CDKLM16
-from SWESimulators import GPUDrifterCollection
-from SWESimulators import WindStress
-from SWESimulators import Common
-from SWESimulators import DataAssimilationUtils as dautils
-from SWESimulators import BaseOceanStateEnsemble
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.drifters import GPUDrifterCollection
+from gpuocean.utils import Common, WindStress
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
+from gpuocean.ensembles import BaseOceanStateEnsemble
 
 
 class OceanNoiseEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):

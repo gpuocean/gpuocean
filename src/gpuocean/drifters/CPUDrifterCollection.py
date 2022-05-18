@@ -27,8 +27,8 @@ import matplotlib.gridspec as gridspec
 import numpy as np
 import time
 
-from SWESimulators import Common
-from SWESimulators import BaseDrifterCollection
+from gpuocean.utils import Common
+from gpuocean.drifters import BaseDrifterCollection
 
 class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
     """

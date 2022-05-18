@@ -29,9 +29,9 @@ import numpy as np
 import pandas as pd
 
 
-from SWESimulators import CDKLM16
-from SWESimulators import GPUDrifterCollection
-from SWESimulators import DataAssimilationUtils as dautils
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.drifters import GPUDrifterCollection
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
 
 

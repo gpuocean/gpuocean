@@ -33,9 +33,8 @@ from pycuda.curandom import XORWOWRandomNumberGenerator
 
 import gc
 
-from SWESimulators import Common
-from SWESimulators import config
-from SWESimulators import FBL, CTCS
+from gpuocean.utils import Common, config
+
 
 class OceanStateNoise(object):
     """

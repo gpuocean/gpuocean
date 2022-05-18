@@ -30,11 +30,11 @@ import numpy as np
 import time
 import abc
 
-from SWESimulators import CDKLM16
-from SWESimulators import CPUDrifterCollection
-from SWESimulators import Common
-from SWESimulators import DataAssimilationUtils as dautils
-from SWESimulators import BaseDrifterEnsemble
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.utils import Common
+from gpuocean.ensembles import BaseDrifterEnsemble
+from gpuocean.drifters import CPUDrifterCollection
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
 
 class CPUDrifterEnsemble(BaseDrifterEnsemble.BaseDrifterEnsemble):

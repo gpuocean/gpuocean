@@ -29,8 +29,8 @@ import numpy as np
 import time
 import abc
 
-from SWESimulators import Common
-from SWESimulators import DataAssimilationUtils as dautils
+from gpuocean.utils import Common
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
 class BaseDrifterCollection(object):    
     """

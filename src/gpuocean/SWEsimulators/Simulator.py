@@ -28,7 +28,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import numpy as np
 import pycuda
 import pycuda.driver as cuda
-from SWESimulators import Common, SimWriter
+
+from gpuocean.utils import Common, SimWriter
+
 import gc
 from abc import ABCMeta, abstractmethod
 import logging

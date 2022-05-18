@@ -28,9 +28,8 @@ import numpy as np
 import time
 import pycuda.driver as cuda
 
-from SWESimulators import Common
-from SWESimulators import WindStress
-from SWESimulators import BaseDrifterCollection
+from gpuocean.utils import Common, WindStress
+from gpuocean.drifters import BaseDrifterCollection
 
 class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
     def __init__(self, gpu_ctx, numDrifters, \

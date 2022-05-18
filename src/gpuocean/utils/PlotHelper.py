@@ -31,7 +31,8 @@ from matplotlib.colors import Normalize
 import numpy as np
 import time
 import re
-from SWESimulators import OceanographicUtilities
+
+from gpuocean.utils import OceanographicUtilities
 
 """
 Class that makes plotting faster by caching the plots instead of recreating them

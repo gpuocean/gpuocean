@@ -30,14 +30,11 @@ import warnings
 
 import pycuda.driver as cuda
 
-from SWESimulators import CDKLM16
-from SWESimulators import GPUDrifterCollection
-from SWESimulators import OceanNoiseEnsemble
-from SWESimulators import BaseOceanStateEnsemble
-from SWESimulators import Common
-from SWESimulators import DoubleJetCase
-from SWESimulators import DataAssimilationUtils as dautils
-
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.utils import Common, DoubleJetCase
+from gpuocean.ensembles import BaseOceanStateEnsemble, OceanNoiseEnsemble
+from gpuocean.drifters import GPUDrifterCollection
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
 
 try:

@@ -30,9 +30,10 @@ from mpi4py import MPI
 import gc, os, time
 import json
 
-from SWESimulators import OceanModelEnsemble, Common, Observation, OceanStateNoise
-from SWESimulators import DataAssimilationUtils as dautils
-
+from gpuocean.SWEsimulators import CDKLM16, OceanStateNoise
+from gpuocean.utils import Common, Observation
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
+from gpuocean.ensembles import OceanModelEnsemble
 
 class MPIOceanModelEnsemble:
     """

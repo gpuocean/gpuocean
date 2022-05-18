@@ -99,9 +99,6 @@ class ImportTests(unittest.TestCase):
     def test_import_utils_EnsemblePlot(self):
         from gpuocean.utils import EnsemblePlot
         
-    def test_import_utils_IPythonMagic(self):
-        from gpuocean.utils import IPythonMagic
-        
     def test_import_utils_NetCDFInitialization(self):
         from gpuocean.utils import NetCDFInitialization
         

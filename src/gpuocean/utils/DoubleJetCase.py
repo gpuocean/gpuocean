@@ -34,7 +34,8 @@ if scipy.__version__.startswith('1.4'):
 else:
     from scipy.integrate._quadrature import AccuracyWarning
     
-from SWESimulators import CDKLM16, Common
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.utils import Common
 
 class DoubleJetPerturbationType:
     """

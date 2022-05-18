@@ -25,8 +25,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys, os, json, datetime, time
 import numpy as np
-from SWESimulators import CDKLM16, Common, DoubleJetCase, GPUDrifterCollection, Observation
 
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.utils import Common, DoubleJetCase, Observation
+from gpuocean.drifters import GPUDrifterCollection
 
 
 def generateTruth(gpu_ctx, destination_dir, 

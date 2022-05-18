@@ -30,7 +30,8 @@ import datetime
 from netCDF4 import Dataset
 import matplotlib.pyplot as plt
 from matplotlib import animation, rc
-from SWESimulators import PlotHelper, Common
+
+from gpuocean.utils import PlotHelper, Common
 
 
 class SimNetCDFReader:

@@ -44,7 +44,6 @@ import pycuda.driver as cuda
 
 import warnings
 import functools
-from SWESimulators import WindStress
 
 
 
@@ -776,50 +775,6 @@ class SWEDataArakawaC:
         self.hu1.release()
         self.hv1.release()
 
-@deprecated
-def WindStressParams(type=99, # "no wind" \
-                 tau0=0, rho=0, alpha=0, xm=0, Rc=0, \
-                 x0=0, y0=0, \
-                 u0=0, v0=0, \
-                 wind_speed=0, wind_direction=0):
-    """
-    Backward compatibility function to avoid rewriting old code and notebooks.
-    
-    SHOULD NOT BE USED IN NEW CODE! Make WindStress object directly instead.
-    """
-    
-    type_ = np.int32(type)
-    tau0_ = np.float32(tau0)
-    rho_ = np.float32(rho)
-    rho_air_ = np.float32(1.3) # new parameter
-    alpha_ = np.float32(alpha)
-    xm_ = np.float32(xm)
-    Rc_ = np.float32(Rc)
-    x0_ = np.float32(x0)
-    y0_ = np.float32(y0)
-    u0_ = np.float32(u0)
-    v0_ = np.float32(v0)
-    wind_speed_ = np.float32(wind_speed)
-    wind_direction_ = np.float32(wind_direction)
-    
-    if type == 0:
-        wind_stress = WindStress.UniformAlongShoreWindStress( \
-            tau0=tau0_, rho=rho_, alpha=alpha_)
-    elif type == 1:
-        wind_stress = WindStress.BellShapedAlongShoreWindStress( \
-            xm=xm_, tau0=tau0_, rho=rho_, alpha=alpha_)
-    elif type == 2:
-        wind_stress = WindStress.MovingCycloneWindStress( \
-            Rc=Rc_, x0=x0_, y0=y0_, u0=u0_, v0=v0_)
-    elif type == 50:
-        wind_stress = WindStress.GenericUniformWindStress( \
-            rho_air=rho_air_, wind_speed=wind_speed_, wind_direction=wind_direction_)
-    elif type == 99:
-        wind_stress = WindStress.NoWindStress()
-    else:
-        raise RuntimeError('Invalid wind stress type!')
-    
-    return wind_stress
 
 class BoundaryConditions:
     """

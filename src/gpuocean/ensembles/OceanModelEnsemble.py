@@ -25,7 +25,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import numpy as np
 import logging
 
-from SWESimulators import CDKLM16, Common, GPUDrifterCollection, BaseOceanStateEnsemble, ParticleInfo, Observation
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.drifters import GPUDrifterCollection
+from gpuocean.utils import Common, ParticleInfo, Observation
+from gpuocean.ensembles import BaseOceanStateEnsemble
 
 class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
     """

@@ -31,7 +31,7 @@ import matplotlib.gridspec as gridspec
 import numpy as np
 import time
 
-from SWESimulators import Common
+from gpuocean.utils import Common
 
 class ObservationType:
     """

@@ -42,7 +42,8 @@ from scipy.special import lambertw, gammainc
 from scipy.optimize import newton
 import logging
 
-from SWESimulators import Common, OceanStateNoise, config, EnsemblePlot
+from gpuocean.utils import Common, config, EnsemblePlot
+from gpuocean.SWEsimulators import OceanStateNoise
 
 class IEWPFOcean:
     """

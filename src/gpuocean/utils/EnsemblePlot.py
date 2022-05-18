@@ -28,8 +28,8 @@ import matplotlib.gridspec as gridspec
 import numpy as np
 import time
 
-from SWESimulators import Common
-from SWESimulators import DataAssimilationUtils as dautils
+from gpuocean.utils import Common
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
 def _updateMinMax(eta, hu, hv, fieldRanges):
     """
