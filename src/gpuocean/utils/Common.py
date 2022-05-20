@@ -425,7 +425,7 @@ class CUDAContext(object):
         options_hash = options_hasher.hexdigest()
         options_hasher = None
         root, ext = os.path.splitext(kernel_filename)
-        kernel_path = os.path.abspath(os.path.join(self.module_path, "gpu_kernels", kernel_filename))
+        kernel_path = os.path.abspath(os.path.join(self.module_path, "..", "gpu_kernels", kernel_filename))
         kernel_hash = root \
                 + "_" + CUDAContext.hash_kernel( \
                     kernel_path, \
@@ -1328,7 +1328,7 @@ class Bathymetry:
         self.Bm = CUDAArray2D(gpu_stream, nx, ny, halo_x, halo_y, Bm_host)
 
         # Load kernel for finding Bm from Bi
-        self.initBm_kernel = gpu_ctx.get_kernel("initBm_kernel.cu", defines={'block_width': block_width, 'block_height': block_height})
+        self.initBm_kernel = gpu_ctx.get_kernel("initHm_kernel.cu", defines={'block_width': block_width, 'block_height': block_height})
 
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.initBm = self.initBm_kernel.get_function("initBm")
