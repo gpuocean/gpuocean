@@ -254,6 +254,9 @@ def minmodX(eta, theta=1.3):
     
 def rescaleMidpoints(data, nx1, ny1, **kwargs):
     ny0, nx0 = data.shape
+
+    nx1 = int(nx1)
+    ny1 = int(ny1)
     
     if (nx0 > nx1 and ny0 > ny1):
         # Subsample - non volume preserving        
@@ -304,7 +307,10 @@ def rescaleMidpoints(data, nx1, ny1, **kwargs):
 
 def rescaleIntersections(data, nx1, ny1, **kwargs):
     ny0, nx0 = data.shape
-        
+
+    nx1 = int(nx1)
+    ny1 = int(ny1)
+
     if (nx0 > nx1 and ny0 > ny1):
         # Subsample - using linear interpolation
         x0 = np.linspace(0, nx0-1, nx0)
