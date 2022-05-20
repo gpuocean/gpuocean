@@ -99,6 +99,9 @@ class ImportTests(unittest.TestCase):
     def test_import_utils_EnsemblePlot(self):
         from gpuocean.utils import EnsemblePlot
         
+    def test_import_utils_GPUOcean_runDeterministic(self):
+        from gpuocean.utils import GPUOcean_runDeterministic
+        
     def test_import_utils_NetCDFInitialization(self):
         from gpuocean.utils import NetCDFInitialization
         
