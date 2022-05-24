@@ -11,7 +11,7 @@ import pyproj
 
 #For GPUOcean
 from gpuocean.SWEsimulators import CDKLM16
-from gpuocean.utils import Common, NetCDFInitialization, Observation, PlotHelper
+from gpuocean.utils import Common, IPythonMagic, PlotHelper, NetCDFInitialization, Observation
 from gpuocean.drifters import GPUDrifterCollection
 from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
@@ -226,7 +226,8 @@ def simulate_gpuocean_deterministic(source_url, domain, initx, inity,
                                     sim_args, norkyst_data = True, erode_land = 1, 
                                     wind_drift_factor = 0.0, rescale=0,
                                     forecast_file = None, start_forecast_hours = 0, duration = 23, 
-                                    ocean_state_file = None, netcdf_frequency = 5 ):
+                                    ocean_state_file = None, netcdf_frequency = 5,
+                                    reduced_gravity_interface=0.0):
     """
     source_url: url or local file or list of either with fielddata in NetCDF-format
     domain: array/list on form [x0,x1,y0,y1] defining the domain for the simulation
@@ -249,7 +250,8 @@ def simulate_gpuocean_deterministic(source_url, domain, initx, inity,
     
     #Create simulator
     data_args = NetCDFInitialization.getInitialConditions(source_url, domain[0], domain[1], domain[2],domain[3] , 
-                     timestep_indices = None,norkyst_data = norkyst_data, erode_land = erode_land, download_data = False)
+                     timestep_indices = None,norkyst_data = norkyst_data, erode_land = erode_land, download_data = False, 
+                     reduced_gravity_interface=reduced_gravity_interface)
     
     if wind_drift_factor:
         wind_data = data_args.pop('wind', None)
