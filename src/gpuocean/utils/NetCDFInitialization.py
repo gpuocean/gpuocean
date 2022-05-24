@@ -34,7 +34,7 @@ from scipy.ndimage.morphology import binary_erosion, grey_dilation
 from gpuocean.utils import Common, WindStress, OceanographicUtilities
 
 
-def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data):
+def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data, reduced_gravity_interface=0.0):
     """
     timestep_indices => index into netcdf-array, e.g. [1, 3, 5]
     timestep => time at timestep, e.g. [1800, 3600, 7200]
@@ -86,29 +86,35 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
 
                 h = H + zeta
                 
-                if norkyst_data:
-                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
-                    hu = hu.filled(0) #zero on land
-                else: 
-                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+2]
-                    hu = hu.filled(0) #zero on land
-                    hu = (hu[:,1:] + hu[:, :-1]) * 0.5
-                    
-                hu = h*hu
+                if reduced_gravity_interface == 0.0:
+                    if norkyst_data:
+                        hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
+                        hu = hu.filled(0) #zero on land
+                    else: 
+                        hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+2]
+                        hu = hu.filled(0) #zero on land
+                        hu = (hu[:,1:] + hu[:, :-1]) * 0.5   
+                    hu = h*hu
+
+                else:
+                    hu = depth_integration(ncfile, reduced_gravity_interface, x0-1, x1+1, y0-1, y1+1, "u", timestep_index)
 
                 bc_hu['north'][bc_index] = hu[-1, 1:-1]
                 bc_hu['south'][bc_index] = hu[0, 1:-1]
                 bc_hu['east'][bc_index] = hu[1:-1, -1]
                 bc_hu['west'][bc_index] = hu[1:-1, 0]
 
-                if norkyst_data:
-                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
-                    hv = hv.filled(0) #zero on land
+                if reduced_gravity_interface == 0.0:
+                    if norkyst_data:
+                        hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
+                        hv = hv.filled(0) #zero on land
+                    else:
+                        hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+2, x0-1:x1+1]
+                        hv = hv.filled(0) #zero on land
+                        hv = (hv[1:,:] + hv[:-1, :]) * 0.5
+                    hv = h*hv
                 else:
-                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+2, x0-1:x1+1]
-                    hv = hv.filled(0) #zero on land
-                    hv = (hv[1:,:] + hv[:-1, :]) * 0.5
-                hv = h*hv
+                    hv = depth_integration(ncfile, reduced_gravity_interface, x0-1, x1+1, y0-1, y1+1, "v", timestep_index)
 
                 bc_hv['north'][bc_index] = hv[-1, 1:-1]
                 bc_hv['south'][bc_index] = hv[0, 1:-1]
@@ -215,7 +221,9 @@ def getCaseLocation(casename):
         {'name': 'skagerak',       'x0':  300, 'x1':  600, 'y0':   50, 'y1':  250 },
         {'name': 'oslo',           'x0':  500, 'x1':  550, 'y0':  160, 'y1':  210 },
         {'name': 'denmark',        'x0':    2, 'x1':  300, 'y0':    2, 'y1':  300 },
-        {'name': 'lovese',         'x0': 1400, 'x1': 2034, 'y0':  450, 'y1':  769 }
+        {'name': 'lovese',         'x0': 1400, 'x1': 2034, 'y0':  450, 'y1':  769 },
+        {'name': 'barents_sea',    'x0': 2150, 'x1': 2575, 'y0':  575, 'y1':  875 },
+        {'name': 'north_sea',      'x0':   25, 'x1':  350, 'y0':  550, 'y1':  875 }
     ]
     use_case = None
     for case in cases:
@@ -295,7 +303,8 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
                          iterations=10, \
                          sponge_cells={'north':20, 'south': 20, 'east': 20, 'west': 20}, \
                          erode_land=0, 
-                         download_data=True):
+                         download_data=True,
+                         reduced_gravity_interface=0.0):
     ic = {}
     
     if type(source_url_list) is not list:
@@ -407,15 +416,26 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         eta0_dil = grey_dilation(eta0.filled(0.0), size=(3,3))
         H_m[new_water] = land_value+eps
         eta0[new_water] = eta0_dil[new_water]
-        
-    H_i, _ = OceanographicUtilities.midpointsToIntersections(H_m, land_value=land_value, iterations=iterations)
-    eta0 = eta0[1:-1, 1:-1]
-    h0 = OceanographicUtilities.intersectionsToMidpoints(H_i).filled(land_value) + eta0.filled(0.0)
+    
+    if reduced_gravity_interface == 0.0:
+        H_i, _ = OceanographicUtilities.midpointsToIntersections(H_m, land_value=land_value, iterations=iterations)
+        eta0 = eta0[1:-1, 1:-1]
+        h0 = OceanographicUtilities.intersectionsToMidpoints(H_i).filled(land_value) + eta0.filled(0.0)
+    else: 
+        H_i, _ = OceanographicUtilities.midpointsToIntersections(H_m, land_value=land_value, iterations=iterations)
+        H_i = np.ma.minimum(H_i, reduced_gravity_interface)
+        eta0 = eta0[1:-1, 1:-1]
+        print("Cut the bathymetry: no reconstruction! (depth integration ignores eta0)")
     
     #Generate physical variables
     eta0 = np.ma.array(eta0.filled(0), mask=eta0.mask.copy())
-    hu0 = np.ma.array(h0*u0, mask=eta0.mask.copy())
-    hv0 = np.ma.array(h0*v0, mask=eta0.mask.copy())
+    if reduced_gravity_interface == 0.0:
+        hu0 = np.ma.array(h0*u0, mask=eta0.mask.copy())
+        hv0 = np.ma.array(h0*v0, mask=eta0.mask.copy())
+    else:
+        hu0 = depth_integration(source_url, reduced_gravity_interface, x0, x1, y0, y1, "u")
+        hv0 = depth_integration(source_url, reduced_gravity_interface, x0, x1, y0, y1, "v")
+        print("Depth integration with trapeziodal rule, ignoring eta")
     
     #Spong cells for e.g., flow relaxation boundary conditions
     ic['sponge_cells'] = sponge_cells
@@ -435,7 +455,11 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     
     #Gravity and friction
     #FIXME: Friction coeff from netcdf?
-    ic['g'] = 9.81
+    if reduced_gravity_interface == 0.0:
+        ic['g'] = 9.81
+    else: 
+        ic['g'] = 0.1
+        print("Reduce gravity")
     ic['r'] = 3.0e-3
     
     #Physical variables
@@ -452,7 +476,11 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     # ic['f'], ic['coriolis_beta'] = OceanographicUtilities.calcCoriolisParams(OceanographicUtilities.degToRad(latitude[0, 0]))
     
     #Boundary conditions
-    ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data)
+    if reduced_gravity_interface == 0.0:
+        ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data)
+    else:
+        ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data, reduced_gravity_interface)
+        print("Depth integration with trapeziodal rule, ignoring eta")
     ic['boundary_conditions'] = Common.BoundaryConditions(north=3, south=3, east=3, west=3, spongeCells=sponge_cells)
     
     #Wind stress (shear stress acting on the ocean surface)
@@ -515,6 +543,44 @@ def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
     wind_source = WindStress.WindStress(t=np.ravel(timesteps).copy(), X=u_wind, Y=v_wind)
     
     return wind_source
+
+
+def depth_integration(source_url, interface_depth, x0, x1, y0, y1, var, timestep_index=0): 
+    """
+    depth integration of var (variable in source_url-netcdf file) 
+    for depth 0 down to interface depth using trpeziodal rule 
+    NB! the interface depth has to be a depth level in the netcdf file
+    """
+    if isinstance(source_url, str):
+        nc = Dataset(source_url)
+    else: 
+        nc = source_url
+    #prepartions 
+    nx = x1 - x0
+    ny = y1 - y0
+
+    depth = nc["depth"][:].data
+    level_idx = np.where(depth == interface_depth)[0][0]
+
+    # trapeziod average of u or v 
+    uv = nc[var][timestep_index,:,y0:y1, x0:x1]
+    uv_hat = (uv[:level_idx] + uv[1:level_idx+1])/2
+
+    # depth steps and restructuring to the same dimensions as uv_hat
+    depth_diff = depth[1:level_idx+1] - depth[:level_idx]
+    for dd_idx in range(len(depth_diff)):
+        if dd_idx == 0:
+            dd_xy = np.full((ny,nx),depth_diff[dd_idx])[np.newaxis,:,:]
+        else:
+            dd_xy = np.concatenate((dd_xy, np.full((ny,nx),depth_diff[dd_idx])[np.newaxis,:,:]), axis=0 )
+
+    huv = np.ma.sum(dd_xy * uv_hat, axis=0)
+
+    if isinstance(source_url, str):
+        nc.close()
+    
+    return huv
+
 
 def rescaleInitialConditions(old_ic, scale):
     ic = copy.deepcopy(old_ic)
