@@ -29,10 +29,8 @@ import gc
 
 from testUtils import *
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../')))
-
-from SWESimulators import Common, CDKLM16
-
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.utils import Common
 
 class CDKLM16test(unittest.TestCase):
 
@@ -386,7 +384,7 @@ class CDKLM16test(unittest.TestCase):
         
         # Defining coriolis parameters and accounting for ghost cells:
         beta = 1e-6
-        self.f = 0.01 - 2*beta*self.dy
+        self.f = 0.01 + 2*beta*self.dy
         
         addCentralBump(self.eta0, self.nx, self.ny, self.dx, self.dy, self.validDomain)
         self.sim = CDKLM16.CDKLM16(self.gpu_ctx, \
