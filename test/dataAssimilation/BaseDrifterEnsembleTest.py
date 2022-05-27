@@ -30,11 +30,9 @@ import abc
 
 from testUtils import *
 
-sys.path.insert(0, '../')
-from SWESimulators import Common
-from SWESimulators import DataAssimilationUtils as dautils
-
-from SWESimulators import DrifterEnsemble
+from gpuocean.utils import Common
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
+from gpuocean.ensembles import DrifterEnsemble
 
 
 class BaseDrifterEnsembleTest(unittest.TestCase):
@@ -150,7 +148,7 @@ class BaseDrifterEnsembleTest(unittest.TestCase):
         self.assertEqual(defaultParticleSet.getCauchyWeight().tolist(), weights)
         
         # Check boundary condition
-        self.assertEqual(defaultParticleSet.getBoundaryConditions().get(), [1,1,1,1])
+        self.assertTrue(defaultParticleSet.getBoundaryConditions().isDefault())
         
     def test_non_default_constructor(self):
         self.set_positions_small_set()

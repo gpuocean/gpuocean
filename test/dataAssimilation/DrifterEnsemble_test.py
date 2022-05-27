@@ -30,11 +30,10 @@ import abc
 
 from testUtils import *
 
-sys.path.insert(0, '../')
-from SWESimulators import Common
-from SWESimulators import DataAssimilationUtils as dautils
+from gpuocean.utils import Common
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
-from SWESimulators import DrifterEnsemble
+from gpuocean.ensembles import DrifterEnsemble
 from dataAssimilation.BaseDrifterEnsembleTest import BaseDrifterEnsembleTest
 
 class DrifterEnsembleTest(BaseDrifterEnsembleTest):
