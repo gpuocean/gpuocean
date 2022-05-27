@@ -817,6 +817,9 @@ class BoundaryConditions:
         #New code is the following, change code calling this function to support new dict
         return {'north': self.north, 'south': self.south, 'east': self.east, 'west': self.west}
     
+    def getBCDict(self):
+        return {'north': self.north, 'south': self.south, 'east': self.east, 'west': self.west}
+    
     def getSponge(self):
         return self.spongeCells
     
@@ -837,6 +840,9 @@ class BoundaryConditions:
     
     def isPeriodicEastWest(self):
         return (self.east == 2 and self.west == 2)
+
+    def isPeriodic(self):
+        return (self.isPeriodicEastWest() and self.isPeriodicNorthSouth())
     
     
     def _toString(self, cond):
