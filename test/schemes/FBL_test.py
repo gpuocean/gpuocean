@@ -29,9 +29,9 @@ import os
 
 from testUtils import *
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../')))
+from gpuocean.SWEsimulators import FBL
+from gpuocean.utils import Common
 
-from SWESimulators import Common, FBL
 
 class FBLtest(unittest.TestCase):
 

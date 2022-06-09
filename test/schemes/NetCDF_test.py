@@ -30,9 +30,8 @@ import gc
 
 from testUtils import *
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../')))
-
-from SWESimulators import Common, CDKLM16, SimWriter, DoubleJetCase, SimReader
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.utils import Common, SimWriter, SimReader, DoubleJetCase
 
 
 class NetCDFtest(unittest.TestCase):

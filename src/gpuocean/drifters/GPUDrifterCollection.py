@@ -33,12 +33,13 @@ from gpuocean.drifters import BaseDrifterCollection
 
 class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
     def __init__(self, gpu_ctx, numDrifters, \
-                 observation_variance=0.01, wind = WindStress.WindStress(),
-                 wind_drift_factor = 0.0,\
+                 observation_variance=0.01, \
                  boundaryConditions=Common.BoundaryConditions(), \
                  initialization_cov_drifters=None, \
                  domain_size_x=1.0, domain_size_y=1.0, \
                  gpu_stream=None, \
+                 wind = WindStress.WindStress(), \
+                 wind_drift_factor = 0.0,\
                  block_width = 64):
         
         super(GPUDrifterCollection, self).__init__(numDrifters,

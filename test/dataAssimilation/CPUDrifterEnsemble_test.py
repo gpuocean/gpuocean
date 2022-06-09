@@ -29,11 +29,10 @@ import abc
 
 from testUtils import *
 
-sys.path.insert(0, '../')
-from SWESimulators import Common
-from SWESimulators import DataAssimilationUtils as dautils
+from gpuocean.utils import Common
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
-from SWESimulators import CPUDrifterEnsemble
+from gpuocean.ensembles import CPUDrifterEnsemble
 from dataAssimilation.BaseDrifterEnsembleTest import BaseDrifterEnsembleTest
 
 class CPUDrifterEnsembleTest(BaseDrifterEnsembleTest):

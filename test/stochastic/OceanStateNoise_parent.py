@@ -29,9 +29,8 @@ import pycuda.driver as cuda
 
 from testUtils import *
 
-sys.path.insert(0, '../')
-from SWESimulators import Common
-from SWESimulators.OceanStateNoise import *
+from gpuocean.utils import Common
+from gpuocean.SWEsimulators.OceanStateNoise import *
 
 
 class OceanStateNoiseTestParent(unittest.TestCase):

@@ -7,8 +7,7 @@ import pycuda.driver as cuda
 
 from testUtils import *
 
-sys.path.insert(0, '../')
-from SWESimulators import Common
+from gpuocean.utils import Common
 from stochastic.RandomNumbers_test import RandomNumbersTest
 
 

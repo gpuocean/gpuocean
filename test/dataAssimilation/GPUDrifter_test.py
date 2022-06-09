@@ -28,9 +28,8 @@ import gc
 
 from testUtils import *
 
-sys.path.insert(0, '../')
-from SWESimulators import Common
-from SWESimulators.GPUDrifterCollection import *
+from gpuocean.utils import Common
+from gpuocean.drifters.GPUDrifterCollection import *
 from dataAssimilation.BaseDrifterTest import BaseDrifterTest
 
 

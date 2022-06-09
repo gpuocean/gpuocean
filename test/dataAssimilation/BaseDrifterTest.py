@@ -31,9 +31,8 @@ import abc
 
 from testUtils import *
 
-sys.path.insert(0, '../')
-from SWESimulators import Common
-from SWESimulators import DataAssimilationUtils as dautils
+from gpuocean.utils import Common
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
 
 
@@ -141,7 +140,7 @@ class BaseDrifterTest(unittest.TestCase):
         self.assertEqual(defaultDrifterSet.getDomainSizeY(), 1.0)
 
         # Check boundary condition
-        self.assertEqual(defaultDrifterSet.getBoundaryConditions().get(), [1,1,1,1])
+        self.assertTrue(defaultDrifterSet.getBoundaryConditions().isDefault())
         
     def test_non_default_constructor(self):
         self.set_positions_small_set()
@@ -162,13 +161,18 @@ class BaseDrifterTest(unittest.TestCase):
         assertListAlmostEqual(self, observation.tolist(), [0.1, 0.1], 6,
                               'non-default constructor, observation')
 
-        self.assertEqual(self.smallDrifterSet.getBoundaryConditions().get(), [2,2,2,2])
+        self.assertTrue(self.smallDrifterSet.getBoundaryConditions().isPeriodic())
 
 
     def test_set_boundary_condition(self):
         self.set_positions_small_set()
         self.smallDrifterSet.setBoundaryConditions(Common.BoundaryConditions(2,1,2,1))
-        self.assertEqual(self.smallDrifterSet.getBoundaryConditions().get(), [2,1,2,1])
+        bcDict = self.smallDrifterSet.getBoundaryConditions().getBCDict()
+        self.assertEqual(bcDict['north'], 2)
+        self.assertEqual(bcDict['east'], 1)
+        self.assertEqual(bcDict['south'], 2)
+        self.assertEqual(bcDict['west'], 1)
+        self.assertTrue(self.smallDrifterSet.getBoundaryConditions().isPeriodicNorthSouth())
 
     def test_set_drifter_positions(self):
         self.set_positions_small_set()
@@ -242,7 +246,7 @@ class BaseDrifterTest(unittest.TestCase):
         assertListAlmostEqual(self, observation.tolist(), pos.tolist(), 6,
                               'set observation, observation')
         
-        self.assertEqual(self.smallDrifterSet.getBoundaryConditions().get(), [2,2,2,2])
+        self.assertTrue(self.smallDrifterSet.getBoundaryConditions().isPeriodic())
         
         
         
@@ -388,7 +392,7 @@ class BaseDrifterTest(unittest.TestCase):
         assertListAlmostEqual(self, observation.tolist(), [0.1, 0.1], 6,
                               'copy Drifter, position observation')
         
-        self.assertEqual(copy.getBoundaryConditions().get(), [2,2,2,2])
+        self.assertTrue(copy.getBoundaryConditions().isPeriodic())
 
         self.assertEqual(copy.getDomainSizeX(), size_x)
         self.assertEqual(copy.getDomainSizeY(), size_y)

@@ -70,7 +70,7 @@ class PlotHelper:
             self.gs = gridspec.GridSpec(3, 3)
         
         ax = self.fig.add_subplot(self.gs[0, 0])
-        self.sp_eta = plt.imshow(eta1, interpolation=interpolation_type, origin='bottom', vmin=-0.05, vmax=0.05, extent=domain_extent)
+        self.sp_eta = plt.imshow(eta1, interpolation=interpolation_type, origin='lower', vmin=-0.05, vmax=0.05, extent=domain_extent)
         plt.axis('tight')
         ax.set_aspect('equal')
         plt.title('Eta')
@@ -80,14 +80,14 @@ class PlotHelper:
         self.driftersMean = plt.scatter(x=None, y=None, color='red', marker='+')
         
         ax = self.fig.add_subplot(self.gs[0, 1])
-        self.sp_u = plt.imshow(u1, interpolation=interpolation_type, origin='bottom', vmin=-1.5, vmax=1.5, extent=domain_extent)
+        self.sp_u = plt.imshow(u1, interpolation=interpolation_type, origin='lower', vmin=-1.5, vmax=1.5, extent=domain_extent)
         plt.axis('tight')
         ax.set_aspect('equal')
         plt.title('U')
         plt.colorbar()
         
         ax = self.fig.add_subplot(self.gs[0, 2])
-        self.sp_v = plt.imshow(v1, interpolation=interpolation_type, origin='bottom', vmin=-1.5, vmax=1.5, extent=domain_extent)
+        self.sp_v = plt.imshow(v1, interpolation=interpolation_type, origin='lower', vmin=-1.5, vmax=1.5, extent=domain_extent)
         plt.axis('tight')
         ax.set_aspect('equal')
         plt.title('V')
@@ -229,7 +229,7 @@ class SinglePlot:
         minValue = np.min(data)
         
         ax = self.fig.add_subplot(self.gs[0, 0])
-        self.sp_eta = plt.imshow(data, interpolation=interpolation_type, origin='bottom', vmin=minValue, vmax=maxValue, extent=domain_extent)
+        self.sp_eta = plt.imshow(data, interpolation=interpolation_type, origin='lower', vmin=minValue, vmax=maxValue, extent=domain_extent)
         plt.axis('tight')
         ax.set_aspect('equal')
         plt.title(title)
@@ -278,7 +278,7 @@ class EnsembleAnimator:
         
         ## TRUE STATE
         ax = self.fig.add_subplot(self.gs[0, 0])
-        self.true_eta = plt.imshow(eta_true, interpolation=interpolation_type, origin='bottom', vmin=-eta_abs_lim, vmax=eta_abs_lim, extent=domain_extent)
+        self.true_eta = plt.imshow(eta_true, interpolation=interpolation_type, origin='lower', vmin=-eta_abs_lim, vmax=eta_abs_lim, extent=domain_extent)
         plt.axis('tight')
         ax.set_aspect('equal')
         plt.title('True eta')
@@ -288,14 +288,14 @@ class EnsembleAnimator:
         self.true_driftersMean = plt.scatter(x=None, y=None, color='red', marker='+')
 
         ax = self.fig.add_subplot(self.gs[0, 1])
-        self.true_hu = plt.imshow(hu_true, interpolation=interpolation_type, origin='bottom', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
+        self.true_hu = plt.imshow(hu_true, interpolation=interpolation_type, origin='lower', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
         plt.axis('tight')
         ax.set_aspect('equal')
         plt.title('True hu')
         plt.colorbar()
 
         ax = self.fig.add_subplot(self.gs[0, 2])
-        self.true_hv = plt.imshow(hv_true, interpolation=interpolation_type, origin='bottom', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
+        self.true_hv = plt.imshow(hv_true, interpolation=interpolation_type, origin='lower', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
         plt.axis('tight')
         ax.set_aspect('equal')
         plt.title('True hv')
@@ -304,7 +304,7 @@ class EnsembleAnimator:
         if not self.trueStateOnly:
             # ENSEMBLE MEANS 
             ax = self.fig.add_subplot(self.gs[1, 0])
-            self.mean_eta = plt.imshow(eta_mean, interpolation=interpolation_type, origin='bottom', vmin=-eta_abs_lim, vmax=eta_abs_lim, extent=domain_extent)
+            self.mean_eta = plt.imshow(eta_mean, interpolation=interpolation_type, origin='lower', vmin=-eta_abs_lim, vmax=eta_abs_lim, extent=domain_extent)
             plt.axis('tight')
             ax.set_aspect('equal')
             plt.title('Ensemble mean eta')
@@ -314,14 +314,14 @@ class EnsembleAnimator:
             self.mean_driftersMean = plt.scatter(x=None, y=None, color='red', marker='+')
 
             ax = self.fig.add_subplot(self.gs[1, 1])
-            self.mean_hu = plt.imshow(hu_mean, interpolation=interpolation_type, origin='bottom', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
+            self.mean_hu = plt.imshow(hu_mean, interpolation=interpolation_type, origin='lower', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
             plt.axis('tight')
             ax.set_aspect('equal')
             plt.title('ensemble mean hu')
             plt.colorbar()
 
             ax = self.fig.add_subplot(self.gs[1, 2])
-            self.mean_hv = plt.imshow(hv_mean, interpolation=interpolation_type, origin='bottom', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
+            self.mean_hv = plt.imshow(hv_mean, interpolation=interpolation_type, origin='lower', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
             plt.axis('tight')
             ax.set_aspect('equal')
             plt.title('ensemble mean hv')
@@ -330,7 +330,7 @@ class EnsembleAnimator:
             
             ## ROOT MEAN-SQUARE ERROR
             ax = self.fig.add_subplot(self.gs[2, 0])
-            self.rmse_eta = plt.imshow(eta_rmse, interpolation=interpolation_type, origin='bottom', vmin=-eta_abs_lim, vmax=eta_abs_lim, extent=domain_extent)
+            self.rmse_eta = plt.imshow(eta_rmse, interpolation=interpolation_type, origin='lower', vmin=-eta_abs_lim, vmax=eta_abs_lim, extent=domain_extent)
             plt.axis('tight')
             ax.set_aspect('equal')
             plt.title('RMSE eta')
@@ -341,14 +341,14 @@ class EnsembleAnimator:
             self.rmse_driftersMean = plt.scatter(x=None, y=None, color='red', marker='+')
 
             ax = self.fig.add_subplot(self.gs[2, 1])
-            self.rmse_hu = plt.imshow(hu_rmse, interpolation=interpolation_type, origin='bottom', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
+            self.rmse_hu = plt.imshow(hu_rmse, interpolation=interpolation_type, origin='lower', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
             plt.axis('tight')
             ax.set_aspect('equal')
             plt.title('RMSE hu')
             plt.colorbar()
 
             ax = self.fig.add_subplot(self.gs[2, 2])
-            self.rmse_hv = plt.imshow(hv_rmse, interpolation=interpolation_type, origin='bottom', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
+            self.rmse_hv = plt.imshow(hv_rmse, interpolation=interpolation_type, origin='lower', vmin=-volume_transport_abs_lim, vmax=volume_transport_abs_lim, extent=domain_extent)
             plt.axis('tight')
             ax.set_aspect('equal')
             plt.title('RMSE hv')
@@ -356,7 +356,7 @@ class EnsembleAnimator:
             
             ## r = sigma / RMSE
             ax = self.fig.add_subplot(self.gs[3, 0])
-            self.r_eta = plt.imshow(eta_r, interpolation=interpolation_type, origin='bottom', vmin=r_min, vmax=r_max, extent=domain_extent)
+            self.r_eta = plt.imshow(eta_r, interpolation=interpolation_type, origin='lower', vmin=r_min, vmax=r_max, extent=domain_extent)
             plt.axis('tight')
             ax.set_aspect('equal')
             plt.title('r = sigma/RMSE (eta)')
@@ -367,14 +367,14 @@ class EnsembleAnimator:
             self.r_driftersMean = plt.scatter(x=None, y=None, color='red', marker='+')
 
             ax = self.fig.add_subplot(self.gs[3, 1])
-            self.r_hu = plt.imshow(hu_r, interpolation=interpolation_type, origin='bottom', vmin=r_min, vmax=r_max, extent=domain_extent)
+            self.r_hu = plt.imshow(hu_r, interpolation=interpolation_type, origin='lower', vmin=r_min, vmax=r_max, extent=domain_extent)
             plt.axis('tight')
             ax.set_aspect('equal')
             plt.title('r = sigma/RMSE (hu)')
             plt.colorbar()
 
             ax = self.fig.add_subplot(self.gs[3, 2])
-            self.r_hv = plt.imshow(hv_r, interpolation=interpolation_type, origin='bottom', vmin=r_min, vmax=r_max, extent=domain_extent)
+            self.r_hv = plt.imshow(hv_r, interpolation=interpolation_type, origin='lower', vmin=r_min, vmax=r_max, extent=domain_extent)
             plt.axis('tight')
             ax.set_aspect('equal')
             plt.title('r = sigma/RMSE (hv)')

@@ -29,9 +29,9 @@ import gc
 
 from testUtils import *
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../')))
+from gpuocean.SWEsimulators import KP07
+from gpuocean.utils import Common
 
-from SWESimulators import Common, KP07
 
 class KP07test(unittest.TestCase):
 

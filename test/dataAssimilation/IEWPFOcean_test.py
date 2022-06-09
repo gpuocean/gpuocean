@@ -27,13 +27,12 @@ import gc
 
 from testUtils import *
 
-sys.path.insert(0, '../')
-from SWESimulators import Common
-from SWESimulators import CDKLM16
-from SWESimulators import OceanNoiseEnsemble
-from SWESimulators import BathymetryAndICs as BC
-from SWESimulators import DataAssimilationUtils as dautils
-from SWESimulators import IEWPFOcean
+from gpuocean.utils import Common
+from gpuocean.SWEsimulators import CDKLM16
+from gpuocean.ensembles import OceanNoiseEnsemble
+from gpuocean.utils import BathymetryAndICs as BC
+from gpuocean.dataassimilation import DataAssimilationUtils as dautils
+from gpuocean.dataassimilation import IEWPFOcean
 
 class IEWPFOceanTest(unittest.TestCase):
 

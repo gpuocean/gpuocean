@@ -29,10 +29,9 @@ import pycuda.driver as cuda
 
 from testUtils import *
 
-sys.path.insert(0, '../')
-from SWESimulators import Common
-from SWESimulators.OceanStateNoise import *
-from tests.stochastic.OceanStateNoise_parent import OceanStateNoiseTestParent
+from gpuocean.utils import Common
+from gpuocean.SWEsimulators.OceanStateNoise import *
+from stochastic.OceanStateNoise_parent import OceanStateNoiseTestParent
 
 
 class RandomNumbersTest(OceanStateNoiseTestParent):

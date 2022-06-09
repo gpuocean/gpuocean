@@ -30,10 +30,8 @@ import pycuda.driver as cuda
 
 from testUtils import *
 
-sys.path.insert(0, '../')
-from SWESimulators import Common
+from gpuocean.utils import Common
 
-#reload(GlobalParticles)
 
 class CUDAArray2DTest(unittest.TestCase):
 
