@@ -34,7 +34,7 @@ from scipy.ndimage.morphology import binary_erosion, grey_dilation
 from gpuocean.utils import Common, WindStress, OceanographicUtilities
 
 
-def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data, reduced_gravity_interface=0.0):
+def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data, reduced_gravity_interface=None):
     """
     timestep_indices => index into netcdf-array, e.g. [1, 3, 5]
     timestep => time at timestep, e.g. [1800, 3600, 7200]
@@ -86,7 +86,7 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
 
                 h = H + zeta
                 
-                if reduced_gravity_interface == 0.0:
+                if reduced_gravity_interface == None:
                     if norkyst_data:
                         hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
                         hu = hu.filled(0) #zero on land
@@ -104,7 +104,7 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
                 bc_hu['east'][bc_index] = hu[1:-1, -1]
                 bc_hu['west'][bc_index] = hu[1:-1, 0]
 
-                if reduced_gravity_interface == 0.0:
+                if reduced_gravity_interface == None:
                     if norkyst_data:
                         hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
                         hv = hv.filled(0) #zero on land
@@ -305,7 +305,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
                          sponge_cells={'north':20, 'south': 20, 'east': 20, 'west': 20}, \
                          erode_land=0, 
                          download_data=True,
-                         reduced_gravity_interface=0.0):
+                         reduced_gravity_interface=None):
     ic = {}
     
     if type(source_url_list) is not list:
@@ -418,7 +418,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         H_m[new_water] = land_value+eps
         eta0[new_water] = eta0_dil[new_water]
     
-    if reduced_gravity_interface == 0.0:
+    if reduced_gravity_interface == None:
         H_i, _ = OceanographicUtilities.midpointsToIntersections(H_m, land_value=land_value, iterations=iterations)
         eta0 = eta0[1:-1, 1:-1]
         h0 = OceanographicUtilities.intersectionsToMidpoints(H_i).filled(land_value) + eta0.filled(0.0)
@@ -426,11 +426,11 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         H_i, _ = OceanographicUtilities.midpointsToIntersections(H_m, land_value=land_value, iterations=iterations)
         H_i = np.ma.minimum(H_i, reduced_gravity_interface)
         eta0 = eta0[1:-1, 1:-1]
-        print("Cut the bathymetry: no reconstruction! (depth integration ignores eta0)")
+        print("Cut the bathymetry: no reconstruction!")
     
     #Generate physical variables
     eta0 = np.ma.array(eta0.filled(0), mask=eta0.mask.copy())
-    if reduced_gravity_interface == 0.0:
+    if reduced_gravity_interface == None:
         hu0 = np.ma.array(h0*u0, mask=eta0.mask.copy())
         hv0 = np.ma.array(h0*v0, mask=eta0.mask.copy())
     else:
@@ -456,11 +456,11 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     
     #Gravity and friction
     #FIXME: Friction coeff from netcdf?
-    if reduced_gravity_interface == 0.0:
+    if reduced_gravity_interface == None:
         ic['g'] = 9.81
     else: 
         ic['g'] = 0.1
-        print("Reduce gravity")
+        print("Reduce gravity (fixed value used)")
     ic['r'] = 3.0e-3
     
     #Physical variables
@@ -477,7 +477,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     # ic['f'], ic['coriolis_beta'] = OceanographicUtilities.calcCoriolisParams(OceanographicUtilities.degToRad(latitude[0, 0]))
     
     #Boundary conditions
-    if reduced_gravity_interface == 0.0:
+    if reduced_gravity_interface == None:
         ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data)
     else:
         ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data, reduced_gravity_interface)
