@@ -690,14 +690,14 @@ __global__ void cdklm_swe_2D(
                     tx+1, ty, bx, 
                     R, Qx, Hi,
                     coriolis_f_central, coriolis_f_right, 
-                    bc_north, bc_south, 
+                    bc_east, bc_west,
                     north)
                 - 
                 computeFFaceFlux(
                     tx , ty, bx,  
                     R, Qx, Hi,
                     coriolis_f_left, coriolis_f_central, 
-                    bc_north, bc_south, 
+                    bc_east, bc_west, 
                     north)) / DX;
     }
     __syncthreads();
@@ -787,14 +787,14 @@ __global__ void cdklm_swe_2D(
                 tx, ty+1, by, 
                 R, Qx, Hi, 
                 coriolis_f_central, coriolis_f_upper, 
-                bc_east, bc_west, 
+                bc_north, bc_south, 
                 east)
             - 
             computeGFaceFlux(
                 tx, ty, by,  
                 R, Qx, Hi, 
                 coriolis_f_lower, coriolis_f_central, 
-                bc_east, bc_west, 
+                bc_north, bc_south, 
                 east)) / DY;
         __syncthreads();
     }
