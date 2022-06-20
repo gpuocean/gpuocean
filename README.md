@@ -50,6 +50,10 @@ We recommend that you set up your python environment using the package manager C
     ```
     pip3 install --trusted-host files.pythonhosted.org --no-deps -U pycuda
     ```
+- Set the `PYTHONPATH` to find the source code:
+    ```
+    conda-develop /path/to/gpuocean/src
+    ```
 - Installing latex for plotting
     ```
     sudo apt-get install texlive-latex-base texlive-latex-extra texlive-fonts-recommended dvipng cm-super
