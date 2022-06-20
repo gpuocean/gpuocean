@@ -1,0 +1,33 @@
+# Assumes that conda, pip and build-essentials are installed
+---
+name: gpuocean
+channels:
+- conda-forge
+
+# If you update this list, please also update gpu_ocean/requirements.txt
+dependencies:
+- python=3.7
+- conda-build
+- numpy
+- matplotlib=3.3.3
+- jupyter
+- netcdf4
+- pytest
+- xmlrunner
+- scipy
+- pandas
+- pytables
+- nb_conda_kernels
+- nbdime
+- mpi4py
+- openssl
+- requests
+- pip
+- pyproj
+- pytools
+- ffmpeg
+# Activate environment and install the following packages using pip:
+# $ conda activate gpuocean
+# $ pip3 install --trusted-host files.pythonhosted.org --no-deps -U pycuda
+# on Windows: make sure your visual studio c++ compiler is available in PATH
+# PATH should have something like C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\
