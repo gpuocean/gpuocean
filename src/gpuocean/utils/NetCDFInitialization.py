@@ -736,3 +736,15 @@ def removeMetadata(old_ic):
     ic.pop('wind', None)
     
     return ic
+
+
+def removeCombinedMetadata(old_barotropic_IC, old_baroclinic_IC):
+    barotropic_IC = removeMetadata(old_barotropic_IC)
+    baroclinic_IC = removeMetadata(old_baroclinic_IC)
+
+    IC = copy.deepcopy(barotropic_IC)
+    for key in ["eta0", "hu0", "hv0", "H", "g", "boundary_conditions_data"]:
+        IC["barotropic_"+key] = IC.pop(key)
+        IC["baroclinic_"+key] = baroclinic_IC[key]
+
+    return IC
