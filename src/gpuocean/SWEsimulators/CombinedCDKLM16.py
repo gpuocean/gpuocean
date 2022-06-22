@@ -29,9 +29,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from sqlite3 import enable_shared_cache
 from xmlrpc.server import DocXMLRPCServer
 import numpy as np
-import datetime
+import datetime, copy
 import logging
-from scipy.interpolate import interp2d
 
 from gpuocean.utils import Common, SimWriter, SimReader, WindStress
 from gpuocean.SWEsimulators import Simulator, OceanStateNoise
@@ -239,10 +238,11 @@ class CombinedCDKLM16():
 
     def attachDrifters(self, drifters):
         # same as in SWEsimulators.Simlator.Simulator() 
-        self.drifters = drifters
         self.hasDrifters = True
-        self.drifters.setGPUStream(self.gpu_stream)
         self.drifter_t = 0.0
+
+        self.drifters = drifters
+        self.drifters.setGPUStream(self.gpu_stream)
 
         
     def cleanUp(self):
@@ -313,7 +313,7 @@ class CombinedCDKLM16():
 
     def drifterStep(self, dt):
         # Evolve drifters with contribution from baroclinic and barotropic sim 
-        if self.hasDrifters:
+        if self.hasDrifters and self.baroclinic_sim is not None and self.barotropic_sim is not None:
             self.drifters.drift(self.baroclinic_sim.gpu_data.h0, self.baroclinic_sim.gpu_data.hu0, \
                                 self.baroclinic_sim.gpu_data.hv0, \
                                 self.baroclinic_sim.bathymetry.Bm, \
