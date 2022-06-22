@@ -26,6 +26,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 #Import packages we need
+from sqlite3 import enable_shared_cache
+from xmlrpc.server import DocXMLRPCServer
 import numpy as np
 import datetime
 import logging
@@ -49,7 +51,7 @@ class CombinedCDKLM16():
     """
 
     def __init__(self, \
-                 gpu_ctx, \
+                 baroclinic_gpu_ctx, barotropic_gpu_ctx, \
                  barotropic_eta0, barotropic_hu0, barotropic_hv0, barotropic_H, \
                  baroclinic_eta0, baroclinic_hu0, baroclinic_hv0, baroclinic_H, \
                  nx, ny, \
@@ -136,11 +138,21 @@ class CombinedCDKLM16():
                
         self.logger = logging.getLogger(__name__)
 
+        self.baroclinic_gpu_ctx = baroclinic_gpu_ctx
+        self.barotropic_gpu_ctx = barotropic_gpu_ctx
+
+        self.nx = nx
+        self.ny = ny
+        self.dx = dx
+        self.dy = dy
+        self.boundary_conditions = boundary_conditions
+
+        self.barotropic_sim = None
         if sim_flags["barotropic"]:
-            self.barotropic_sim = CDKLM16.CDKLM16(gpu_ctx, \
+            self.barotropic_sim = CDKLM16.CDKLM16(self.barotropic_gpu_ctx, \
                  barotropic_eta0, barotropic_hu0, barotropic_hv0, barotropic_H, \
-                 nx, ny, \
-                 dx, dy, dt, \
+                 self.nx, self.ny, \
+                 self.dx, self.dy, dt, \
                  barotropic_g, f, r, \
                  subsample_f=subsample_f, \
                  angle=angle, \
@@ -151,7 +163,7 @@ class CombinedCDKLM16():
                  coriolis_beta=coriolis_beta, \
                  max_wind_direction_perturbation = max_wind_direction_perturbation, \
                  wind_stress=wind_stress, \
-                 boundary_conditions=boundary_conditions, \
+                 boundary_conditions=self.boundary_conditions, \
                  boundary_conditions_data=barotropic_boundary_conditions_data, \
                  small_scale_perturbation=small_scale_perturbation, \
                  small_scale_perturbation_amplitude=small_scale_perturbation_amplitude, \
@@ -173,14 +185,13 @@ class CombinedCDKLM16():
                  depth_cutoff = depth_cutoff, \
                  block_width=block_width, block_height=block_height, num_threads_dt=num_threads_dt,
                  block_width_model_error=block_width_model_error, block_height_model_error=block_height_model_error)
-        else:
-            self.barotropic_sim = None
-            
+
+        self.baroclinic_sim = None  
         if sim_flags["baroclinic"]:
-            self.baroclinic_sim = CDKLM16.CDKLM16(gpu_ctx, \
+            self.baroclinic_sim = CDKLM16.CDKLM16(self.baroclinic_gpu_ctx, \
                  baroclinic_eta0, baroclinic_hu0, baroclinic_hv0, baroclinic_H, \
-                 nx, ny, \
-                 dx, dy, dt, \
+                 self.nx, self.ny, \
+                 self.dx, self.dy, dt, \
                  baroclinic_g, f, r, \
                  subsample_f=subsample_f, \
                  angle=angle, \
@@ -191,7 +202,7 @@ class CombinedCDKLM16():
                  coriolis_beta=coriolis_beta, \
                  max_wind_direction_perturbation = max_wind_direction_perturbation, \
                  wind_stress=wind_stress, \
-                 boundary_conditions=boundary_conditions, \
+                 boundary_conditions=self.boundary_conditions, \
                  boundary_conditions_data=baroclinic_boundary_conditions_data, \
                  small_scale_perturbation=small_scale_perturbation, \
                  small_scale_perturbation_amplitude=small_scale_perturbation_amplitude, \
@@ -213,15 +224,28 @@ class CombinedCDKLM16():
                  depth_cutoff = depth_cutoff, \
                  block_width=block_width, block_height=block_height, num_threads_dt=num_threads_dt,
                  block_width_model_error=block_width_model_error, block_height_model_error=block_height_model_error)
-        else:
-            self.baroclinic_sim = None
-        
-        
+
+        self.gpu_stream = cuda.Stream()
+        self.barotropic_sim.gpu_stream = self.gpu_stream
+        self.baroclinic_sim.gpu_stream = self.gpu_stream
+
+        self.hasDrifters = False
+
+        self.barotropic_iters = 0
+        self.baroclinic_iters = 0
+
+        self.t = self.barotropic_sim.t # needed for drifters and they follow barotropic timestepping
+
+
+    def attachDrifters(self, drifters):
+        # same as in SWEsimulators.Simlator.Simulator() 
+        self.drifters = drifters
+        self.hasDrifters = True
+        self.drifters.setGPUStream(self.gpu_stream)
+        self.drifter_t = 0.0
+
         
     def cleanUp(self):
-        """
-        Clean up function
-        """
         if self.barotropic_sim is not None:
             self.barotropic_sim.cleanUp()
         
@@ -229,7 +253,7 @@ class CombinedCDKLM16():
             self.baroclinic_sim.cleanUp()
         
 
-    def step(self, t_end=0.0, apply_stochastic_term=True, write_now=True, update_dt=False):
+    def combinedStep(self, t_end=0.0, apply_stochastic_term=True, write_now=True, update_dt=False, trajectories=None, trajectory_dt=0.0):
         """
         Function which steps n timesteps.
         apply_stochastic_term: Boolean value for whether the stochastic
@@ -237,296 +261,100 @@ class CombinedCDKLM16():
             by adding SOAR-generated random fields using OceanNoiseState.perturbSim(...)
         """
         
-        if self.t == 0:
-            self.bc_kernel.update_bc_values(self.gpu_stream, self.t)
-            self.bc_kernel.boundaryCondition(self.gpu_stream, \
-                                             self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0)
+        if self.baroclinic_sim is not None:
+            baroclinic_t_now = 0.0
+        else:
+            baroclinic_t_now = t_end
+        if self.barotropic_sim is not None:
+            barotropic_t_now = 0.0
+        else:
+            barotropic_t_now = t_end
         
-        t_now = 0.0
-        while (t_now < t_end):
-        #for i in range(0, n):
-            # Get new random wind direction (emulationg large-scale model error)
-            if(self.max_wind_direction_perturbation > 0.0 and self.wind_stress.type() == 1):
-                # max perturbation +/- max_wind_direction_perturbation deg within original wind direction (at t=0)
-                perturbation = 2.0*(np.random.rand()-0.5) * self.max_wind_direction_perturbation;
-                new_wind_stress = WindStress.GenericUniformWindStress( \
-                    rho_air=self.wind_stress.rho_air, \
-                    wind_speed=self.wind_stress.wind_speed, \
-                    wind_direction=self.wind_stress.wind_direction + perturbation)
-                # Upload new wind stress params to device
-                cuda.memcpy_htod_async(int(self.wind_stress_dev), new_wind_stress.tostruct(), stream=self.gpu_stream)
+        while (baroclinic_t_now < t_end) or (barotropic_t_now < t_end):
                 
-            # Calculate dt if using automatic dt
-            if (update_dt):
-                self.updateDt()
-            local_dt = np.float32(min(self.dt, np.float32(t_end - t_now)))
+            # Determine which simulator is active and step
+            if baroclinic_t_now <= barotropic_t_now:
+                if (update_dt):
+                    self.baroclinic_sim.updateDt()
+                baroclinic_local_dt = np.float32(min(self.baroclinic_sim.dt, np.float32(t_end - baroclinic_t_now)))
+                barotropic_local_dt  = np.float32(0.0)
+            else:
+                baroclinic_local_dt = np.float32(0.0)
+                if (update_dt):
+                    self.barotropic_sim.updateDt()
+                barotropic_local_dt = np.float32(min(self.barotropic_sim.dt, np.float32(t_end - barotropic_t_now)))
             
-            wind_stress_t = np.float32(self.update_wind_stress(self.kernel, self.cdklm_swe_2D))
-            self.bc_kernel.update_bc_values(self.gpu_stream, self.t)
+            # Simulate step
+            if baroclinic_local_dt > 0.0:
+                self.baroclinic_sim.step(baroclinic_local_dt, apply_stochastic_term=apply_stochastic_term, write_now=False)
+                baroclinic_t_now += np.float64(baroclinic_local_dt)
+                self.baroclinic_iters += 1
+            elif barotropic_local_dt > 0.0:
+                self.barotropic_sim.step(barotropic_local_dt, apply_stochastic_term=apply_stochastic_term, write_now=False)
+                barotropic_t_now += np.float64(barotropic_local_dt)
+                self.t = self.barotropic_sim.t
+                self.barotropic_iters += 1
 
-            #self.bc_kernel.boundaryCondition(self.cl_queue, \
-            #            self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1)
-            
-            # 2nd order Runge Kutta
-            if (self.rk_order == 2):
-
-                self.callKernel(self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
-                                self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
-                                local_dt, wind_stress_t, 0)
-
-                self.bc_kernel.boundaryCondition(self.gpu_stream, \
-                        self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1)
-
-                self.callKernel(self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
-                                self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
-                                local_dt, wind_stress_t, 1)
-
-                # Applying final boundary conditions after perturbation (if applicable)
-                
-            elif (self.rk_order == 1):
-                self.callKernel(self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
-                                self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
-                                local_dt, wind_stress_t, 0)
-                                
-                self.gpu_data.swap()
-
-                # Applying boundary conditions after perturbation (if applicable)
-                
-            # 3rd order RK method:
-            elif (self.rk_order == 3):
-
-                self.callKernel(self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
-                                self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
-                                local_dt, wind_stress_t, 0)
-                
-                self.bc_kernel.boundaryCondition(self.gpu_stream, \
-                        self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1)
-
-                self.callKernel(self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
-                                self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
-                                local_dt, wind_stress_t, 1)
-
-                self.bc_kernel.boundaryCondition(self.gpu_stream, \
-                        self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1)
-
-                self.callKernel(self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
-                                self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
-                                local_dt, wind_stress_t, 2)
-                
-                # Applying final boundary conditions after perturbation (if applicable)
-            
-            # Perturb ocean state with model error
-            if self.small_scale_perturbation and apply_stochastic_term:
-                self.small_scale_model_error.perturbSim(self)
-                
-            # Apply boundary conditions
-            self.bc_kernel.boundaryCondition(self.gpu_stream, \
-                        self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0)
-            
             # Evolve drifters
-            self.drifterStep(local_dt)
+            if barotropic_local_dt > 0.0:
+                self.drifterStep(barotropic_local_dt)
+                if trajectories is not None and self.t > trajectory_dt:
+                    assert (trajectories.register_buoys == False), "Only floating drifters supported for combined sim"
+                    trajectories.add_observation_from_sim(self)
+                    trajectory_dt += trajectory_dt
+        
+        # Write to file 
+        if self.barotropic_sim.write_netcdf and self.baroclinic_sim.write_netcdf and write_now:
+            self.barotropic_sim.sim_writer.writeTimestep(self.barotropic_sim)
+            self.baroclinic_sim.sim_writer.writeTimestep(self.baroclinic_sim)
             
-            self.t += np.float64(local_dt)
-            t_now += np.float64(local_dt)
-            self.num_iterations += 1
-            
-        if self.write_netcdf and write_now:
-            self.sim_writer.writeTimestep(self)
-            
-        return self.t
+        return self.barotropic_sim.t, self.baroclinic_sim.t
+
 
     def drifterStep(self, dt):
-        # Evolve drifters
+        # Evolve drifters with contribution from baroclinic and barotropic sim 
         if self.hasDrifters:
-            self.drifters.drift(self.gpu_data.h0, self.gpu_data.hu0, \
-                                self.gpu_data.hv0, \
-                                self.bathymetry.Bm, \
-                                self.nx, self.ny, self.t, self.dx, self.dy, \
+            self.drifters.drift(self.baroclinic_sim.gpu_data.h0, self.baroclinic_sim.gpu_data.hu0, \
+                                self.baroclinic_sim.gpu_data.hv0, \
+                                self.baroclinic_sim.bathymetry.Bm, \
+                                self.nx, self.ny, self.barotropic_sim.t, self.dx, self.dy, \
+                                dt, \
+                                np.int32(2), np.int32(2)) # using more precise t from barotropic sim
+            self.drifters.drift(self.barotropic_sim.gpu_data.h0, self.barotropic_sim.gpu_data.hu0, \
+                                self.barotropic_sim.gpu_data.hv0, \
+                                self.barotropic_sim.bathymetry.Bm, \
+                                self.nx, self.ny, self.barotropic_sim.t, self.dx, self.dy, \
                                 dt, \
                                 np.int32(2), np.int32(2))
             self.drifter_t += dt
             return self.drifter_t
-        
-
-    def callKernel(self, \
-                   h_in, hu_in, hv_in, \
-                   h_out, hu_out, hv_out, \
-                   local_dt, wind_stress_t, rk_step):
-
-        #"Beautify" code a bit by packing four int8s into a single int32
-        #Note: Must match code in kernel!
-        boundary_conditions = np.int32(0)
-        boundary_conditions = boundary_conditions | np.int8(self.boundary_conditions.north) << 24
-        boundary_conditions = boundary_conditions | np.int8(self.boundary_conditions.south) << 16
-        boundary_conditions = boundary_conditions | np.int8(self.boundary_conditions.east) << 8
-        boundary_conditions = boundary_conditions | np.int8(self.boundary_conditions.west) << 0
-
-        self.cdklm_swe_2D.prepared_async_call(self.global_size, self.local_size, self.gpu_stream, \
-                           local_dt, \
-                           np.int32(rk_step), \
-                           h_in.data.gpudata, h_in.pitch, \
-                           hu_in.data.gpudata, hu_in.pitch, \
-                           hv_in.data.gpudata, hv_in.pitch, \
-                           h_out.data.gpudata, h_out.pitch, \
-                           hu_out.data.gpudata, hu_out.pitch, \
-                           hv_out.data.gpudata, hv_out.pitch, \
-                           self.bathymetry.Bi.data.gpudata, self.bathymetry.Bi.pitch, \
-                           self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
-                           self.bathymetry.mask_value,
-                           wind_stress_t, \
-                           boundary_conditions)
-            
     
-    def perturbState(self, q0_scale=1):
-        if self.small_scale_perturbation:
-            self.small_scale_model_error.perturbSim(self, q0_scale=q0_scale)
-    
-    def applyBoundaryConditions(self):
-        self.bc_kernel.boundaryCondition(self.gpu_stream, \
-                        self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0)
-    
-    def dataAssimilationStep(self, observation_time, model_error_final_step=True, write_now=True, courant_number=0.8):
-        """
-        The model runs until self.t = observation_time - self.model_time_step with model error.
-        If model_error_final_step is true, another stochastic model_time_step is performed, 
-        otherwise a deterministic model_time_step.
-        """
-        # For the IEWPF scheme, it is important that the final timestep before the
-        # observation time is a full time step (fully deterministic). 
-        # We therefore make sure to take the (potential) small timestep first in this function,
-        # followed by appropriately many full time steps.
-        
-        full_model_time_steps = int(round(observation_time - self.t)/self.model_time_step)
-        leftover_step_size = observation_time - self.t - full_model_time_steps*self.model_time_step
-
-        # Avoid a too small extra timestep
-        if leftover_step_size/self.model_time_step < 0.1 and full_model_time_steps > 1:
-            leftover_step_size += self.model_time_step
-            full_model_time_steps -= 1
-        
-        # Force leftover_step_size to zero if it is very small compared to the model_time_step
-        if leftover_step_size/self.model_time_step < 0.00001:
-            leftover_step_size = 0
-
-        assert(full_model_time_steps > 0), "There is less than CDKLM16.model_time_step until the observation"
-
-        # Start by updating the timestep size.
-        self.updateDt(courant_number=courant_number)
-            
-        # Loop standard steps:
-        for i in range(full_model_time_steps+1):
-            
-            if i == 0 and leftover_step_size == 0:
-                continue
-            elif i == 0:
-                # Take the leftover step
-                self.step(leftover_step_size, apply_stochastic_term=False, write_now=False)
-                self.perturbState(q0_scale=np.sqrt(leftover_step_size/self.model_time_step))
-
-            else:
-                # Take standard steps
-                self.step(self.model_time_step, apply_stochastic_term=False, write_now=False)
-                if (i < full_model_time_steps) or model_error_final_step:
-                    self.perturbState()
-                    
-            self.total_time_steps += 1
-            
-            # Update dt now and then
-            if self.total_time_steps % 5 == 0:
-                self.updateDt(courant_number=courant_number)
-            
-        if self.write_netcdf and write_now:
-            self.sim_writer.writeTimestep(self)
-    
-        assert(round(observation_time) == round(self.t)), 'The simulation time is not the same as observation time after dataAssimilationStep! \n' + \
-            '(self.t, observation_time, diff): ' + str((self.t, observation_time, self.t - observation_time))
-    
-    def writeState(self):        
-        if self.write_netcdf:
-            self.sim_writer.writeTimestep(self)
-        
-    
-    
-    def updateDt(self, courant_number=None):
-        """
-        Updates the time step self.dt by finding the maximum size of dt according to the 
-        CFL conditions, and scale it with the provided courant number (0.8 on default).
-        """
-        if courant_number is None:
-            courant_number = self.courant_number
-        
-        self.per_block_max_dt_kernel.prepared_async_call(self.global_size, self.local_size, self.gpu_stream, \
-                   self.nx, self.ny, \
-                   self.dx, self.dy, \
-                   self.g, \
-                   self.gpu_data.h0.data.gpudata, self.gpu_data.h0.pitch, \
-                   self.gpu_data.hu0.data.gpudata, self.gpu_data.hu0.pitch, \
-                   self.gpu_data.hv0.data.gpudata, self.gpu_data.hv0.pitch, \
-                   self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
-                   self.bathymetry.mask_value, \
-                   self.device_dt.data.gpudata, self.device_dt.pitch)
-    
-        self.max_dt_reduction_kernel.prepared_async_call((1,1),
-                                                         (self.num_threads_dt,1,1),
-                                                         self.gpu_stream,
-                                                         self.num_blocks_dt,
-                                                         self.device_dt.data.gpudata,
-                                                         self.max_dt_buffer.data.gpudata)
-
-        dt_host = self.max_dt_buffer.download(self.gpu_stream)
-        self.dt = courant_number*dt_host[0,0]
-    
-    def _getMaxTimestepHost(self, courant_number=0.8):
-        """
-        Calculates the maximum allowed time step according to the CFL conditions and scales the
-        result with the provided courant number (0.8 on default).
-        This function is for reference only, and suboptimally implemented on the host.
-        """
-        eta, hu, hv = self.download(interior_domain_only=True)
-        Hm = self.downloadBathymetry()[1][2:-2, 2:-2]
-        #print(eta.shape, Hm.shape)
-        
-        h = eta + Hm
-        gravityWaves = np.sqrt(self.g*h)
-        u = hu/h
-        v = hv/h
-        
-        max_dt = 0.25*min(self.dx/np.max(np.abs(u)+gravityWaves), 
-                          self.dy/np.max(np.abs(v)+gravityWaves) )
-        
-        return courant_number*max_dt    
-    
-    def downloadBathymetry(self, interior_domain_only=False):
-        Bi, Bm = self.bathymetry.download(self.gpu_stream)
-        
-        if interior_domain_only:
-            Bi = Bi[self.interior_domain_indices[2]:self.interior_domain_indices[0]+1,  
-               self.interior_domain_indices[3]:self.interior_domain_indices[1]+1] 
-            Bm = Bm[self.interior_domain_indices[2]:self.interior_domain_indices[0],  
-               self.interior_domain_indices[3]:self.interior_domain_indices[1]]
-               
-        return [Bi, Bm]
     
     def getLandMask(self, interior_domain_only=True):
-        if self.gpu_data.h0.mask is None:
-            return None
-        
-        if interior_domain_only:
-            return self.gpu_data.h0.mask[2:-2,2:-2]
-        else:
-            return self.gpu_data.h0.mask
+        if self.barotropic_sim is not None:
+            return self.barotropic_sim.getLandMask(interior_domain_only=interior_domain_only)
+        elif self.baroclinic_sim is not None:
+            return self.baroclinic_sim.getLandMask(interior_domain_only=interior_domain_only)
     
-    def downloadDt(self):
-        return self.device_dt.download(self.gpu_stream)
 
-    def downloadGeoEqNorm(self):
-        
-        uxpvy_cpu = self.geoEq_uxpvy.download(self.gpu_stream)
-        Kx_cpu = self.geoEq_Kx.download(self.gpu_stream)
-        Ly_cpu = self.geoEq_Ly.download(self.gpu_stream)
+    def download(self):
+        """
+        Returning 
+        * eta_combined = eta_barotropic + eta_baroclinic
+        * u_combined = u_barotropic + u_baroclinic
+        * v_combined = v_barotropic + v_baroclinic
+        for the current state of the combined simulator
+        """
+        baroclinic_eta, baroclinic_hu, baroclinic_hv = self.baroclinic_sim.download()
+        barotropic_eta, barotropic_hu, barotropic_hv = self.barotropic_sim.download()
 
-        uxpvy_norm = np.linalg.norm(uxpvy_cpu)
-        Kx_norm = np.linalg.norm(Kx_cpu)
-        Ly_norm = np.linalg.norm(Ly_cpu)
+        baroclinic_H = self.baroclinic_sim.downloadBathymetry()[1]
+        barotropic_H = self.barotropic_sim.downloadBathymetry()[1]
 
-        return uxpvy_norm, Kx_norm, Ly_norm
+        baroclinic_u = baroclinic_hu/(baroclinic_H + baroclinic_eta)
+        baroclinic_v = baroclinic_hv/(baroclinic_H + baroclinic_eta)
+
+        barotropic_u = barotropic_hu/(barotropic_H + barotropic_eta)
+        barotropic_v = barotropic_hv/(barotropic_H + barotropic_eta)
+
+        return baroclinic_eta+barotropic_eta, baroclinic_u+barotropic_u, baroclinic_v+barotropic_v
