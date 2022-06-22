@@ -246,7 +246,7 @@ def simulate_gpuocean_deterministic(source_url, domain, initx, inity,
                                     wind_drift_factor = 0.0, rescale=0,
                                     forecast_file = None, start_forecast_hours = 0, duration = 23, 
                                     ocean_state_file = None, netcdf_frequency = 5,
-                                    reduced_gravity_interface=0.0):
+                                    reduced_gravity_interface=None):
     """
     source_url: url or local file or list of either with fielddata in NetCDF-format
     domain: array/list on form [x0,x1,y0,y1] defining the domain for the simulation
