@@ -28,7 +28,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import time
 import numpy as np
 import datetime, os, copy
-from netCDF4 import Dataset
+from netCDF4 import Dataset, MFDataset
 import pyproj
 from scipy.ndimage.morphology import binary_erosion, grey_dilation
 
@@ -631,7 +631,7 @@ def getCombinedInitialConditions(source_url_list, x0, x1, y0, y1,
     # H
     if type(source_url_list) is not list:
         source_url_list = [source_url_list]
-    nc = Dataset(source_url_list[0])
+    nc = MFDataset(source_url_list)
     print("This download maybe avoided by interpolation (and using the right mask)")
     full_H  = np.ma.array(nc['h'][y0:y1, x0:x1], mask=full_eta0.mask.copy())
     upper_H = np.ma.minimum(full_H, 25.0)
