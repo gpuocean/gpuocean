@@ -55,6 +55,8 @@ class CDKLM16(Simulator.Simulator):
                  angle=np.array([[0]], dtype=np.float32), \
                  subsample_angle=10, \
                  latitude=None, \
+                 p_atm = np.array([[0]], dtype=np.float32), \
+                 rho_o = 1025.0, \
                  t=0.0, \
                  theta=1.3, rk_order=2, \
                  coriolis_beta=0.0, \
@@ -186,7 +188,8 @@ class CDKLM16(Simulator.Simulator):
                          'DX': "{:.12f}f".format(self.dx),
                          'DY': "{:.12f}f".format(self.dy),
                          'GRAV': "{:.12f}f".format(self.g),
-                         'FRIC': "{:.12f}f".format(self.r)
+                         'FRIC': "{:.12f}f".format(self.r),
+                         'RHO_O': "{:.12f}f".format(rho_o)
         }
         
         #Get kernels
@@ -211,7 +214,7 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPiffi")
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPiffPibi")
         self.update_wind_stress(self.kernel, self.cdklm_swe_2D)
         
         # CUDA functions for finding max time step size:
@@ -350,6 +353,23 @@ class CDKLM16(Simulator.Simulator):
         self.coriolis_texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
         
         
+        ## Atmospheric pressure
+        #  Note that normal pressure is 1000 hPa
+        #  High pressure systems might be at 1020 hPa, and low pressure 980 hPa.
+        #  Since the systems are large and since we are only interested in the differences,
+        #  we subtract the "normal" pressure of 1000 hPa, so that we get a range -20:20 hPa
+        self.use_p_atm = True
+        if p_atm.shape == (1, 1) and p_atm[0, 0] == 0.0:
+            self.use_p_atm = False
+        else:
+            assert(p_atm.shape == eta0.shape)
+        self.p_atm_dev = None
+        if p_atm.max() > 10000: # 10% of normal level
+            self.p_atm_dev = Common.CUDAArray2D(self.gpu_stream, p_atm.shape[1], p_atm.shape[0],
+                                                0, 0, p_atm - 100000)
+        else:
+            self.p_atm_dev = Common.CUDAArray2D(self.gpu_stream, p_atm.shape[1], p_atm.shape[0],
+                                                0, 0, p_atm)
 
         # Small scale perturbation:
         self.small_scale_perturbation = small_scale_perturbation
@@ -402,6 +422,8 @@ class CDKLM16(Simulator.Simulator):
         
         self.device_dt.release()
         self.max_dt_buffer.release()
+
+        self.p_atm_dev.release()
         
         self.gpu_ctx = None
         gc.collect()
@@ -423,7 +445,7 @@ class CDKLM16(Simulator.Simulator):
                + sim_name + " results."
         
         # read the most recent state 
-        H = sim_reader.getH();
+        H = sim_reader.getH()
         
         # get last timestep (including simulation time of last timestep)
         if time0 is None:
@@ -635,6 +657,8 @@ class CDKLM16(Simulator.Simulator):
                            self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
                            self.bathymetry.mask_value,
                            wind_stress_t, \
+                           self.p_atm_dev.data.gpudata, self.p_atm_dev.pitch,
+                           self.use_p_atm,
                            boundary_conditions)
             
     

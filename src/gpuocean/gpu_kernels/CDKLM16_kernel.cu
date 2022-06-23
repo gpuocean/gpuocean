@@ -449,6 +449,10 @@ __global__ void cdklm_swe_2D(
         //Wind stress parameters
         const float wind_stress_t_,
 
+        // P atmospheric
+        float* p_atm_ptr_, const int p_atm_pitch_,
+        const bool use_p_atm,
+
         // Boundary conditions (1: wall, 2: periodic, 3: open boundary (flow relaxation scheme))
         // Note: these are packed north, east, south, west boolean bits into an int
         const int boundary_conditions_) {
@@ -860,9 +864,25 @@ __global__ void cdklm_swe_2D(
                 const float hu_cor = right.x*hu_east_cor + right.y*hv_north_cor;
                 const float hv_cor = up.x*hu_east_cor + up.y*hv_north_cor;
 
+                // Atmospheric pressure
+                float atm_pressure_x = 0.0f;
+                float atm_pressure_y = 0.0f;
+                if (use_p_atm) {
+                    float* const p_atm_row   = (float*) ((char*) p_atm_ptr_ + p_atm_pitch_* tj);
+                    float* const p_atm_row_p = (float*) ((char*) p_atm_ptr_ + p_atm_pitch_*(tj+1));
+                    float* const p_atm_row_m = (float*) ((char*) p_atm_ptr_ + p_atm_pitch_*(tj-1));
+
+                    const float dpdx = (p_atm_row[ti+1] - p_atm_row[ti-1])/(2.0f*DX);
+                    const float dpdy = (p_atm_row_p[ti] - p_atm_row_m[ti])/(2.0f*DY);
+
+                    atm_pressure_x = -dpdx*h/RHO_O;
+                    atm_pressure_y = -dpdy*h/RHO_O;
+                }
+
+
                 // Total source terms
-                st1 = X + hu_cor + bathymetry1/DX;
-                st2 = Y + hv_cor + bathymetry2/DY;
+                st1 = X + hu_cor + atm_pressure_x + bathymetry1/DX;
+                st2 = Y + hv_cor + atm_pressure_y + bathymetry2/DY;
             }
         }
 
