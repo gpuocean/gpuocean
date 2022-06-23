@@ -451,7 +451,7 @@ __global__ void cdklm_swe_2D(
 
         // P atmospheric
         float* p_atm_ptr_, const int p_atm_pitch_,
-        const bool use_p_atm,
+        const bool use_p_atm, const float p_atm_factor,
 
         // Boundary conditions (1: wall, 2: periodic, 3: open boundary (flow relaxation scheme))
         // Note: these are packed north, east, south, west boolean bits into an int
@@ -875,8 +875,8 @@ __global__ void cdklm_swe_2D(
                     const float dpdx = (p_atm_row[ti+1] - p_atm_row[ti-1])/(2.0f*DX);
                     const float dpdy = (p_atm_row_p[ti] - p_atm_row_m[ti])/(2.0f*DY);
 
-                    atm_pressure_x = -dpdx*h/RHO_O;
-                    atm_pressure_y = -dpdy*h/RHO_O;
+                    atm_pressure_x = -p_atm_factor*dpdx*h/RHO_O;
+                    atm_pressure_y = -p_atm_factor*dpdy*h/RHO_O;
                 }
 
 

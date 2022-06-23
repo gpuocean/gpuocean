@@ -37,7 +37,8 @@ class AtmosphericPressureTest(unittest.TestCase):
             "gpu_ctx": Common.CUDAContext(),
             "nx": 500, "ny": 400, "dx": 800, "dy": 500,
             "g": 9.81, "dt": 0.0, "f": 0.0, "r": 0.0,
-            "rho_o": 1015,
+            "rho_o": 1015, 
+            "p_atm_factor_handle": lambda t: 1.0
         }
 
         self.dataShape = (self.sim_args["ny"]+4, self.sim_args["nx"]+4)
@@ -50,7 +51,7 @@ class AtmosphericPressureTest(unittest.TestCase):
         }
 
         self.sim = None
-
+        self.gradualT = 5*3600
         self.p_atm = np.ones(self.dataShape, np.float32)*100000
 
     def setBumpyP(self, balanced_eta=True):
@@ -96,6 +97,10 @@ class AtmosphericPressureTest(unittest.TestCase):
                 if balanced_eta:
                     self.init_args["eta0"][j, i] = - 4000*(fullx[i] + fully[j])/((self.sim_args["nx"] + self.sim_args["ny"]) * (self.sim_args["g"]*self.sim_args["rho_o"]))
 
+    def makeGradualP(self, a, b):
+        self.sim_args["p_atm_factor_handle"] = lambda t: min((t+a*3600)/(b*3600), 1.0)
+        
+
     def tearDown(self) -> None:
         if self.sim != None:
             self.sim.cleanUp()
@@ -110,24 +115,35 @@ class AtmosphericPressureTest(unittest.TestCase):
         gc.collect() # Force run garbage collection to free up memory
 
 
-    def check_steady_state(self, places=0):
+    def check_steady_state(self, places=0, eta_only=False, normalize_eta=False):
         eta1, hu1, hv1 = self.sim.download(interior_domain_only=True)
+        etadiff = eta1 - self.init_args["eta0"][2:-2, 2:-2]
+        if normalize_eta:
+            etadiff = eta1 - (self.init_args["eta0"][2:-2, 2:-2] - np.mean(self.init_args["eta0"][2:-2, 2:-2]))
+
         if places == 0:
-            self.assertEqual(np.abs(hu1[1:-1, 1:-1]).max(), 0, msg='Not steady state. Got np.abs(hu1).max() = '+str(np.abs(hu1).max()))
-            self.assertEqual(np.abs(hv1[1:-1, 1:-1]).max(), 0, msg='Not steady state. Got np.abs(hv1).max() = '+str(np.abs(hv1).max()))
-            etadiff = eta1 - self.init_args["eta0"][2:-2, 2:-2]
+            if not eta_only:
+                self.assertEqual(np.abs(hu1[1:-1, 1:-1]).max(), 0, msg='Not steady state. Got np.abs(hu1).max() = '+str(np.abs(hu1).max()))
+                self.assertEqual(np.abs(hv1[1:-1, 1:-1]).max(), 0, msg='Not steady state. Got np.abs(hv1).max() = '+str(np.abs(hv1).max()))
             self.assertEqual(np.abs(etadiff[1:-1, 1:-1]).max(), 0, msg='Not steady state. Got np.abs(etadiff).max() = '+str(np.abs(etadiff).max()))
             
         else:
-            self.assertAlmostEqual(np.abs(hu1[1:-1, 1:-1]).max(), 0, places=places)
-            self.assertAlmostEqual(np.abs(hv1[1:-1, 1:-1]).max(), 0, places=places)
-            etadiff = eta1 - self.init_args["eta0"][2:-2, 2:-2]
+            if not eta_only:
+                self.assertAlmostEqual(np.abs(hu1[1:-1, 1:-1]).max(), 0, places=places)
+                self.assertAlmostEqual(np.abs(hv1[1:-1, 1:-1]).max(), 0, places=places)
             self.assertAlmostEqual(np.abs(etadiff[1:-1, 1:-1]).max(), 0, places=places)
+
+
+    ###########################################################################
+    # Lake at rest - no atm pressure 
 
     def test_steady_state_lake_at_rest(self):
         self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
         self.sim.step(3600)
         self.check_steady_state()
+
+    ###########################################################################
+    # Non-zero steady states caused by atmospheric pressure 
 
     def test_steady_state_linear_x(self):
         self.setLinearXP()
@@ -152,4 +168,47 @@ class AtmosphericPressureTest(unittest.TestCase):
         self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
         self.sim.step(3600)
         self.check_steady_state(places=2)
+
+    ###########################################################################
+    # Obtaining approximate non-zero steady states through slowly changing atm pressure 
+
+    def test_create_steady_state_linear_x(self):
+        self.setLinearXP(balanced_eta=False)
+        self.makeGradualP(0, 12)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        for i in range(3600):
+            self.sim.step(24)
+        self.setLinearXP(balanced_eta=True)
+        self.check_steady_state(places=1, eta_only=True, normalize_eta=True)
+
+    def test_create_steady_state_linear_y(self):
+        self.setLinearYP(balanced_eta=False)
+        self.makeGradualP(0, 12)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        for i in range(3600):
+            self.sim.step(24)
+        self.setLinearYP(balanced_eta=True)
+        self.check_steady_state(places=1, eta_only=True, normalize_eta=True)
+
+    def test_create_steady_state_linear_diag(self):
+        self.setLinearDiagP(balanced_eta=False)
+        self.makeGradualP(0, 12)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        for i in range(3600):
+            self.sim.step(24)
+        self.setLinearDiagP(balanced_eta=True)
+        self.check_steady_state(places=1, eta_only=True, normalize_eta=True)
+
+
+    def test_create_steady_state_bumps(self):
+        self.setBumpyP()
+        self.init_args["eta0"] *= -1
+        self.makeGradualP(-10, 10)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        for i in range(3600):
+            self.sim.step(24)
+        self.setBumpyP()
+        self.check_steady_state(places=1, eta_only=True, normalize_eta=True)
+
+
 

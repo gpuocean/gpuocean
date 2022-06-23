@@ -56,6 +56,7 @@ class CDKLM16(Simulator.Simulator):
                  subsample_angle=10, \
                  latitude=None, \
                  p_atm = np.array([[0]], dtype=np.float32), \
+                 p_atm_factor_handle = lambda t: 1, \
                  rho_o = 1025.0, \
                  t=0.0, \
                  theta=1.3, rk_order=2, \
@@ -214,7 +215,7 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPiffPibi")
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPiffPibfi")
         self.update_wind_stress(self.kernel, self.cdklm_swe_2D)
         
         # CUDA functions for finding max time step size:
@@ -371,6 +372,8 @@ class CDKLM16(Simulator.Simulator):
             self.p_atm_dev = Common.CUDAArray2D(self.gpu_stream, p_atm.shape[1], p_atm.shape[0],
                                                 0, 0, p_atm)
 
+        self.p_atm_factor_handle = p_atm_factor_handle
+
         # Small scale perturbation:
         self.small_scale_perturbation = small_scale_perturbation
         self.small_scale_model_error = None
@@ -526,6 +529,8 @@ class CDKLM16(Simulator.Simulator):
                                              self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0)
         
         t_now = 0.0
+        #print("self.p_atm_factor_handle(self.t) = " + str(self.p_atm_factor_handle(self.t)))
+
         while (t_now < t_end):
         #for i in range(0, n):
             # Get new random wind direction (emulationg large-scale model error)
@@ -658,7 +663,7 @@ class CDKLM16(Simulator.Simulator):
                            self.bathymetry.mask_value,
                            wind_stress_t, \
                            self.p_atm_dev.data.gpudata, self.p_atm_dev.pitch,
-                           self.use_p_atm,
+                           self.use_p_atm, np.float32(self.p_atm_factor_handle(self.t)),
                            boundary_conditions)
             
     
