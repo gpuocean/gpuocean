@@ -236,13 +236,22 @@ class CombinedCDKLM16():
         self.t = self.barotropic_sim.t # needed for drifters and they follow barotropic timestepping
 
 
-    def attachDrifters(self, drifters):
+    def attachDrifters(self, drifters, baroclinic_drifters=None, barotropic_drifters=None):
         # same as in SWEsimulators.Simlator.Simulator() 
+        # self.drifters are drifters using combined currents
         self.hasDrifters = True
         self.drifter_t = 0.0
 
         self.drifters = drifters
         self.drifters.setGPUStream(self.gpu_stream)
+
+        # drifters only using currents from one of the sims
+        if baroclinic_drifters is not None:
+            self.baroclinic_sim.attachDrifters(baroclinic_drifters)
+
+        if barotropic_drifters is not None:
+            self.barotropic_sim.attachDrifters(barotropic_drifters)
+
 
         
     def cleanUp(self):
@@ -253,7 +262,8 @@ class CombinedCDKLM16():
             self.baroclinic_sim.cleanUp()
         
 
-    def combinedStep(self, t_end=0.0, apply_stochastic_term=True, write_now=True, update_dt=False, trajectories=None, trajectory_dt=0.0):
+    def combinedStep(self, t_end=0.0, apply_stochastic_term=True, write_now=True, update_dt=False, trajectory_dt=0.0, trajectories=None,\
+                        baroclinic_trajectories=None, barotropic_trajectories=None):
         """
         Function which steps n timesteps.
         apply_stochastic_term: Boolean value for whether the stochastic
@@ -301,7 +311,15 @@ class CombinedCDKLM16():
                 if trajectories is not None and self.t > trajectory_dt:
                     assert (trajectories.register_buoys == False), "Only floating drifters supported for combined sim"
                     trajectories.add_observation_from_sim(self)
+                    if baroclinic_trajectories is not None:
+                        try:
+                            baroclinic_trajectories.add_observation_from_sim(self.baroclinic_sim)
+                        except:
+                            pass
+                    if barotropic_trajectories is not None:
+                        barotropic_trajectories.add_observation_from_sim(self.barotropic_sim)
                     trajectory_dt += trajectory_dt
+
         
         # Write to file 
         if self.barotropic_sim.write_netcdf and self.baroclinic_sim.write_netcdf and write_now:
