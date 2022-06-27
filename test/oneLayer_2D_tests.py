@@ -41,7 +41,7 @@ from schemes.CombinedCDKLM16_test import CombinedCDKLM16test
 
 def printSupportedSchemes():
     print("Supported schemes:")
-    print("0: All, 1: FBL, 2: CTCS, 3: CDKLM16, 4: KP07, 5: NetCDF interface, 6: Conservation of mass")
+    print("0: All, 1: FBL, 2: CTCS, 3: CDKLM16, 4: KP07, 5: NetCDF interface, 6: Conservation of mass, 7: Combined CDKLM time stepping")
     
 
 if (len(sys.argv) < 2):
