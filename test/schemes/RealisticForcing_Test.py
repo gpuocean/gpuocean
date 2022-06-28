@@ -29,16 +29,17 @@ import gc
 from testUtils import *
 
 from gpuocean.SWEsimulators import CDKLM16
-from gpuocean.utils import Common
+from gpuocean.utils import Common, WindStress
 
-class AtmosphericPressureTest(unittest.TestCase):
+class RealisticForcingTest(unittest.TestCase):
     def setUp(self):
         self.sim_args = {
             "gpu_ctx": Common.CUDAContext(),
             "nx": 500, "ny": 400, "dx": 800, "dy": 500,
             "g": 9.81, "dt": 0.0, "f": 0.0, "r": 0.0,
             "rho_o": 1015, 
-            "p_atm_factor_handle": lambda t: 1.0
+            "p_atm_factor_handle": lambda t: 1.0,
+            "wind_stress": WindStress.WindStress()
         }
 
         self.dataShape = (self.sim_args["ny"]+4, self.sim_args["nx"]+4)
@@ -97,6 +98,18 @@ class AtmosphericPressureTest(unittest.TestCase):
                 if balanced_eta:
                     self.init_args["eta0"][j, i] = - 4000*(fullx[i] + fully[j])/((self.sim_args["nx"] + self.sim_args["ny"]) * (self.sim_args["g"]*self.sim_args["rho_o"]))
 
+    def setLinearWindY(self):
+        t = [0, 10*360]
+        X = [np.zeros((self.sim_args["ny"]+4,1), dtype=np.float32, order='C'),
+             np.zeros((self.sim_args["ny"]+4,1), dtype=np.float32, order='C')]
+        Y = [np.zeros((1,1),                     dtype=np.float32, order='C'),
+             np.zeros((1,1),                     dtype=np.float32, order='C')]
+        
+        # Linear wind stress
+        X[1][:,0] += np.linspace(0, 5e-4, self.sim_args["ny"]+4)
+
+        self.sim_args["wind_stress"] = WindStress.WindStress(t=t, X=X, Y=Y)
+
     def makeGradualP(self, a, b):
         self.sim_args["p_atm_factor_handle"] = lambda t: min((t+a*3600)/(b*3600), 1.0)
         
@@ -135,7 +148,7 @@ class AtmosphericPressureTest(unittest.TestCase):
 
 
     ###########################################################################
-    # Lake at rest - no atm pressure 
+    # Lake at rest - no atm pressure or wind
 
     def test_steady_state_lake_at_rest(self):
         self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
@@ -212,3 +225,16 @@ class AtmosphericPressureTest(unittest.TestCase):
 
 
 
+    ###########################################################################
+    # Check linear wind forcing
+    def test_wind_linear_y(self):
+        # To investigate bug, see following notebook:
+        # https://github.com/havahol/miscGPUOcean/blob/360848153609c2aefe8997dcac72884ecfca2d5f/atmospheric-pressure/WindTextureCheck.ipynb
+        self.setLinearWindY()
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
+        for i in range(360):
+            self.sim.step(24)
+        eta, hu, hv = self.sim.download(interior_domain_only=True)
+        for j in range(1, self.sim.ny):
+            self.assertGreaterEqual(hu[j, 100], hu[j-1, 100], "The linear wind-driven velocity flattens out")
+        
