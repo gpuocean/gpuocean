@@ -225,7 +225,8 @@ def getCaseLocation(casename):
         {'name': 'lovese',         'x0': 1400, 'x1': 2034, 'y0':  450, 'y1':  769 },
         {'name': 'barents_sea',    'x0': 2150, 'x1': 2575, 'y0':  575, 'y1':  875 },
         {'name': 'north_sea',      'x0':   25, 'x1':  350, 'y0':  550, 'y1':  875 },
-        {'name': 'vestlandskysten','x0':  350, 'x1':  850, 'y0':  550, 'y1':  850 }
+        {'name': 'vestlandskysten','x0':  350, 'x1':  850, 'y0':  550, 'y1':  850 },
+        {'name': 'sorvestlandet',  'x0':  100, 'x1':  550, 'y0':  350, 'y1':  700 }
     ]
     use_case = None
     for case in cases:
@@ -632,7 +633,8 @@ def getCombinedInitialConditions(source_url_list, x0, x1, y0, y1,
     if type(source_url_list) is not list:
         source_url_list = [source_url_list]
     nc = MFDataset(source_url_list)
-    print("This download maybe avoided by interpolation (and using the right mask)")
+    #print("This download maybe avoided by interpolation (and using the right mask)")
+    full_eta0 = np.ma.array(nc['zeta'][0,y0:y1, x0:x1])
     full_H  = np.ma.array(nc['h'][y0:y1, x0:x1], mask=full_eta0.mask.copy())
     upper_H = np.ma.minimum(full_H, 25.0)
 
@@ -648,7 +650,7 @@ def getCombinedInitialConditions(source_url_list, x0, x1, y0, y1,
 
     # Prepare boundary conditions
     # NOTE: The following download is repetitive but with the current code design likely not avoidable
-    full_eta = nc['zeta'][:, y0-1:y1+1, x0-1:x1+1]
+    full_eta = np.ma.array(nc['zeta'][:, y0-1:y1+1, x0-1:x1+1])
     
     full_H  = np.ma.array(nc['h'][y0-1:y1+1, x0-1:x1+1], mask=full_eta[0].mask.copy())
     upper_H = np.ma.minimum(full_H, reduced_gravity_interface) #CAREFUL! Ensure to use same calculation as in getInitialConditions()!!!
