@@ -25,7 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "common.cu"
-
+#include "external_forcing.cu"
 
 texture<float, cudaTextureType2D> angle_tex;
 texture<float, cudaTextureType2D> coriolis_f_tex;
