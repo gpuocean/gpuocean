@@ -33,7 +33,7 @@ import numpy as np
 import gc
 import pycuda.driver as cuda
 
-from gpuocean.utils import Common, SimWriter, SimReader, WindStress
+from gpuocean.utils import Common, SimWriter, SimReader, WindStress, AtmosphericPressure
 from gpuocean.SWEsimulators import Simulator
 
 import time
@@ -53,6 +53,7 @@ class CTCS(Simulator.Simulator):
                  coriolis_beta=0.0, \
                  y_zero_reference_cell = 0, \
                  wind_stress=WindStress.WindStress(), \
+                 atmospheric_pressure=AtmosphericPressure.AtmosphericPressure(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  write_netcdf=False, \
                  comm=None, \
@@ -76,6 +77,7 @@ class CTCS(Simulator.Simulator):
         A: Eddy viscosity coefficient (O(dx))
         t: Start simulation at time t
         coriolis_beta: Coriolis linear factor -> f = f + beta*(y-y_0)
+        atmospheric_pressure: Object with values for atmospheric pressure
         y_zero_reference_cell: The cell representing y_0 in the above, defined as the lower face of the cell .
         wind_stress: Wind stress parameters
         boundary_conditions: Boundary condition object
@@ -114,6 +116,7 @@ class CTCS(Simulator.Simulator):
                                    coriolis_beta, \
                                    y_zero_reference_cell, \
                                    wind_stress, \
+                                   atmospheric_pressure, \
                                    write_netcdf, \
                                    ignore_ghostcells, \
                                    offset_x, offset_y, \

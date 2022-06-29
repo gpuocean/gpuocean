@@ -31,7 +31,7 @@ import gc
 import logging
 from scipy.interpolate import interp2d
 
-from gpuocean.utils import Common, SimWriter, SimReader, WindStress
+from gpuocean.utils import Common, SimWriter, SimReader, WindStress, AtmosphericPressure
 from gpuocean.SWEsimulators import Simulator, OceanStateNoise
 from gpuocean.utils import OceanographicUtilities
 
@@ -63,6 +63,7 @@ class CDKLM16(Simulator.Simulator):
                  coriolis_beta=0.0, \
                  max_wind_direction_perturbation = 0, \
                  wind_stress=WindStress.WindStress(), \
+                 atmospheric_pressure=AtmosphericPressure.AtmosphericPressure(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  boundary_conditions_data=Common.BoundaryConditionsData(), \
                  small_scale_perturbation=False, \
@@ -109,6 +110,7 @@ class CDKLM16(Simulator.Simulator):
         coriolis_beta: Coriolis linear factor -> f = f + beta*(y-y_0)
         max_wind_direction_perturbation: Large-scale model error emulation by per-time-step perturbation of wind direction by +/- max_wind_direction_perturbation (degrees)
         wind_stress: Wind stress parameters
+        atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
         small_scale_perturbation: Boolean value for applying a stochastic model error
         small_scale_perturbation_amplitude: Amplitude (q0 coefficient) for model error
@@ -165,6 +167,7 @@ class CDKLM16(Simulator.Simulator):
                                       coriolis_beta, \
                                       y_zero_reference_cell, \
                                       wind_stress, \
+                                      atmospheric_pressure, \
                                       write_netcdf, \
                                       ignore_ghostcells, \
                                       offset_x, offset_y, \

@@ -61,6 +61,7 @@ class Simulator(object):
                  coriolis_beta, \
                  y_zero_reference_cell, \
                  wind_stress, \
+                 atmospheric_pressure, \
                  write_netcdf, \
                  ignore_ghostcells, \
                  offset_x, offset_y, \
@@ -90,6 +91,7 @@ class Simulator(object):
         self.r = np.float32(r)
         self.coriolis_beta = np.float32(coriolis_beta)
         self.wind_stress = wind_stress
+        self.atmospheric_pressure = atmospheric_pressure
         self.y_zero_reference_cell = np.float32(y_zero_reference_cell)
         
         self.offset_x = offset_x
@@ -103,6 +105,10 @@ class Simulator(object):
         self.wind_stress_textures = {}
         self.wind_stress_timestamps = {}
         
+        # Initialize atmospheric pressure parameters
+        self.atmospheric_pressure_textures = {}
+        self.atmospheric_pressure_timestamps = {}
+
         if A is None:
             self.A = 'NA'  # Eddy viscocity coefficient
         else:
