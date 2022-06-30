@@ -21,8 +21,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-from asyncio import shield
-from re import T
 import numpy as np
 
 class AtmosphericPressure():
@@ -43,10 +41,13 @@ class AtmosphericPressure():
 
         self.numAtmPressures = 1
 
-        if t is not None:
-            assert(P is not None), "Missing atmospheric pressure P"
-
-            assert(len(t) == len(P)), str(len(t)) + " vs " + str(len(P))
+        if P is not None:
+            if len(P) > 1:
+                assert(t is not None), "Missing timestamps t"
+                assert(len(t) == len(P)), str(len(t)) + " vs " + str(len(P))
+            else:
+                # If P is only one field, we assume that it belongs to t = 0
+                t = self.t
 
             self.numAtmPressures = len(t)
 
@@ -71,3 +72,6 @@ class AtmosphericPressure():
             orig_P[i] = self.P[i] + self.shiftValue
         
         return orig_P
+
+    def __str__(self):
+        return "Atmospheric pressure with " + str(len(self.t)) + " timesteps, and P[0].shape = " + str(self.P[0].shape)

@@ -446,8 +446,9 @@ __global__ void cdklm_swe_2D(
         float* Hm_ptr_, const int Hm_pitch_,
         float land_value_,
 
-        //Wind stress parameters
+        //External forcing parameters
         const float wind_stress_t_,
+        const float atmospheric_pressure_t_,
 
         // P atmospheric
         float* p_atm_ptr_, const int p_atm_pitch_,
@@ -865,12 +866,15 @@ __global__ void cdklm_swe_2D(
                 const float hv_cor = up.x*hu_east_cor + up.y*hv_north_cor;
 
                 // Atmospheric pressure
-                float atm_pressure_x = 0.0f;
-                float atm_pressure_y = 0.0f;
-                if (use_p_atm) {
+                const float2 atm_p_central_diff = atmospheric_pressure_central_diff(atmospheric_pressure_t_,  ti+0.5, tj+0.5, NX+4, NY+4);
+                float atm_pressure_x = -atm_p_central_diff.x*h/(2.0f*DX*RHO_O);
+                float atm_pressure_y = -atm_p_central_diff.y*h/(2.0f*DY*RHO_O);
+
+                if (false) {
                     float* const p_atm_row   = (float*) ((char*) p_atm_ptr_ + p_atm_pitch_* tj);
                     float* const p_atm_row_p = (float*) ((char*) p_atm_ptr_ + p_atm_pitch_*(tj+1));
                     float* const p_atm_row_m = (float*) ((char*) p_atm_ptr_ + p_atm_pitch_*(tj-1));
+
 
                     const float dpdx = (p_atm_row[ti+1] - p_atm_row[ti-1])/(2.0f*DX);
                     const float dpdy = (p_atm_row_p[ti] - p_atm_row_m[ti])/(2.0f*DY);
