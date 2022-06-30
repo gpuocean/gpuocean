@@ -38,8 +38,8 @@ class RealisticForcingTest(unittest.TestCase):
             "nx": 500, "ny": 400, "dx": 800, "dy": 500,
             "g": 9.81, "dt": 0.0, "f": 0.0, "r": 0.0,
             "rho_o": 1015, 
-            "p_atm_factor_handle": lambda t: 1.0,
-            "wind_stress": WindStress.WindStress()
+            "wind_stress": WindStress.WindStress(),
+            "atmospheric_pressure": AtmosphericPressure.AtmosphericPressure()
         }
 
         self.dataShape = (self.sim_args["ny"]+4, self.sim_args["nx"]+4)
@@ -56,10 +56,25 @@ class RealisticForcingTest(unittest.TestCase):
         self.numPressures = 10
         self.p_atm_0 = np.float32(100000)
         self.p_atm = np.ones(self.dataShape, dtype=np.float32)*self.p_atm_0
-        
-        self.atmPressure = AtmosphericPressure.AtmosphericPressure()
+    
+    
+    def setPressure(self, temporal_a=0, temporal_b=0):
+        if temporal_a != temporal_b:
+            self.setTemporalPressure(temporal_a, temporal_b)
+        else:
+            self.sim_args["atmospheric_pressure"] = AtmosphericPressure.AtmosphericPressure(P=[self.p_atm])
 
-    def setBumpyP(self, balanced_eta=True):
+    def setTemporalPressure(self, a, b):
+        P = [None]*self.numPressures
+        t = np.arange(self.numPressures, dtype=np.float32)*3600*(b - a)/(self.numPressures-1)
+        temporal_handle = self.makeTemporalFunctionHandle(a, b)
+        for i in range(self.numPressures):
+            P[i] = (self.p_atm - self.p_atm_0)*temporal_handle(t[i]) + self.p_atm_0
+        self.sim_args["atmospheric_pressure"] = AtmosphericPressure.AtmosphericPressure(t=t, P=P)
+    
+    ###########################################################
+    ## Setting up initial conditions and forcing
+    def setBumpyP(self, balanced_eta=True, temporal_a=0, temporal_b=0):
         x = np.linspace(0, 2*np.pi, int((self.dataShape[1]-4)/2))
         y = np.linspace(0, 2*np.pi, self.dataShape[0]-4)
 
@@ -71,17 +86,9 @@ class RealisticForcingTest(unittest.TestCase):
                 if balanced_eta:
                     self.init_args["eta0"][j, i                             ] = -0.5*(1 - np.cos(x[i]))*(1 - np.cos(y[j]))*2000 / (self.sim_args["g"]*self.sim_args["rho_o"])
                     self.init_args["eta0"][j, i + int(self.sim_args["nx"]/2)] = -0.5*(np.cos(x[i]) - 1)*(1 - np.cos(y[j]))*2000 / (self.sim_args["g"]*self.sim_args["rho_o"])
+        self.setPressure(temporal_a, temporal_b)  
 
-    def setTemporalPressure(self, a, b):
-        P = [None]*self.numPressures
-        t = np.arange(self.numPressures, dtype=np.float32)*3600*(b - a)/(self.numPressures-1)
-        temporal_handle = self.makeTemporalFunctionHandle(a, b)
-        for i in range(self.numPressures):
-            P[i] = (self.p_atm - self.p_atm_0)*temporal_handle(t[i]) + self.p_atm_0
-        self.atmPressure = AtmosphericPressure.AtmosphericPressure(t=t, P=P)
-        
-
-    def setLinearXP_(self, balanced_eta=True, temporal_a=0, temporal_b=0):
+    def setLinearXP(self, balanced_eta=True, temporal_a=0, temporal_b=0):
         fullx = np.linspace(-1.5, self.sim_args["nx"]+1.5, self.sim_args["nx"]+4)
         fully = np.linspace(-1.5, self.sim_args["ny"]+1.5, self.sim_args["ny"]+4)
         for i in range(len(fullx)):
@@ -90,15 +97,10 @@ class RealisticForcingTest(unittest.TestCase):
                 self.p_atm[j, i] += - 2000 + 4000*fullx[i]/ self.sim_args["nx"]
                 if balanced_eta:
                     self.init_args["eta0"][j, i] = - 4000*fullx[i]/(self.sim_args["nx"] * (self.sim_args["g"]*self.sim_args["rho_o"]))
-
-        if temporal_a != temporal_b:
-            self.setTemporalPressure(temporal_a, temporal_b)
-        else:
-            self.atmPressure = AtmosphericPressure.AtmosphericPressure(P=[self.p_atm])
-
+        self.setPressure(temporal_a, temporal_b)
 
     
-    def setLinearXP(self, balanced_eta=True):
+    def setLinearXP_(self, balanced_eta=True):
         fullx = np.linspace(-1.5, self.sim_args["nx"]+1.5, self.sim_args["nx"]+4)
         fully = np.linspace(-1.5, self.sim_args["ny"]+1.5, self.sim_args["ny"]+4)
         for i in range(len(fullx)):
@@ -108,7 +110,7 @@ class RealisticForcingTest(unittest.TestCase):
                 if balanced_eta:
                     self.init_args["eta0"][j, i] = - 4000*fullx[i]/(self.sim_args["nx"] * (self.sim_args["g"]*self.sim_args["rho_o"]))
 
-    def setLinearYP(self, balanced_eta=True):
+    def setLinearYP(self, balanced_eta=True, temporal_a=0, temporal_b=0):
         fullx = np.linspace(-1.5, self.sim_args["nx"]+1.5, self.sim_args["nx"]+4)
         fully = np.linspace(-1.5, self.sim_args["ny"]+1.5, self.sim_args["ny"]+4)
         for i in range(len(fullx)):
@@ -117,8 +119,10 @@ class RealisticForcingTest(unittest.TestCase):
                 self.p_atm[j, i]  += - 2000 + 4000*fully[j]/ self.sim_args["ny"]
                 if balanced_eta:
                     self.init_args["eta0"][j, i] = - 4000*fully[j]/(self.sim_args["ny"] * (self.sim_args["g"]*self.sim_args["rho_o"]))
+        self.setPressure(temporal_a, temporal_b)
 
-    def setLinearDiagP(self, balanced_eta=True):
+
+    def setLinearDiagP(self, balanced_eta=True, temporal_a=0, temporal_b=0):
         fullx = np.linspace(-1.5, self.sim_args["nx"]+1.5, self.sim_args["nx"]+4)
         fully = np.linspace(-1.5, self.sim_args["ny"]+1.5, self.sim_args["ny"]+4)
         for i in range(len(fullx)):
@@ -127,6 +131,7 @@ class RealisticForcingTest(unittest.TestCase):
                 self.p_atm[j, i] += - 2000 + 4000*(fullx[i] + fully[j])/ (self.sim_args["nx"] + self.sim_args["ny"])
                 if balanced_eta:
                     self.init_args["eta0"][j, i] = - 4000*(fullx[i] + fully[j])/((self.sim_args["nx"] + self.sim_args["ny"]) * (self.sim_args["g"]*self.sim_args["rho_o"]))
+        self.setPressure(temporal_a, temporal_b)
 
     def setLinearWindY(self):
         t = [0, 10*360]
@@ -184,7 +189,7 @@ class RealisticForcingTest(unittest.TestCase):
     # Lake at rest - no atm pressure or wind
 
     def test_steady_state_lake_at_rest(self):
-        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
         self.sim.step(3600)
         self.check_steady_state()
 
@@ -192,12 +197,12 @@ class RealisticForcingTest(unittest.TestCase):
     ###########################################################################
     # Test atmospheric pressure class
     def test_atmospheric_pressure_default_class(self):
-        self.assertEqual(len(self.atmPressure.t), 1)
-        self.assertEqual(len(self.atmPressure.P), 1)
-        self.assertEqual(self.atmPressure.P[0].shape, (1,1))
-        self.assertEqual(self.atmPressure.P[0][0,0], 0)
-        self.assertEqual(self.atmPressure.t[0], 0)
-        orig_P = self.atmPressure.getOriginalP()
+        self.assertEqual(len(self.sim_args["atmospheric_pressure"].t), 1)
+        self.assertEqual(len(self.sim_args["atmospheric_pressure"].P), 1)
+        self.assertEqual(self.sim_args["atmospheric_pressure"].P[0].shape, (1,1))
+        self.assertEqual(self.sim_args["atmospheric_pressure"].P[0][0,0], 0)
+        self.assertEqual(self.sim_args["atmospheric_pressure"].t[0], 0)
+        orig_P = self.sim_args["atmospheric_pressure"].getOriginalP()
         self.assertEqual(len(orig_P), 1)
         self.assertEqual(orig_P[0].shape, (1,1))
         self.assertEqual(orig_P[0][0,0], 0)
@@ -205,43 +210,43 @@ class RealisticForcingTest(unittest.TestCase):
         
     
     def test_atmospheric_pressure_temporal_class(self):
-        self.setLinearXP_(temporal_a = 0 , temporal_b = 9)
-        self.assertEqual(self.numPressures, len(self.atmPressure.t))
-        self.assertEqual(self.numPressures, len(self.atmPressure.P))
-        self.assertEqual(self.atmPressure.P[0].shape, self.dataShape)
-        self.assertTrue(np.all(self.atmPressure.P[0] == 0))
-        orig_P = self.atmPressure.getOriginalP()
+        self.setLinearXP(temporal_a = 0 , temporal_b = 9)
+        self.assertEqual(self.numPressures, len(self.sim_args["atmospheric_pressure"].t))
+        self.assertEqual(self.numPressures, len(self.sim_args["atmospheric_pressure"].P))
+        self.assertEqual(self.sim_args["atmospheric_pressure"].P[0].shape, self.dataShape)
+        self.assertTrue(np.all(self.sim_args["atmospheric_pressure"].P[0] == 0))
+        orig_P = self.sim_args["atmospheric_pressure"].getOriginalP()
         self.assertTrue(np.all(orig_P[0] == self.p_atm_0))
         self.assertTrue(np.all(orig_P[-1] == self.p_atm))
-        self.assertTrue(np.all(self.atmPressure.P[-1] == self.p_atm - self.p_atm_0))
-        for i in range(1,len(self.atmPressure.t)):
-            self.assertLess(   self.atmPressure.P[i][ 10,  10], self.atmPressure.P[i-1][ 10,  10])
-            self.assertGreater(self.atmPressure.P[i][-10, -10], self.atmPressure.P[i-1][-10, -10])
+        self.assertTrue(np.all(self.sim_args["atmospheric_pressure"].P[-1] == self.p_atm - self.p_atm_0))
+        for i in range(1,len(self.sim_args["atmospheric_pressure"].t)):
+            self.assertLess(   self.sim_args["atmospheric_pressure"].P[i][ 10,  10], self.sim_args["atmospheric_pressure"].P[i-1][ 10,  10])
+            self.assertGreater(self.sim_args["atmospheric_pressure"].P[i][-10, -10], self.sim_args["atmospheric_pressure"].P[i-1][-10, -10])
 
     ###########################################################################
     # Non-zero steady states caused by atmospheric pressure 
 
     def test_steady_state_linear_x(self):
         self.setLinearXP()
-        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
         self.sim.step(3600)
         self.check_steady_state(places=3)
 
     def test_steady_state_linear_y(self):
         self.setLinearYP()
-        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
         self.sim.step(3600)
         self.check_steady_state(places=3)
 
     def test_steady_state_linear_diag(self):
         self.setLinearDiagP()
-        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
         self.sim.step(3600)
         self.check_steady_state(places=2)
 
     def test_steady_state_bumps(self):
         self.setBumpyP()
-        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
         self.sim.step(3600)
         self.check_steady_state(places=2)
 
@@ -249,27 +254,24 @@ class RealisticForcingTest(unittest.TestCase):
     # Obtaining approximate non-zero steady states through slowly changing atm pressure 
 
     def test_create_steady_state_linear_x(self):
-        self.setLinearXP(balanced_eta=False)
-        self.makeGradualP(0, 12)
-        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        self.setLinearXP(balanced_eta=False, temporal_a=0, temporal_b=12)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
         for i in range(3600):
             self.sim.step(24)
         self.setLinearXP(balanced_eta=True)
         self.check_steady_state(places=1, eta_only=True, normalize_eta=True)
 
     def test_create_steady_state_linear_y(self):
-        self.setLinearYP(balanced_eta=False)
-        self.makeGradualP(0, 12)
-        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        self.setLinearYP(balanced_eta=False, temporal_a=0, temporal_b=12)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
         for i in range(3600):
             self.sim.step(24)
         self.setLinearYP(balanced_eta=True)
         self.check_steady_state(places=1, eta_only=True, normalize_eta=True)
 
     def test_create_steady_state_linear_diag(self):
-        self.setLinearDiagP(balanced_eta=False)
-        self.makeGradualP(0, 12)
-        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        self.setLinearDiagP(balanced_eta=False, temporal_a=0, temporal_b=12)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
         for i in range(3600):
             self.sim.step(24)
         self.setLinearDiagP(balanced_eta=True)
@@ -277,10 +279,10 @@ class RealisticForcingTest(unittest.TestCase):
 
 
     def test_create_steady_state_bumps(self):
-        self.setBumpyP()
+        self.numPressures = 20
+        self.setBumpyP(temporal_a=-10, temporal_b=10)
         self.init_args["eta0"] *= -1
-        self.makeGradualP(-10, 10)
-        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args, p_atm=self.p_atm)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
         for i in range(3600):
             self.sim.step(24)
         self.setBumpyP()

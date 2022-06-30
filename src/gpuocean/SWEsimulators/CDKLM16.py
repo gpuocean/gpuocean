@@ -55,8 +55,6 @@ class CDKLM16(Simulator.Simulator):
                  angle=np.array([[0]], dtype=np.float32), \
                  subsample_angle=10, \
                  latitude=None, \
-                 p_atm = np.array([[0]], dtype=np.float32), \
-                 p_atm_factor_handle = lambda t: 1, \
                  rho_o = 1025.0, \
                  t=0.0, \
                  theta=1.3, rk_order=2, \
@@ -180,7 +178,7 @@ class CDKLM16(Simulator.Simulator):
         # eta[self.interior_domain_indices[2]:self.interior_domain_indices[0], \
         #     self.interior_domain_indices[3]:self.interior_domain_indices[1] ]
         self.interior_domain_indices = np.array([-2,-2,2,2])
-        
+
         defines={'block_width': block_width, 'block_height': block_height,
                          'KPSIMULATOR_DESING_EPS': "{:.12f}f".format(desingularization_eps),
                          'KPSIMULATOR_FLUX_SLOPE_EPS': "{:.12f}f".format(flux_slope_eps),
@@ -218,7 +216,7 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifffPibfi")
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifffi")
         self.update_wind_stress(self.kernel, self.cdklm_swe_2D)
         self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D)
         
@@ -359,26 +357,6 @@ class CDKLM16(Simulator.Simulator):
         self.coriolis_texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
         
         
-        ## Atmospheric pressure
-        #  Note that normal pressure is 1000 hPa
-        #  High pressure systems might be at 1020 hPa, and low pressure 980 hPa.
-        #  Since the systems are large and since we are only interested in the differences,
-        #  we subtract the "normal" pressure of 1000 hPa, so that we get a range -20:20 hPa
-        self.use_p_atm = True
-        if p_atm.shape == (1, 1) and p_atm[0, 0] == 0.0:
-            self.use_p_atm = False
-        else:
-            assert(p_atm.shape == eta0.shape)
-        self.p_atm_dev = None
-        if p_atm.max() > 10000: # 10% of normal level
-            self.p_atm_dev = Common.CUDAArray2D(self.gpu_stream, p_atm.shape[1], p_atm.shape[0],
-                                                0, 0, p_atm - 100000)
-        else:
-            self.p_atm_dev = Common.CUDAArray2D(self.gpu_stream, p_atm.shape[1], p_atm.shape[0],
-                                                0, 0, p_atm)
-
-        self.p_atm_factor_handle = p_atm_factor_handle
-
         # Small scale perturbation:
         self.small_scale_perturbation = small_scale_perturbation
         self.small_scale_model_error = None
@@ -430,9 +408,7 @@ class CDKLM16(Simulator.Simulator):
         
         self.device_dt.release()
         self.max_dt_buffer.release()
-
-        self.p_atm_dev.release()
-        
+ 
         self.gpu_ctx = None
         gc.collect()
            
@@ -669,8 +645,6 @@ class CDKLM16(Simulator.Simulator):
                            self.bathymetry.mask_value,
                            wind_stress_t, \
                            atmospheric_pressure_t, \
-                           self.p_atm_dev.data.gpudata, self.p_atm_dev.pitch,
-                           self.use_p_atm, np.float32(self.p_atm_factor_handle(self.t)),
                            boundary_conditions)
             
     
