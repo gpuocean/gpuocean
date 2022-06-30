@@ -835,8 +835,8 @@ __global__ void cdklm_swe_2D(
                 const float RHyp = 0.5f*( Hi[H_j+1][H_i  ] + Hi[H_j+1][H_i+1] );
                 const float RHym = 0.5f*( Hi[H_j  ][H_i  ] + Hi[H_j  ][H_i+1] );
                 
-                float H_x = RHxp - RHxm;
-                float H_y = RHyp - RHym;
+                const float H_x = RHxp - RHxm;
+                const float H_y = RHyp - RHym;
                 
                 const float eta_sn = 0.5f*(eta_north + eta_south);
                 const float eta_we = 0.5f*(eta_west  + eta_east);
@@ -863,8 +863,8 @@ __global__ void cdklm_swe_2D(
 
                 // Atmospheric pressure
                 const float2 atm_p_central_diff = atmospheric_pressure_central_diff(atmospheric_pressure_t_,  ti+0.5, tj+0.5, NX+4, NY+4);
-                float atm_pressure_x = -atm_p_central_diff.x*h/(2.0f*DX*RHO_O);
-                float atm_pressure_y = -atm_p_central_diff.y*h/(2.0f*DY*RHO_O);
+                const float atm_pressure_x = -atm_p_central_diff.x*h/(2.0f*DX*RHO_O);
+                const float atm_pressure_y = -atm_p_central_diff.y*h/(2.0f*DY*RHO_O);
 
                 // Total source terms
                 st1 = X + hu_cor + atm_pressure_x + bathymetry1/DX;
