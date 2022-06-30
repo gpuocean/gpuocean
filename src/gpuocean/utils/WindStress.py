@@ -3,7 +3,7 @@
 """
 This software is part of GPU Ocean. 
 
-Copyright (C) 2018, 2019 SINTEF Digital
+Copyright (C) 2018, 2019, 2022 SINTEF Digital
 Copyright (C) 2018, 2019 Norwegian Meteorological Institute
 
 This python module implements wind forcing, which is used onto 
@@ -38,8 +38,9 @@ from gpuocean.utils.Common import deprecated
 
 class WindStress():
     
-    def __init__(self, t=None, X=None, Y=None, u_wind=None, v_wind=None):
+    def __init__(self, source_filename=None, t=None, X=None, Y=None, u_wind=None, v_wind=None):
         
+        self.source_filename = source_filename
         self.t = [0]
         self.X = [np.zeros((1,1), dtype=np.float32, order='C')]
         self.Y = [np.zeros((1,1), dtype=np.float32, order='C')]
