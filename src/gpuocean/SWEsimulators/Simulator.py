@@ -305,7 +305,7 @@ class Simulator(object):
         atmospheric_pressure_t = 0.0
         elapsed_since_t0 = (self.t-new_t0)
         time_interval = max(1.0e-10, (new_t1-new_t0))
-        atmospheric_pressures_t = max(0.0, min(1.0, elapsed_since_t0 / time_interval))
+        atmospheric_pressure_t = max(0.0, min(1.0, elapsed_since_t0 / time_interval))
         self.logger.debug("Interpolation t is %f", atmospheric_pressure_t)
         
         return atmospheric_pressure_t

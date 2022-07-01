@@ -288,6 +288,30 @@ class RealisticForcingTest(unittest.TestCase):
         self.setBumpyP()
         self.check_steady_state(places=1, eta_only=True, normalize_eta=True)
 
+    ###########################################################################
+    ### Compare interpolation between few and many textures when temporal change is linear
+    def test_different_number_of_linear_textures(self):
+        self.numPressures = 100
+        self.setLinearDiagP(balanced_eta=False, temporal_a=0, temporal_b=12)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
+        for i in range(360):
+            self.sim.step(24)
+        eta1, hu1, hv1 = self.sim.download(interior_domain_only=True)
+
+        self.sim.cleanUp()
+        self.numPressures = 2
+        self.p_atm = np.ones(self.dataShape, dtype=np.float32)*self.p_atm_0
+        self.setLinearDiagP(balanced_eta=False, temporal_a=0, temporal_b=12)
+        self.sim = CDKLM16.CDKLM16(**self.sim_args, **self.init_args)
+        for i in range(360):
+            self.sim.step(24)
+        eta2, hu2, hv2 = self.sim.download(interior_domain_only=True)
+
+        self.assertLess(np.max(np.abs(eta1 - eta2)), 1e-4)
+        self.assertLess(np.max(np.abs(hu1 - hu2)), 1e-2)
+        self.assertLess(np.max(np.abs(hv1 - hv2)), 1e-2)
+        
+
 
 
     ###########################################################################
