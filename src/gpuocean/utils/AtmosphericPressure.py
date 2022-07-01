@@ -51,9 +51,6 @@ class AtmosphericPressure():
 
             self.numAtmPressures = len(t)
 
-            for i in range(len(P)):
-                assert(P[i].dtype == "float32"), "Atmospheric pressure needs to be of type np.float32"
-
             self.t = t
             self.P = P
 
@@ -64,6 +61,15 @@ class AtmosphericPressure():
         if not (self.shiftValue == 0): 
             for i in range(len(self.P)):
                 self.P[i] -= self.shiftValue
+
+        # Cast the resulting pressures to float32.
+        # Although we could have required only float32 input values, it makes sense to 
+        # use float64 before subtracting the normal atmospheric pressure.
+        for i in range(len(self.P)):
+            if self.P[i].dtype != "float32":
+                self.P[i] = self.P[i].astype(np.float32)
+            assert(self.P[i].dtype == "float32"), "Failed to make atmospheric pressure to type np.float32"
+
 
     def getOriginalP(self):
 
