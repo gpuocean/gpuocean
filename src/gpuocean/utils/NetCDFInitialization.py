@@ -165,6 +165,8 @@ def getWindSourceterm(source_url_list, timestep_indices, timesteps, x0, x1, y0, 
     for i in range(num_files):
         try:
             ncfile = Dataset(source_url_list[i])
+            if i == 0 and len(ncfile.variables['Uwind'].shape) == 0:
+                return WindStress.WindStress()
             u_wind_list[i] = ncfile.variables['Uwind'][timestep_indices[i], y0:y1, x0:x1]
             v_wind_list[i] = ncfile.variables['Vwind'][timestep_indices[i], y0:y1, x0:x1]
         except Exception as e:
@@ -219,7 +221,7 @@ def getCaseLocation(casename):
         {'name': 'norwegian_sea',  'x0':  900, 'x1': 1400, 'y0':  600, 'y1':  875 },
         {'name': 'lofoten',        'x0': 1400, 'x1': 1900, 'y0':  450, 'y1':  750 },
         {'name': 'complete_coast', 'x0':   25, 'x1': 2575, 'y0':   25, 'y1':  875 },
-        {'name': 'skagerak',       'x0':  300, 'x1':  600, 'y0':   50, 'y1':  250 },
+        {'name': 'skagerak',       'x0':   50, 'x1':  550, 'y0':   35, 'y1':  285 },
         {'name': 'oslo',           'x0':  500, 'x1':  550, 'y0':  160, 'y1':  210 },
         {'name': 'denmark',        'x0':    2, 'x1':  300, 'y0':    2, 'y1':  300 },
         {'name': 'lovese',         'x0': 1400, 'x1': 2034, 'y0':  450, 'y1':  769 },
@@ -527,6 +529,8 @@ def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
     for i in range(num_files):
         try:
             ncfile = Dataset(source_url_list[i])
+            if i == 0 and len(ncfile.variables['Uwind'].shape) == 0:
+                return WindStress.WindStress()
             u_wind_list[i] = ncfile.variables['Uwind'][timestep_indices[i], y0:y1, x0:x1]
             v_wind_list[i] = ncfile.variables['Vwind'][timestep_indices[i], y0:y1, x0:x1]
         except Exception as e:
