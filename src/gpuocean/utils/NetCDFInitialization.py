@@ -32,6 +32,9 @@ from netCDF4 import Dataset, MFDataset
 import pyproj
 from scipy.ndimage.morphology import binary_erosion, grey_dilation
 
+import seawater as sw
+from scipy.ndimage.filters import convolve, gaussian_filter
+
 from gpuocean.utils import Common, WindStress, OceanographicUtilities
 
 
@@ -162,17 +165,20 @@ def getWindSourceterm(source_url_list, timestep_indices, timesteps, x0, x1, y0, 
     u_wind_list = [None]*num_files
     v_wind_list = [None]*num_files
     
-    for i in range(num_files):
-        try:
-            ncfile = Dataset(source_url_list[i])
-            if i == 0 and len(ncfile.variables['Uwind'].shape) == 0:
-                return WindStress.WindStress()
-            u_wind_list[i] = ncfile.variables['Uwind'][timestep_indices[i], y0:y1, x0:x1]
-            v_wind_list[i] = ncfile.variables['Vwind'][timestep_indices[i], y0:y1, x0:x1]
-        except Exception as e:
-            raise e
-        finally:
-            ncfile.close()
+    if "Uwind" in Dataset(source_url_list[0]).variables:
+        for i in range(num_files):
+            try:
+                ncfile = Dataset(source_url_list[i])
+                if i == 0 and len(ncfile.variables['Uwind'].shape) == 0:
+                    return WindStress.WindStress()
+                u_wind_list[i] = ncfile.variables['Uwind'][timestep_indices[i], y0:y1, x0:x1]
+                v_wind_list[i] = ncfile.variables['Vwind'][timestep_indices[i], y0:y1, x0:x1]
+            except Exception as e:
+                raise e
+            finally:
+                ncfile.close()
+    else:
+        return WindStress.WindStress()
 
     u_wind = u_wind_list[0].filled(0)
     v_wind = v_wind_list[0].filled(0)
@@ -526,17 +532,20 @@ def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
     u_wind_list = [None]*num_files
     v_wind_list = [None]*num_files
     
-    for i in range(num_files):
-        try:
-            ncfile = Dataset(source_url_list[i])
-            if i == 0 and len(ncfile.variables['Uwind'].shape) == 0:
-                return WindStress.WindStress()
-            u_wind_list[i] = ncfile.variables['Uwind'][timestep_indices[i], y0:y1, x0:x1]
-            v_wind_list[i] = ncfile.variables['Vwind'][timestep_indices[i], y0:y1, x0:x1]
-        except Exception as e:
-            raise e
-        finally:
-            ncfile.close()
+    if "Uwind" in Dataset(source_url_list[0]).variables:
+        for i in range(num_files):
+            try:
+                ncfile = Dataset(source_url_list[i])
+                if i == 0 and len(ncfile.variables['Uwind'].shape) == 0:
+                    return WindStress.WindStress()
+                u_wind_list[i] = ncfile.variables['Uwind'][timestep_indices[i], y0:y1, x0:x1]
+                v_wind_list[i] = ncfile.variables['Vwind'][timestep_indices[i], y0:y1, x0:x1]
+            except Exception as e:
+                raise e
+            finally:
+                ncfile.close()
+    else:
+        return WindStress.WindStress()
 
     u_wind = u_wind_list[0].filled(0)
     v_wind = v_wind_list[0].filled(0)
@@ -754,3 +763,131 @@ def removeCombinedMetadata(old_barotropic_IC, old_baroclinic_IC):
         IC["baroclinic_"+key] = baroclinic_IC[key]
 
     return IC
+
+def potentialDensities(source_url, t=0, x0=0, x1=-1, y0=0, y1=-1):
+
+    s_nc = Dataset(source_url)
+
+    # Collect information about s-levels
+    s_lvls = s_nc["Cs_r"][:].data
+
+    # Collect information about domain
+    s_hs   = s_nc["h"][y0:y1,x0:x1]
+    s_lats = s_nc["lat_rho"][y0:y1,x0:x1]
+
+    # Fetch temperature and salinity from nc-file 
+    s_temps = s_nc["temp"][t,:,y0:y1,x0:x1]
+    s_sals  = s_nc["salt"][t,:,y0:y1,x0:x1]
+
+    # Transform depths to pressures 
+    s_depths = np.ma.array(np.multiply.outer(s_lvls,s_hs), mask=s_temps.mask.copy())
+    s_pressures = sw.eos80.pres(-s_depths,s_lats)
+
+    # Calculate potential densities from salinity, temperature and pressure (depth)
+    s_pot_densities = sw.eos80.pden(s_sals,s_temps,s_pressures)
+
+    return s_pot_densities
+
+
+def MLD(source_url, thres, min_mld, max_mld=None, t=0, x0=0, x1=-1, y0=0, y1=-1):
+    """
+    Calculates the mixed layer depth (MLD) 
+    by finding smoothed isopynic line along "thres" 
+    or "min_mld" if the entire water column is heavier than thres
+
+    Input_
+    source_url: url to s-level file on thredds.met.no
+    t: time index 
+    x0, x1, y0, y1: indices specifying a subset of the domain 
+
+    Output_
+    mld: masked array with mixed layer depth as positive value in meters 
+    """
+
+    s_nc = Dataset(source_url)
+
+    # Collect information about s-levels
+    s_lvls = s_nc["Cs_r"][:].data
+
+    # Collect information about domain
+    s_hs   = s_nc["h"][y0:y1,x0:x1]
+    ny, nx = s_hs.shape
+
+    # Calculate potential densities 
+    s_pot_densities = potentialDensities(source_url, t=t, x0=x0, x1=x1, y0=y0, y1=y1)
+
+    # Collect information about domain
+    s_hs   = s_nc["h"][y0:y1,x0:x1]
+    ny, nx = s_hs.shape
+    s_depths = np.ma.array(np.multiply.outer(s_lvls,s_hs), mask=s_pot_densities.mask.copy())
+
+    ## Get MLD by interpolation between the two s-levels where one has lighter and the next heavier water than thres 
+    # if all s-levels are heavier than the threshold, then set the upper layer (last index, while argmax fills with 0 in such cases)
+    mld_base_idx = np.ma.maximum(np.argmax(s_pot_densities < thres, axis=0), (len(s_lvls)-1)*(s_pot_densities[-1] > thres))
+    # ensure that it is not the base index is not the last level 
+    mld_base_idx = np.ma.maximum(mld_base_idx, 1)
+
+    mld_prog_idx = mld_base_idx-1
+
+    mld_depth_base = -np.take_along_axis(s_depths, mld_base_idx.reshape(1,ny,nx), axis=0)[0]
+    mld_dens_base = np.take_along_axis(s_pot_densities, mld_base_idx.reshape(1,ny,nx), axis=0)[0]
+
+    mld_depth_prog = -np.take_along_axis(s_depths, mld_prog_idx.reshape(1,ny,nx), axis=0)[0]
+    mld_dens_prog = np.take_along_axis(s_pot_densities, mld_prog_idx.reshape(1,ny,nx), axis=0)[0]
+
+    # Solving linear interpolation equals thres
+    mld = (thres - mld_dens_base)*(mld_depth_prog - mld_depth_base)/(mld_dens_prog - mld_dens_base) + mld_depth_base
+
+    # Again special attention to all-heavier locations 
+    mld[s_pot_densities[-1] > thres] = 0
+
+    # Bounding MLD between the bathymetry and min_mld
+    mld = np.ma.minimum(mld, s_hs)
+    mld = np.ma.maximum(mld, min_mld)
+    if max_mld is not None:
+        mld = np.ma.minimum(mld, max_mld)
+
+    # ## Smoothing of MLD to avoid shocks 
+    # mld = np.ma.array(gaussian_filter(mld, [1,1]), mask=s_temps[0].mask.copy())
+    # # Bounding MLD between the bathymetry and min_mld
+    # mld = np.ma.minimum(mld, s_hs)
+    # mld = np.ma.maximum(mld, min_mld)
+    # if max_mld is not None:
+    #     mld = np.ma.minimum(mld, max_mld)
+
+    return mld 
+
+
+def MLD_integrator(source_url, mld, t=0, x0=0, x1=-1, y0=0, y1=-1):
+
+    s_nc = Dataset(source_url)
+
+    # Collect information about s-levels
+    w_lvls = s_nc["Cs_w"][:].data
+
+    # Collect information about domain
+    s_hs   = s_nc["h"][y0:y1,x0:x1]
+    w_depths = np.ma.array(np.multiply.outer(w_lvls,s_hs), mask=np.array((len(w_lvls)*[mld.mask.copy()])))
+
+    ny, nx = s_hs.shape
+
+    ## Construct integration weights 
+    depths_diff = w_depths[1:] - w_depths[:-1]
+    weights = np.ma.array(np.zeros_like(depths_diff), mask=depths_diff.mask.copy())
+
+    lvl_idxs = (np.arange(len(w_lvls)-1)[:,np.newaxis,np.newaxis]*np.ones((len(w_lvls)-1,ny,nx)))
+    mld_upper_idx = np.maximum(np.argmax(-w_depths < mld, axis=0), 1)
+
+    # Full w-levels
+    weights[lvl_idxs >= mld_upper_idx] = 1
+
+    # Partial w-levels as fraction 
+    mld_lower_idx = np.ma.maximum(mld_upper_idx - 1, 0)
+    mld_upper_depth = -np.take_along_axis(w_depths, mld_upper_idx.reshape(1,ny,nx), axis=0)[0]
+    mld_lower_depth = -np.take_along_axis(w_depths, mld_lower_idx.reshape(1,ny,nx), axis=0)[0]
+
+    np.put_along_axis(weights, mld_lower_idx.reshape(1,ny,nx), ((mld - mld_upper_depth)/(mld_lower_depth - mld_upper_depth)), axis=0)
+
+    integrator = depths_diff * weights
+
+    return integrator
