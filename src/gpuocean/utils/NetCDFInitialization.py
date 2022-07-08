@@ -863,8 +863,12 @@ def MLD_integrator(source_url, mld, t=0, x0=0, x1=-1, y0=0, y1=-1):
     w_lvls = s_nc["Cs_w"][:].data
 
     # Collect information about domain
-    s_hs   = s_nc["h"][y0:y1,x0:x1]
-    w_depths = np.ma.array(np.multiply.outer(w_lvls,s_hs), mask=np.array((len(w_lvls)*[mld.mask.copy()])))
+    s_hs   = s_nc["h"][y0:y1,x0:x1] + s_nc["zeta"][t,y0:y1,x0:x1]
+
+    mask = False
+    if  mld.mask != False:
+        mask = np.array((len(w_lvls)*[mld.mask.copy()]))
+    w_depths = np.ma.array(np.multiply.outer(w_lvls,s_hs), mask=mask)
 
     ny, nx = s_hs.shape
 
