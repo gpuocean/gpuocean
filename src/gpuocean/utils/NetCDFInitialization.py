@@ -772,7 +772,7 @@ def potentialDensities(source_url, t=0, x0=0, x1=-1, y0=0, y1=-1):
     s_lvls = s_nc["Cs_r"][:].data
 
     # Collect information about domain
-    s_hs   = s_nc["h"][y0:y1,x0:x1]
+    s_hs   = s_nc["h"][y0:y1,x0:x1] + s_nc["zeta"][t,y0:y1,x0:x1]
     s_lats = s_nc["lat_rho"][y0:y1,x0:x1]
 
     # Fetch temperature and salinity from nc-file 
@@ -809,16 +809,13 @@ def MLD(source_url, thres, min_mld, max_mld=None, t=0, x0=0, x1=-1, y0=0, y1=-1)
     # Collect information about s-levels
     s_lvls = s_nc["Cs_r"][:].data
 
-    # Collect information about domain
-    s_hs   = s_nc["h"][y0:y1,x0:x1]
-    ny, nx = s_hs.shape
 
     # Calculate potential densities 
     s_pot_densities = potentialDensities(source_url, t=t, x0=x0, x1=x1, y0=y0, y1=y1)
 
     # Collect information about domain
-    s_hs   = s_nc["h"][y0:y1,x0:x1]
-    ny, nx = s_hs.shape
+    s_hs   = s_nc["h"][y0:y1,x0:x1] + s_nc["zeta"][t,y0:y1,x0:x1]
+    ny, nx = s_hs.shape 
     s_depths = np.ma.array(np.multiply.outer(s_lvls,s_hs), mask=s_pot_densities.mask.copy())
 
     ## Get MLD by interpolation between the two s-levels where one has lighter and the next heavier water than thres 
