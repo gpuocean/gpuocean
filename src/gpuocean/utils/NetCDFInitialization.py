@@ -227,7 +227,7 @@ def getCaseLocation(casename):
         {'name': 'norwegian_sea',  'x0':  900, 'x1': 1400, 'y0':  600, 'y1':  875 },
         {'name': 'lofoten',        'x0': 1400, 'x1': 1900, 'y0':  450, 'y1':  750 },
         {'name': 'complete_coast', 'x0':   25, 'x1': 2575, 'y0':   25, 'y1':  875 },
-        {'name': 'skagerak',       'x0':   50, 'x1':  550, 'y0':   35, 'y1':  285 },
+        {'name': 'skagerrak',      'x0':   50, 'x1':  550, 'y0':   35, 'y1':  285 },
         {'name': 'oslo',           'x0':  500, 'x1':  550, 'y0':  160, 'y1':  210 },
         {'name': 'denmark',        'x0':    2, 'x1':  300, 'y0':    2, 'y1':  300 },
         {'name': 'lovese',         'x0': 1400, 'x1': 2034, 'y0':  450, 'y1':  769 },
@@ -866,7 +866,7 @@ def MLD_integrator(source_url, mld, t=0, x0=0, x1=-1, y0=0, y1=-1):
     s_hs   = s_nc["h"][y0:y1,x0:x1] + s_nc["zeta"][t,y0:y1,x0:x1]
 
     mask = False
-    if  mld.mask != False:
+    if  isinstance(mld.mask, np.ndarray):
         mask = np.array((len(w_lvls)*[mld.mask.copy()]))
     w_depths = np.ma.array(np.multiply.outer(w_lvls,s_hs), mask=mask)
 
