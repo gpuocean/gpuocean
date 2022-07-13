@@ -104,7 +104,10 @@ class WindStress():
         wind_stress_v = wind_stress*v_wind
     
         return wind_stress_u, wind_stress_v
-            
+
+
+########################################################
+## All below this point is depreciated            
 
     
 class WIND_STRESS_PARAMS(Structure):
