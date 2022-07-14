@@ -60,7 +60,7 @@ class CDKLM16(Simulator.Simulator):
                  theta=1.3, rk_order=2, \
                  coriolis_beta=0.0, \
                  max_wind_direction_perturbation = 0, \
-                 wind_stress=WindStress.WindStress(), \
+                 wind=WindStress.WindStress(), \
                  atmospheric_pressure=AtmosphericPressure.AtmosphericPressure(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  boundary_conditions_data=Common.BoundaryConditionsData(), \
@@ -107,7 +107,7 @@ class CDKLM16(Simulator.Simulator):
         rk_order: Order of Runge Kutta method {1,2*,3}
         coriolis_beta: Coriolis linear factor -> f = f + beta*(y-y_0)
         max_wind_direction_perturbation: Large-scale model error emulation by per-time-step perturbation of wind direction by +/- max_wind_direction_perturbation (degrees)
-        wind_stress: Wind stress parameters
+        wind: Wind stress parameters
         atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
         small_scale_perturbation: Boolean value for applying a stochastic model error
@@ -164,7 +164,7 @@ class CDKLM16(Simulator.Simulator):
                                       theta, rk_order, \
                                       coriolis_beta, \
                                       y_zero_reference_cell, \
-                                      wind_stress, \
+                                      wind, \
                                       atmospheric_pressure, \
                                       write_netcdf, \
                                       ignore_ghostcells, \
@@ -470,12 +470,8 @@ class CDKLM16(Simulator.Simulator):
         }    
         
         # Wind stress
-        try:
-            wind_stress_type = sim_reader.get("wind_stress_type")
-            wind = Common.WindStressParams(type=wind_stress_type)
-        except:
-            wind = WindStress.WindStress()
-        sim_params['wind_stress'] = wind
+        wind = WindStress.WindStress()
+        sim_params['wind'] = wind
             
         # Boundary conditions
         sim_params['boundary_conditions'] = sim_reader.getBC()

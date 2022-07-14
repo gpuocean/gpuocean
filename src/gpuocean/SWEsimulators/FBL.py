@@ -48,7 +48,7 @@ class FBL(Simulator.Simulator):
                  t=0.0, \
                  coriolis_beta=0.0, \
                  y_zero_reference_cell = 1, \
-                 wind_stress=WindStress.WindStress(), \
+                 wind=WindStress.WindStress(), \
                  atmospheric_pressure=AtmosphericPressure.AtmosphericPressure(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  write_netcdf=False, \
@@ -72,7 +72,7 @@ class FBL(Simulator.Simulator):
         r: Bottom friction coefficient (2.4e-3 m/s)
         coriolis_beta: Coriolis linear factor -> f = f + beta*y
         y_zero_reference_cell: The cell representing y_0 in the above, defined as the lower face of the cell .
-        wind_stress: Wind stress parameters
+        wind: Wind stress parameters
         atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
         write_netcdf: Write the results after each superstep to a netCDF file
@@ -132,7 +132,7 @@ class FBL(Simulator.Simulator):
                                   theta, rk_order, \
                                   coriolis_beta, \
                                   y_zero_reference_cell, \
-                                  wind_stress, \
+                                  wind, \
                                   atmospheric_pressure, \
                                   write_netcdf, \
                                   ignore_ghostcells, \
@@ -232,11 +232,7 @@ class FBL(Simulator.Simulator):
         timeIntegrator = sim_reader.get("time_integrator")
         y_zero_reference_cell = sim_reader.get("y_zero_reference_cell")
 
-        try:
-            wind_stress_type = sim_reader.get("wind_stress_type")
-            wind = Common.WindStressParams(type=wind_stress_type)
-        except:
-            wind = WindStress.WindStress()
+        wind = WindStress.WindStress()
 
         boundaryConditions = sim_reader.getBC()
 
@@ -251,7 +247,7 @@ class FBL(Simulator.Simulator):
                 dx, dy, dt, \
                 g, f, r, \
                 t=time0, \
-                wind_stress=wind, \
+                wind=wind, \
                 boundary_conditions=boundaryConditions, \
                 write_netcdf=cont_write_netcdf)
     

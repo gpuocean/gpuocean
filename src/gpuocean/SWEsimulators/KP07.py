@@ -50,7 +50,7 @@ class KP07(Simulator.Simulator):
                  theta=1.3, use_rk2=True,
                  coriolis_beta=0.0, \
                  y_zero_reference_cell = 0, \
-                 wind_stress=WindStress.WindStress(), \
+                 wind=WindStress.WindStress(), \
                  atmospheric_pressure=AtmosphericPressure.AtmosphericPressure(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  write_netcdf=False, \
@@ -79,7 +79,7 @@ class KP07(Simulator.Simulator):
         use_rk2: Boolean if to use 2nd order Runge-Kutta (false -> 1st order forward Euler)
         coriolis_beta: Coriolis linear factor -> f = f + beta*(y-y_0)
         y_zero_reference_cell: The cell representing y_0 in the above, defined as the lower face of the cell .
-        wind_stress: Wind stress parameters
+        wind: Wind stress parameters
         atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
         write_netcdf: Write the results after each superstep to a netCDF file
@@ -116,7 +116,7 @@ class KP07(Simulator.Simulator):
                                    theta, rk_order, \
                                    coriolis_beta, \
                                    y_zero_reference_cell, \
-                                   wind_stress, \
+                                   wind, \
                                    atmospheric_pressure, \
                                    write_netcdf, \
                                    ignore_ghostcells, \
@@ -236,11 +236,7 @@ class KP07(Simulator.Simulator):
             using_rk2 = False 
         y_zero_reference_cell = sim_reader.get("y_zero_reference_cell")        
         
-        try:
-            wind_stress_type = sim_reader.get("wind_stress_type")
-            wind = Common.WindStressParams(type=wind_stress_type)
-        except:
-            wind = WindStress.WindStress()
+        wind = WindStress.WindStress()
 
         boundaryConditions = sim_reader.getBC()
 
@@ -258,7 +254,7 @@ class KP07(Simulator.Simulator):
                  theta=minmodTheta, use_rk2=using_rk2, \
                  coriolis_beta=beta, \
                  y_zero_reference_cell = y_zero_reference_cell, \
-                 wind_stress=wind, \
+                 wind=wind, \
                  boundary_conditions=boundaryConditions, \
                  write_netcdf=cont_write_netcdf)
 
