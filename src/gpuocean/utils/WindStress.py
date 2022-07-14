@@ -44,6 +44,8 @@ class WindStress():
         self.t = [0]
         self.wind_u = [np.zeros((1,1), dtype=np.float32, order='C')]
         self.wind_v = [np.zeros((1,1), dtype=np.float32, order='C')]
+        self.stress_u = None
+        self.stress_v = None
         
         self.numWindSteps = 1
         
@@ -59,15 +61,6 @@ class WindStress():
                 assert(len(t) == len(stress_u)), str(len(t)) + " vs " + str(len(stress_u))
                 assert(len(t) == len(stress_v)), str(len(t)) + " vs " + str(len(stress_v))
 
-            """    
-            X, Y = self._compute_wind_stress_from_wind(wind_u, wind_v)
-
-            assert(X is not None), "missing wind forcing X"
-            assert(Y is not None), "missing wind forcing Y"
-            
-            assert(len(t) == len(X)), str(len(t)) + " vs " + str(len(X))
-            assert(len(t) == len(Y)), str(len(t)) + " vs " + str(len(Y))
-            """
 
             self.numWindSteps = len(t)
             
