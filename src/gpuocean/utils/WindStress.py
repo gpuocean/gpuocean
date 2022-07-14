@@ -38,49 +38,61 @@ from gpuocean.utils.Common import deprecated
 
 class WindStress():
     
-    def __init__(self, source_filename=None, t=None, X=None, Y=None, u_wind=None, v_wind=None):
+    def __init__(self, source_filename=None, t=None, wind_u=None, wind_v=None, stress_u=None, stress_v=None):
         
         self.source_filename = source_filename
         self.t = [0]
-        self.X = [np.zeros((1,1), dtype=np.float32, order='C')]
-        self.Y = [np.zeros((1,1), dtype=np.float32, order='C')]
+        self.wind_u = [np.zeros((1,1), dtype=np.float32, order='C')]
+        self.wind_v = [np.zeros((1,1), dtype=np.float32, order='C')]
         
         self.numWindSteps = 1
         
         if t is not None:
-            if (X is None and Y is None) and (u_wind is not None or v_wind is not None):
-                assert(u_wind is not None), "missing wind in x u_wind"
-                assert(v_wind is not None), "missing wind in y v_wind"
+            assert(wind_u is not None or stress_u is not None), "any information in x direction missing, provide wind or wind stress"
+            assert(wind_v is not None or stress_v is not None), "any information in y direction missing, provide wind or wind stress"
             
-                assert(len(t) == len(u_wind)), str(len(t)) + " vs " + str(len(u_wind))
-                assert(len(t) == len(v_wind)), str(len(t)) + " vs " + str(len(v_wind))
+            if (wind_u is not None or wind_v is not None):
+                assert(len(t) == len(wind_u)), str(len(t)) + " vs " + str(len(wind_u))
+                assert(len(t) == len(wind_v)), str(len(t)) + " vs " + str(len(wind_v))
 
-                X, Y = self._compute_wind_stress_from_wind(u_wind, v_wind)
+            if (stress_u is not None or stress_v is not None):
+                assert(len(t) == len(stress_u)), str(len(t)) + " vs " + str(len(stress_u))
+                assert(len(t) == len(stress_v)), str(len(t)) + " vs " + str(len(stress_v))
+
+            """    
+            X, Y = self._compute_wind_stress_from_wind(u_wind, v_wind)
 
             assert(X is not None), "missing wind forcing X"
             assert(Y is not None), "missing wind forcing Y"
             
             assert(len(t) == len(X)), str(len(t)) + " vs " + str(len(X))
             assert(len(t) == len(Y)), str(len(t)) + " vs " + str(len(Y))
+            """
 
             self.numWindSteps = len(t)
             
-            for i in range(len(X)):
-                assert (X[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
-                assert (Y[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
+            for i in range(self.numWindSteps):
+                assert (wind_u[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
+                assert (wind_v[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
+                assert (stress_u[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
+                assert (stress_v[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
             
             self.t = t
-            self.X = X
-            self.Y = Y
             
-    def _compute_wind_stress_from_wind(self, u_wind, v_wind):
+            self.wind_u = wind_u
+            self.wind_v = wind_v
+
+            self.stress_u = stress_u
+            self.stress_v = stress_v 
+
+            
+    def compute_wind_stress_from_wind(self, u_wind, v_wind):
  
         if type(u_wind) is list:
             u_wind = np.stack(u_wind, axis=0)
         if type(v_wind) is list:
             v_wind = np.stack(v_wind, axis=0)
         
-        print(type(u_wind), type(v_wind))
         u_wind = u_wind.astype(np.float32)
         v_wind = v_wind.astype(np.float32)
         
