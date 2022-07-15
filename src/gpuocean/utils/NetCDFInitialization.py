@@ -840,9 +840,10 @@ def MLD(source_url, thres, min_mld, max_mld=None, t=0, x0=0, x1=-1, y0=0, y1=-1)
 
     # Bounding MLD between the bathymetry and min_mld
     mld = np.ma.minimum(mld, s_hs)
-    mld = np.ma.maximum(mld, min_mld)
+    
     if max_mld is not None:
         mld = np.ma.minimum(mld, max_mld)
+    mld = np.ma.maximum(mld, min_mld)
 
     # ## Smoothing of MLD to avoid shocks 
     # mld = np.ma.array(gaussian_filter(mld, [1,1]), mask=s_temps[0].mask.copy())
