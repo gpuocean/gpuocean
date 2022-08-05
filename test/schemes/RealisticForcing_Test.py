@@ -38,7 +38,7 @@ class RealisticForcingTest(unittest.TestCase):
             "nx": 500, "ny": 400, "dx": 800, "dy": 500,
             "g": 9.81, "dt": 0.0, "f": 0.0, "r": 0.0,
             "rho_o": 1015, 
-            "wind_stress": WindStress.WindStress(),
+            "wind": WindStress.WindStress(),
             "atmospheric_pressure": AtmosphericPressure.AtmosphericPressure()
         }
 
@@ -143,7 +143,7 @@ class RealisticForcingTest(unittest.TestCase):
         # Linear wind stress
         X[1][:,0] += np.linspace(0, 5e-4, self.sim_args["ny"]+4)
 
-        self.sim_args["wind_stress"] = WindStress.WindStress(t=t, X=X, Y=Y)
+        self.sim_args["wind"] = WindStress.WindStress(t=t, stress_u=X, stress_v=Y)
 
     def makeGradualP(self, a, b):
         self.sim_args["p_atm_factor_handle"] = self.makeTemporalFunctionHandle(a, b)

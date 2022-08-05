@@ -65,11 +65,13 @@ class WindStress():
             self.numWindSteps = len(t)
             
             for i in range(self.numWindSteps):
-                assert (wind_u[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
-                assert (wind_v[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
+                if wind_u is not None:
+                    # if wind_u is not None, then it is assumed that also wind_v is provided
+                    assert (wind_u[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
+                    assert (wind_v[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
                 if stress_u is not None:
+                    # if stress_u is not None, then it is assumed that also stress_v is provided
                     assert (stress_u[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
-                if stress_v is not None:
                     assert (stress_v[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
             
             self.t = t
