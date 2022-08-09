@@ -475,7 +475,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     
     #Physical variables
     ic['H'] = H_i
-    ic['eta0'] = eta0
+    ic['eta0'] = fill_coastal_data(eta0)
     ic['hu0'] = hu0
     ic['hv0'] = hv0
     
@@ -508,6 +508,57 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     ic['timesteps'] = np.ravel(timesteps)
     
     return ic
+
+def fill_coastal_data(maarr):
+    """
+    Function manipulating the data of a masked array in the dry-zone.
+    If a dry cell has one or more wet neighbors, the average data is filled (otherwise the dry data stays 0, what is the default)
+
+    Input:  maarr - masked array
+    Output: maarr - masked array (with same mask, but modified data)
+    """
+
+    for i in range(maarr.shape[1]):
+        for j in range(maarr.shape[0]):
+            if (maarr.mask[j,i]):
+                N_wet_neighbors = 0
+                sum = 0.0
+                if i > 0:
+                    if maarr.mask[j,i-1] == False:
+                        sum += maarr.data[j,i-1]
+                        N_wet_neighbors += 1 
+                if i < maarr.shape[1]-1: 
+                    if maarr.mask[j,i+1] == False:
+                        sum += maarr.data[j,i-1]
+                        N_wet_neighbors += 1 
+                if j > 0: 
+                    if maarr.mask[j-1,i] == False:
+                        sum += maarr.data[j-1,i]
+                        N_wet_neighbors += 1 
+                if j < maarr.shape[0]-1: 
+                    if maarr.mask[j+1,i] == False:
+                        sum += maarr.data[j+1,i]
+                        N_wet_neighbors += 1 
+                if i > 0 and j > 0:
+                    if maarr.mask[j-1,i-1] == False:
+                        sum += maarr.data[j-1,i-1]
+                        N_wet_neighbors += 1 
+                if i < maarr.shape[1]-1 and j > 0:
+                    if maarr.mask[j-1,i+1] == False:
+                        sum += maarr.data[j-1,i+1]
+                        N_wet_neighbors += 1 
+                if i > 0 and j < maarr.shape[0]-1:
+                    if maarr.mask[j+1,i-1] == False:
+                        sum += maarr.data[j+1,i-1]
+                        N_wet_neighbors += 1 
+                if i < maarr.shape[1]-1 and j < maarr.shape[0]-1:
+                    if maarr.mask[j+1,i+1] == False:
+                        sum += maarr.data[j+1,i+1]
+                        N_wet_neighbors += 1 
+                if N_wet_neighbors > 0:
+                    maarr.data[j,i] = sum/N_wet_neighbors
+    return maarr
+
 
 def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
     """
