@@ -940,6 +940,7 @@ def MLD_integrator(source_url, mld, t=0, x0=0, x1=-1, y0=0, y1=-1):
     mld_lower_depth = -np.take_along_axis(w_depths, mld_lower_idx.reshape(1,ny,nx), axis=0)[0]
 
     np.put_along_axis(weights, mld_lower_idx.reshape(1,ny,nx), ((mld - mld_upper_depth)/(mld_lower_depth - mld_upper_depth)), axis=0)
+    # NOTE: If the mld is below the bathymetry the last level can have weight >1
 
     integrator = depths_diff * weights
 
