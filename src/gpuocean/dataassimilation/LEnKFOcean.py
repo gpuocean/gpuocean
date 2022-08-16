@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 
+from doctest import ELLIPSIS_MARKER
 import numpy as np
 import scipy
 import time
@@ -73,109 +74,24 @@ class LEnKFOcean:
         feasible_methods = ["SEnKF", "ETKF"]
         assert method in feasible_methods, "Method not supported. Choose among " + str(feasible_methods)
         self.method = method
-    
-    
-    """
-    The following methods stating with _ are simple matrix computations and reshaping operations
-    which are separated for the seek of readability
-    """
-
-    def _deleteDeactivatedObservations(self, observation):
-        """
-        Delete inactive particles
-        """
-        idx = 0
-        for p in range(self.N_e):
-            if self.ensemble.particlesActive[p]:
-                idx+=1
-            elif not self.ensemble.particlesActive[p]:
-                observation = np.delete(observation, idx, axis=0)
-        return observation
-
-
-    def _constructRinv(self):
-        
-        R_orig = self.ensemble.getObservationCov()
-
-        R = np.zeros( (R_orig.shape[0]*self.N_d, R_orig.shape[1]*self.N_d) )
-
-        for l in range(self.N_d):
-            R[l,l] = R_orig[0,0]
-            R[self.N_d+l, self.N_d+l] = R_orig[1,1]
-            R[l,self.N_d+l] = R_orig[0,1]
-            R[self.N_d+l,l] = R_orig[1,0]
-
-        Rinv = np.linalg.inv(R)
-
-        return Rinv
-
-    def _getX_f(self):
-
-        """
-        The download gives eta = 
-        [
-        [eta(x0,y0),...,eta(xN,y0)],
-        ...,
-        [eta(x0,yN),...,eta(xN,yN)]
-        ]
-        as an array of size Ny x Nx
-        and analog for hu and hv.
-        we use those as an 1D array eta = 
-        [eta(x0,y0),...,eta(xN,y0),eta(x0,y1),...,eta(xN,y(N-1)),eta(x0,yN),...,eta(xN,yN)]
-        and anlog for hu and hv 
-
-        For further calculations the indivdual dimensions of the state variable are concatinated X = 
-        [eta, hu, hv]
-
-        Collecting the state perturbation for each ensemble member in a matrix Nx x Ne, where
-        X_f_pert = 
-        [ 
-        [eta_pert(x0,y0) (particle 1),..., eta_pert],
-        ...
-        particle 2: [eta_pert,hu_pert,hv_pert]
-        ]
-        """
-
-        X_f = np.zeros((3*self.n_i*self.n_j, self.N_e_active))
-
-        idx = 0
-        for e in range(self.N_e):
-            if self.ensemble.particlesActive[e]:
-                eta, hu, hv = self.ensemble.particles[e].download(interior_domain_only=False)
-                eta = eta.reshape(self.n_i*self.n_j)
-                hu  = hu.reshape(self.n_i*self.n_j)
-                hv  = hv.reshape(self.n_i*self.n_j)
-                X_f[:,idx] = np.append(eta, np.append(hu,hv))
-                idx += 1
-
-        X_f_mean = np.zeros( 3*self.n_i*self.n_j )
-        for e in range(self.N_e_active):
-            X_f_mean += 1/self.N_e_active * X_f[:,e]
-
-        X_f_pert = np.zeros_like( X_f )
-        for e in range(self.N_e_active):
-            X_f_pert[:,e] = X_f[:,e] - X_f_mean
-
-        return X_f, X_f_mean, X_f_pert
 
 
     """
-    Functionalities for the LETKF
+    Functionalities for the Localisation
     """
 
-    @staticmethod
-    def getLocalIndices(obs_loc, scale_r, dx, dy, nx, ny):
+    def getLocalIndices(self, obs_loc, r_factor, dx, dy, nx, ny):
         """ 
         Defines mapping from global domain (nx times ny) to local domain
         """
 
-        boxed_r = dx*np.ceil(scale_r*1.5)
+        boxed_r = dx*np.ceil(r_factor*1.5)
         
         localIndices = np.array([[False]*nx]*ny)
         
-        obs_loc_cellID = (np.int(obs_loc[0]//dx), np.int(obs_loc[1]//dy))
-
+        #obs_loc_cellID = (np.int(obs_loc[0]//dx), np.int(obs_loc[1]//dy))
         #print(obs_loc_cellID)
+
         loc_cell_left  = int(np.round(obs_loc[0]/dx)) - int(np.round(boxed_r/dx))
         loc_cell_right = int(np.round(obs_loc[0]/dx)) + int(np.round((boxed_r+dx)/dx))
         loc_cell_down  = int(np.round(obs_loc[1]/dy)) - int(np.round(boxed_r/dy))
@@ -188,21 +104,25 @@ class LEnKFOcean:
         yroll = 0
 
         if loc_cell_left < 0:
-            xranges.append((nx+loc_cell_left , nx))
+            if self.ensemble.getBoundaryConditions().north == 2:
+                xranges.append((nx+loc_cell_left , nx))
             xroll = loc_cell_left   # negative number
             loc_cell_left = 0 
         elif loc_cell_right > nx:
-            xranges.append((0, loc_cell_right - nx))
+            if self.ensemble.getBoundaryConditions().north == 2:
+                xranges.append((0, loc_cell_right - nx))
             xroll = loc_cell_right - nx   # positive number
             loc_cell_right = nx 
         xranges.append((loc_cell_left, loc_cell_right))
 
         if loc_cell_down < 0:
-            yranges.append((ny+loc_cell_down , ny))
+            if self.ensemble.getBoundaryConditions().east == 2:
+                yranges.append((ny+loc_cell_down , ny))
             yroll = loc_cell_down   # negative number
             loc_cell_down = 0 
         elif loc_cell_up > ny:
-            yranges.append((0, loc_cell_up - ny ))
+            if self.ensemble.getBoundaryConditions().east == 2:
+                yranges.append((0, loc_cell_up - ny ))
             yroll = loc_cell_up - ny   # positive number
             loc_cell_up = ny
         yranges.append((loc_cell_down, loc_cell_up))
@@ -211,15 +131,14 @@ class LEnKFOcean:
             for yrange in yranges:
                 localIndices[yrange[0] : yrange[1], xrange[0] : xrange[1]] = True
 
-                for y in range(yrange[0],yrange[1]):
-                    for x in range(xrange[0], xrange[1]):
-                        loc = np.array([(x+0.5)*dx, (y+0.5)*dy])
+                # for y in range(yrange[0],yrange[1]):
+                #     for x in range(xrange[0], xrange[1]):
+                #         loc = np.array([(x+0.5)*dx, (y+0.5)*dy])
 
         return localIndices, xroll, yroll
 
 
-    @staticmethod
-    def distGC(obs, loc, r, lx, ly):
+    def distGC(self, obs, loc, r, lx, ly):
         """
         Calculating the Gasparin-Cohn value for the distance between obs 
         and loc for the localisation radius r.
@@ -260,14 +179,18 @@ class LEnKFOcean:
         return distGC
 
 
-    @staticmethod
-    def getLocalWeightShape(scale_r, dx, dy, nx, ny, scale_w=1.0):
+    def getLocalWeightShape(self):
         """
         Gives a local stencil with weights based on the distGC
         """
+        dy = self.ensemble.dy
+        dx = self.ensemble.dx
+
+        nx = self.ensemble.nx
+        ny = self.ensemble.ny
         
-        local_nx = int(np.ceil(scale_r*1.5)*2 + 1)
-        local_ny = int(np.ceil(scale_r*1.5)*2 + 1)
+        local_nx = int(np.ceil(self.r_factor*1.5)*2 + 1)
+        local_ny = int(np.ceil(self.r_factor*1.5)*2 + 1)
         weights = np.zeros((local_ny, local_ny))
         
         obs_loc_cellID = (local_ny, local_nx)
@@ -276,43 +199,52 @@ class LEnKFOcean:
         for y in range(local_ny):
             for x in range(local_nx):
                 loc = np.array([(x+0.5)*dx, (y+0.5)*dy])
-                if np.linalg.norm(obs_loc - loc) > 1.5*scale_r*dx:
+                if np.linalg.norm(obs_loc - loc) > 1.5*self.r_factor*dx:
                     weights[y,x] = 0
                 else:
-                    weights[y,x] = min(1, LEnKFOcean.distGC(obs_loc, loc, scale_r*dx, nx*dx, ny*dy))
+                    weights[y,x] = min(1, self.distGC(obs_loc, loc, self.r_factor*dx, nx*dx, ny*dy))
                                 
-        return scale_w * weights
+        return self.scale_w * weights
             
 
-    @staticmethod
-    def getCombinedWeights(observation_positions, scale_r, dx, dy, nx, ny, W_loc, scale_w=1.0):
-        
+    def getCombinedWeights(self, group):
+
+        nx = self.ensemble.nx
+        ny = self.ensemble.ny
+
         W_scale = np.zeros((ny, nx))
         
-        num_drifters = observation_positions.shape[0]
-        #print('found num_drifters:', num_drifters)
-        if observation_positions.shape[1] != 2:
-            print('observation_positions has wrong shape')
-            return None
 
-        # Get the shape of the local weights (drifter independent)
-        W_loc = LEnKFOcean.getLocalWeightShape(scale_r, dx, dy, nx, ny, scale_w)
-        
-        for d in range(num_drifters):
+        for d in group:
             # Get local mapping for drifter 
-            L, xroll, yroll = LEnKFOcean.getLocalIndices(observation_positions[d,:], scale_r, dx, dy, nx, ny)
+            L, xroll, yroll = self.all_Ls[d], self.all_xrolls[d], self.all_yrolls[d]
 
-            # Roll weigths according to periodic boundaries
-            W_loc_d = np.roll(np.roll(W_loc, shift=yroll, axis=0 ), shift=xroll, axis=1)
             
             # Add weights to global domain based on local mapping:
-            W_scale[L] += W_loc_d.flatten()
+            if np.sum(L) == np.prod(self.W_loc.shape):
+                # Roll weigths according to periodic boundaries
+                W_loc_d = np.roll(np.roll(self.W_loc, shift=yroll, axis=0 ), shift=xroll, axis=1)
+                W_scale[L] += W_loc_d.flatten()
+            else:
+                if xroll == 0:
+                    xarg = ":"
+                elif xroll < 0:
+                    xarg = "-xroll:"
+                elif xroll > 0:
+                    xarg = ":-xroll"
+                if yroll == 0:
+                    yarg = ":"
+                elif yroll < 0:
+                    yarg = "-yroll:"
+                elif yroll > 0:
+                    yarg = ":-yroll"
+                W_scale[L] += eval("self.W_loc["+yarg+","+xarg+"].flatten()")
 
             
         return W_scale
 
 
-    def initializeLocalPatches(self, r_factor=0.0):
+    def initializeLocalPatches(self):
         """
         Preprocessing for the LETKF 
         which generates arrays storing the local observation indices for every grid cell (including 2 ghost cells)
@@ -324,18 +256,8 @@ class LEnKFOcean:
         FILL CONTENT
         """
 
-        # Book keeping
-        dy = self.ensemble.dy
-        dx = self.ensemble.dx
-
-        nx = self.ensemble.nx
-        ny = self.ensemble.ny
-
-        if r_factor > 0.0:
-            self.r_factor = r_factor
-
         # Construct local stencil
-        self.W_loc = LEnKFOcean.getLocalWeightShape(self.r_factor, dx, dy, nx, ny, self.scale_w)
+        self.W_loc = self.getLocalWeightShape()
 
         self.W_analyses = []
         self.W_forecasts = []
@@ -343,7 +265,7 @@ class LEnKFOcean:
         for g in range(len(self.groups)):
 
             # Construct global analysis and forecast weights
-            W_combined = LEnKFOcean.getCombinedWeights(self.drifter_positions[self.groups[g]], self.r_factor, dx, dy, nx, ny, self.W_loc, self.scale_w)
+            W_combined = self.getCombinedWeights(self.groups[g])
 
             W_scale = np.maximum(W_combined, 1)
 
@@ -355,12 +277,10 @@ class LEnKFOcean:
 
 
 
-    def initializeGroups(self, r_factor):
-        # Get drifter position
-        if self.ensemble.observation_type == dautils.ObservationType.StaticBuoys:
-            self.drifter_positions = self.ensemble.observeTrueDrifters()
-        else:
-            self.drifter_positions = self.ensemble.observeTrueState()[:,0:2]
+    def initializeGroups(self):
+        """
+        Simple algorithm ensuring that local areas around observations dont overlap
+        """
 
         xdim = self.ensemble.getDx() * self.ensemble.getNx()
         ydim = self.ensemble.getDy() * self.ensemble.getNy() 
@@ -372,10 +292,10 @@ class LEnKFOcean:
         for i in range(N_y):
             for j in range(N_y):
                 dx = np.abs(self.drifter_positions[i][0] - self.drifter_positions[j][0])
-                if dx > xdim/2:
+                if dx > xdim/2 and self.ensemble.getBoundaryConditions().north == 2:
                     dx = xdim - dx
                 dy = np.abs(self.drifter_positions[i][1] - self.drifter_positions[j][1])
-                if dy > ydim/2:
+                if dy > ydim/2 and self.ensemble.getBoundaryConditions().east == 2:
                     dy = ydim - dy 
                 obs_dist_mat[i,j] = np.sqrt(dx**2+dy**2)
         # Heavy diagonal such that 0-distances are above every threshold
@@ -384,7 +304,7 @@ class LEnKFOcean:
         # Groups of "un-correlated" observation
         self.groups = list([list(np.arange(N_y, dtype=int))])
         # Observations are assumed to be uncorrelated, if distance bigger than threshold
-        threshold = 2.0 * 1.5 * r_factor * self.ensemble.particles[0].dx
+        threshold = 2.0 * 1.5 * self.r_factor * self.ensemble.particles[0].dx
 
         g = 0 
         while obs_dist_mat[np.ix_(self.groups[g],self.groups[g])].min() < threshold:
@@ -398,7 +318,8 @@ class LEnKFOcean:
                     self.groups[g+1].append(idx2move)
             g = g + 1 
 
-    def _prepare_LEnKF(self, ensemble=None, r_factor=None):
+
+    def prepare_LEnKF(self, ensemble=None, r_factor=None):
         """
         Internal preprocessing for computing the LETKF analysis.
         This function will update, if neccessary, the class member variables for
@@ -417,17 +338,18 @@ class LEnKFOcean:
 
             self.N_e_active = ensemble.getNumActiveParticles()
 
+        # Update drifter position
+        if self.ensemble.observation_type == dautils.ObservationType.StaticBuoys:
+            self.drifter_positions = self.ensemble.observeTrueDrifters()
+        else:
+            self.drifter_positions = self.ensemble.observeTrueState()[:,0:2]
 
-        # Update localisation if needed
+        
+        # Update localisation parameters if needed
         if r_factor is not None and r_factor != self.r_factor:
             self.r_factor = r_factor
             self.W_loc = None
             self.groups = None
-
-        if self.groups is None or self.ensemble.observation_type != dautils.ObservationType.StaticBuoys:
-            self.initializeGroups( r_factor=self.r_factor )
-            self.initializeLocalPatches( r_factor=self.r_factor )
-
 
         # Precalculate rolling (for StaticBuoys this just have to be once)
         if self.all_Ls is None or self.ensemble.observation_type != dautils.ObservationType.StaticBuoys:
@@ -438,8 +360,12 @@ class LEnKFOcean:
             for d in range(self.N_d):
                 # Collecting rolling information (xroll and yroll are 0)
                 self.all_Ls[d], self.all_xrolls[d], self.all_yrolls[d] = \
-                    LEnKFOcean.getLocalIndices(self.drifter_positions[d,:], self.r_factor, \
+                    self.getLocalIndices(self.drifter_positions[d,:], self.r_factor, \
                         self.ensemble.dx, self.ensemble.dy, self.ensemble.nx, self.ensemble.ny)
+
+        if self.groups is None or self.ensemble.observation_type != dautils.ObservationType.StaticBuoys:
+            self.initializeGroups()
+            self.initializeLocalPatches()
 
 
 
@@ -454,7 +380,7 @@ class LEnKFOcean:
         NOTE: Then it overwrites the initially defined member ensemble
         """
 
-        self._prepare_LEnKF(ensemble=ensemble, r_factor=r_factor)
+        self.prepare_LEnKF(ensemble=ensemble, r_factor=r_factor)
 
         # Prepare local ETKF analysis
         X_f      = np.zeros((self.N_e_active,3,self.ensemble.ny,self.ensemble.nx), dtype=np.float32)
