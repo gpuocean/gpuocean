@@ -677,7 +677,16 @@ class LEnKFOcean:
         id_x = np.int(np.floor(observations_xy[0]/self.ensemble.dx))
         id_y = np.int(np.floor(observations_xy[1]/self.ensemble.dy))
         
-        eta_compensation = (self.ensemble.mean_depth + X_f[:, 0, id_y, id_x])/self.ensemble.mean_depth
+
+        if self.ensemble.observation_type == dautils.ObservationType.StaticBuoys and hasattr(self, "eta_compensation"):
+            eta_compensation = self.eta_compensation
+        else:
+            eta_compensation = np.zeros(self.N_e_active)
+            for e in range(self.N_e_active):
+                Hm = self.ensemble.particles[e].downloadBathymetry()[1][id_y,id_x]
+                eta_compensation[e] = (Hm + X_f[e, 0, id_y, id_x])/Hm
+        if self.ensemble.observation_type == dautils.ObservationType.StaticBuoys and not hasattr(self, "eta_compensation"):
+            self.eta_compensation = eta_compensation
 
         D = Y_loc * eta_compensation - (HX_f_loc_mean[:,np.newaxis] + HX_f_loc_pert)
 
