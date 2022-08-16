@@ -398,7 +398,7 @@ class LEnKFOcean:
                     self.groups[g+1].append(idx2move)
             g = g + 1 
 
-    def _prepare_LEnKF(self, ensemble=None, r_factor=0.0):
+    def _prepare_LEnKF(self, ensemble=None, r_factor=None):
         """
         Internal preprocessing for computing the LETKF analysis.
         This function will update, if neccessary, the class member variables for
@@ -419,18 +419,18 @@ class LEnKFOcean:
 
 
         # Update localisation if needed
-        if r_factor > 0.0 and r_factor != self.localScale:
+        if r_factor is not None and r_factor != self.r_factor:
             self.r_factor = r_factor
             self.W_loc = None
             self.groups = None
 
-        if self.groups is None:
+        if self.groups is None or self.ensemble.observation_type != dautils.ObservationType.StaticBuoys:
             self.initializeGroups( r_factor=self.r_factor )
             self.initializeLocalPatches( r_factor=self.r_factor )
 
 
         # Precalculate rolling (for StaticBuoys this just have to be once)
-        if self.ensemble.observation_type == dautils.ObservationType.StaticBuoys and self.all_Ls is None:
+        if self.all_Ls is None or self.ensemble.observation_type != dautils.ObservationType.StaticBuoys:
             self.all_Ls = [None]*self.N_d
             self.all_xrolls = np.zeros(self.N_d, dtype=np.int)
             self.all_yrolls = np.zeros(self.N_d, dtype=np.int)
@@ -444,7 +444,7 @@ class LEnKFOcean:
 
 
 
-    def assimilate(self, ensemble=None, r_factor=0.0):
+    def assimilate(self, ensemble=None, r_factor=None):
         """
         Performing the analysis phase of the EnKF.
         Particles are observed and the analysis state is calculated and uploaded!
@@ -517,10 +517,14 @@ class LEnKFOcean:
 
                 y_loc = observations[d, 2:4].T
 
+                D = None
+                if self.ensemble.compensate_for_eta:
+                    D = self.compensate_for_eta(y_loc, observations[d, 0:2], X_f, HX_f_loc_mean, HX_f_loc_pert)
+
                 if self.method == "SEnKF":
-                    X_a_loc = self.SEnKF_loc(X_f_loc, X_f_loc_pert, HX_f_loc_mean, HX_f_loc_pert, y_loc)
+                    X_a_loc = self.SEnKF_loc(X_f_loc, X_f_loc_pert, HX_f_loc_mean, HX_f_loc_pert, y_loc, D)
                 elif self.method == "ETKF":
-                    X_a_loc = self.ETKF_loc(ensemble, X_f_loc_mean, X_f_loc_pert, HX_f_loc_mean, HX_f_loc_pert, y_loc)
+                    X_a_loc = self.ETKF_loc(ensemble, X_f_loc_mean, X_f_loc_pert, HX_f_loc_mean, HX_f_loc_pert, y_loc, D)
 
                 # FROM LOCAL VECTOR TO GLOBAL ARRAY (we fill the global X_a with the *weighted* local values)
                 # eta, hu, hv
@@ -550,14 +554,15 @@ class LEnKFOcean:
         self.uploadAnalysis(X_f)
 
 
-    def SEnKF_loc(self, X_f_loc, X_f_loc_pert, HX_f_loc_mean, HX_f_loc_pert, y_loc):
+    def SEnKF_loc(self, X_f_loc, X_f_loc_pert, HX_f_loc_mean, HX_f_loc_pert, y_loc, D=None):
 
         # R
         R = self.ensemble.getObservationCov()
 
         # D
-        Y_loc = (y_loc + np.random.multivariate_normal(mean=np.zeros(2),cov=R, size=self.N_e)).T
-        D = Y_loc - (HX_f_loc_mean[:,np.newaxis] + HX_f_loc_pert)
+        if D is None:
+            Y_loc = (y_loc + np.random.multivariate_normal(mean=np.zeros(2),cov=R, size=self.N_e)).T
+            D = Y_loc - (HX_f_loc_mean[:,np.newaxis] + HX_f_loc_pert)
 
         # F 
         F = self.inflation_factor**2/(self.N_e - 1) * HX_f_loc_pert @ HX_f_loc_pert.T + R 
@@ -567,14 +572,16 @@ class LEnKFOcean:
         return X_a_loc
 
 
-    def ETKF_loc(self, ensemble, X_f_loc_mean, X_f_loc_pert, HX_f_loc_mean, HX_f_loc_pert, y_loc):
+    def ETKF_loc(self, ensemble, X_f_loc_mean, X_f_loc_pert, HX_f_loc_mean, HX_f_loc_pert, y_loc, D=None):
 
         # Rinv 
         Rinv = scipy.linalg.inv(self.ensemble.getObservationCov())
 
         # D
-        #y_loc = self.ensemble.observeTrueState()[d,2:4].T
-        D = y_loc - HX_f_loc_mean
+        if D is None:
+            D = y_loc - HX_f_loc_mean
+        else: 
+            D = np.average(D, axis=1)
 
         # Inflation
         if self.inflation_factor == 0.0:
@@ -647,7 +654,6 @@ class LEnKFOcean:
 
 
     def observe_particles_from_X_f(self, X_f, observations):
-        assert(self.ensemble.observation_type == dautils.ObservationType.StaticBuoys), 'Only implemented for StaticBuoys'
         assert(self.N_d == observations.shape[0]), 'mismatch between observations and N_d' 
         
         active_particles = X_f.shape[0]
@@ -663,6 +669,20 @@ class LEnKFOcean:
 
         return observedParticles
         
+
+    def compensate_for_eta(self, y_loc, observations_xy, X_f, HX_f_loc_mean, HX_f_loc_pert): 
+        
+        Y_loc = (y_loc + np.random.multivariate_normal(mean=np.zeros(2), cov=self.ensemble.getObservationCov(), size=self.N_e)).T
+
+        id_x = np.int(np.floor(observations_xy[0]/self.ensemble.dx))
+        id_y = np.int(np.floor(observations_xy[1]/self.ensemble.dy))
+        
+        eta_compensation = (self.ensemble.mean_depth + X_f[:, 0, id_y, id_x])/self.ensemble.mean_depth
+
+        D = Y_loc * eta_compensation - (HX_f_loc_mean[:,np.newaxis] + HX_f_loc_pert)
+
+        return D
+
 
     def uploadAnalysis(self, X_new):
         # Upload analysis
