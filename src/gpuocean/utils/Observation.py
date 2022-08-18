@@ -262,7 +262,7 @@ class Observation:
             while x < self.nx:
                 if self.land_mask is None:
                     buoy_indices.append([x, y])
-                elif self.land_mask[y, x]:
+                elif not self.land_mask[y, x]:
                     buoy_indices.append([x, y])
                 x = x + frequency_x
             y = y + frequency_y
