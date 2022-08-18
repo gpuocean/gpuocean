@@ -79,6 +79,10 @@ class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
                     
             if self.initialization_variance_factor_ocean_field != 0.0:
                 self.particles[i].perturbState(q0_scale=self.initialization_variance_factor_ocean_field)
+
+        # Set bookkeeping variables 
+        self.nx, self.ny = self.particles[0].nx, self.particles[0].ny
+        self.dx, self.dy = self.particles[0].dx, self.particles[0].dy
             
     
     def attachDrifters(self, drifter_positions):
