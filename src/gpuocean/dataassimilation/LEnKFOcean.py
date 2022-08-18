@@ -40,16 +40,22 @@ class LEnKFOcean:
             
     """
 
-    def __init__(self, ensemble, relaxation_factor = 1.0, inflation_factor=1.0, method="SEnKF"):
+    def __init__(self, ensemble, relaxation_factor = 1.0, inflation_factor=1.0, method="SEnKF", observations=None):
         """
         Copying the ensemble to the member variables 
         and deducing frequently used ensemble quantities
         """
 
         self.ensemble = ensemble
-        
         self.N_e = ensemble.getNumParticles()
-        self.N_d = ensemble.getNumDrifters()
+        
+        self.observations = observations
+        if observations is None:
+            try: 
+                self.observations = self.ensemble.observations
+            except:
+                assert (False), "If not EnsembleFromFile, the observations have to be provided here"
+        self.N_d = self.observations.get_num_drifters()
 
         # Size of state matrices (with ghost cells)
         self.n_i = self.ensemble.particles[0].ny + 2*self.ensemble.particles[-1].ghost_cells_y
@@ -397,7 +403,11 @@ class LEnKFOcean:
 
         X_a_loc_pert = None
 
-        observations = self.ensemble.observeTrueState()
+        if hasattr(ensemble, "mean_depth"):
+            observations = self.observations.get_observation(self.ensemble.t, self.ensemble.mean_depth)
+        else:
+            Hm = self.ensemble.particles[0].downloadBathymetry()[1]
+            observations = self.observations.get_observation(self.ensemble.t, Hm)
         
         
         for g in range(len(self.groups)):
@@ -608,8 +618,8 @@ class LEnKFOcean:
             eta_compensation = self.eta_compensation
         else:
             eta_compensation = np.zeros(self.N_e_active)
+            Hm = self.ensemble.particles[0].downloadBathymetry()[1][id_y,id_x]
             for e in range(self.N_e_active):
-                Hm = self.ensemble.particles[e].downloadBathymetry()[1][id_y,id_x]
                 eta_compensation[e] = (Hm + X_f[e, 0, id_y, id_x])/Hm
         if self.ensemble.observation_type == dautils.ObservationType.StaticBuoys and not hasattr(self, "eta_compensation"):
             self.eta_compensation = eta_compensation
