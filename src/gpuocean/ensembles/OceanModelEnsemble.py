@@ -111,6 +111,22 @@ class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
     
     
     
+    def stepToObservation(self, observation_time, write_now=False):
+        """
+        Advance the ensemble to the given observation time, and mimics CDKLM16.dataAssimilationStep function
+        
+        Arguments:
+            observation_time: The end time for the simulation
+            write_now: Write result to NetCDF if an writer is active.
+        """
+        for p in range(self.numParticles):
+        
+            # Only active particles are evolved
+            if self.particlesActive[p]:
+                self.particles[p].dataAssimilationStep(observation_time, write_now=write_now)
+
+        self.t = observation_time
+
     
     def modelStep(self, sub_t, rank="", update_dt=True):
         """
