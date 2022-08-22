@@ -22,7 +22,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 
-from doctest import ELLIPSIS_MARKER
 import numpy as np
 import scipy
 import time
@@ -48,8 +47,14 @@ class LEnKFOcean:
 
         self.ensemble = ensemble
         self.N_e = ensemble.getNumParticles()
+        self.N_e_active = ensemble.getNumParticles()
 
         self.Hm = ensemble.particles[0].downloadBathymetry()[1]
+
+        assert ensemble.t == 0 or np.all(ensemble.particles[0].getLandMask() == None), "Not implemented! For inits after initial, no mask can be identified"
+        self.mask = np.full((ensemble.particles[0].ny, ensemble.particles[0].nx), True)
+        if np.all(ensemble.particles[0].getLandMask() != None):
+            self.mask = (ensemble.particles[0].download(interior_domain_only=True)[0].data == 0.0)
         
         self.observations = observations
         if observations is None:
@@ -427,6 +432,8 @@ class LEnKFOcean:
                 X_f_loc_pert_tmp[:,:,:] = X_f_pert[:,:,L] # shape: (N_e_active, 3, N_x_local)
                 X_f_loc_mean_tmp[:,:] = X_f_mean[:,L]   # shape: (3, N_x_local))
 
+                if not np.all(self.mask[L]):
+                    print("hello")
                 
                 # Roll local array (this should not change anything here!)
                 if not (xroll == 0 and yroll == 0):
@@ -441,6 +448,7 @@ class LEnKFOcean:
                 # FROM LOCAL ARRAY TO LOCAL VECTOR FOR FORECAST (we concatinate eta, hu and hv components)
                 X_f_loc_mean = np.append(X_f_loc_mean_tmp[0,:],np.append(X_f_loc_mean_tmp[1,:],X_f_loc_mean_tmp[2,:]))
                 X_f_loc[:,:] = X_f_loc_tmp.reshape((self.N_e_active, 3*N_x_local)).T
+
                 X_f_loc_pert[:,:] = X_f_loc_pert_tmp.reshape((self.N_e_active, 3*N_x_local)).T
                 
                     
@@ -452,9 +460,12 @@ class LEnKFOcean:
 
                 y_loc = observations[d, 2:4].T
 
+                # eta-compensation is done directly on the innovation vector
+                # with D=None, the classical innovation is calculated in the DA functions
                 D = None
-                if self.ensemble.compensate_for_eta:
-                    D = self.compensate_for_eta(y_loc, observations[d, 0:2], X_f, HX_f_loc_mean, HX_f_loc_pert)
+                if hasattr(self.ensemble, 'compensate_for_eta'):
+                    if self.ensemble.compensate_for_eta:
+                        D = self.compensate_for_eta(y_loc, observations[d, 0:2], X_f, HX_f_loc_mean, HX_f_loc_pert)
 
                 if self.method == "SEnKF":
                     X_a_loc = self.SEnKF_loc(X_f_loc, X_f_loc_pert, HX_f_loc_mean, HX_f_loc_pert, y_loc, D)
@@ -564,7 +575,7 @@ class LEnKFOcean:
             idx = 0
             for e in range(self.N_e):
                 if self.ensemble.particlesActive[e]:
-                    X_f[idx,0,:,:], X_f[idx,1,:,:], X_f[idx,2,:,:] = self.ensemble.particles[e].download(interior_domain_only=True)
+                    X_f[idx,0,:,:], X_f[idx,1,:,:], X_f[idx,2,:,:] = list(map(np.ma.getdata, self.ensemble.particles[e].download(interior_domain_only=True)))
                     idx += 1
 
         X_f_mean[:,:,:] = np.mean(X_f, axis=0)

@@ -84,6 +84,8 @@ class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
         self.nx, self.ny = self.particles[0].nx, self.particles[0].ny
         self.dx, self.dy = self.particles[0].dx, self.particles[0].dy
         self.t  = self.particles[0].t
+
+        self.particlesActive = [True]*(numParticles)
             
     
     def attachDrifters(self, drifter_positions):
