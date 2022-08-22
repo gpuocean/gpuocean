@@ -52,9 +52,9 @@ class LEnKFOcean:
         self.Hm = ensemble.particles[0].downloadBathymetry()[1]
 
         assert ensemble.t == 0 or np.all(ensemble.particles[0].getLandMask() == None), "Not implemented! For inits after initial, no mask can be identified"
-        self.mask = np.full((ensemble.particles[0].ny, ensemble.particles[0].nx), True)
+        self.data_mask = np.full((ensemble.particles[0].ny, ensemble.particles[0].nx), True)
         if np.all(ensemble.particles[0].getLandMask() != None):
-            self.mask = (ensemble.particles[0].download(interior_domain_only=True)[0].data == 0.0)
+            self.data_mask = (ensemble.particles[0].download(interior_domain_only=True)[0].data != 0.0)
         
         self.observations = observations
         if observations is None:
@@ -404,9 +404,6 @@ class LEnKFOcean:
         X_f_loc_tmp      = np.zeros((self.N_e_active, 3, N_x_local))
         X_f_loc_pert_tmp = np.zeros((self.N_e_active, 3, N_x_local))
         X_f_loc_mean_tmp = np.zeros((3, N_x_local))
-            
-        X_f_loc      = np.zeros((3*N_x_local, self.N_e_active))
-        X_f_loc_pert = np.zeros((3*N_x_local, self.N_e_active))
 
         X_a_loc_pert = None
 
@@ -431,25 +428,23 @@ class LEnKFOcean:
                 X_f_loc_tmp[:,:,:] = X_f[:,:,L]           # shape: (N_e_active, 3, N_x_local)
                 X_f_loc_pert_tmp[:,:,:] = X_f_pert[:,:,L] # shape: (N_e_active, 3, N_x_local)
                 X_f_loc_mean_tmp[:,:] = X_f_mean[:,L]   # shape: (3, N_x_local))
-
-                if not np.all(self.mask[L]):
-                    print("hello")
+                data_mask_loc = self.data_mask[L]
                 
                 # Roll local array (this should not change anything here!)
                 if not (xroll == 0 and yroll == 0):
                     rolling_shape = (self.N_e_active, 3, self.W_loc.shape[0], self.W_loc.shape[1]) # roll around axis 2 and 3
+                    data_mask_loc = np.roll(np.roll(self.data_mask[L].reshape(self.W_loc.shape[0], self.W_loc.shape[1]), shift=-yroll, axis=0 ), shift=-xroll, axis=1).flatten()
                     X_f_loc_tmp[:,:,:] = np.roll(np.roll(X_f_loc_tmp.reshape(rolling_shape), shift=-yroll, axis=2 ), shift=-xroll, axis=3).reshape((self.N_e_active, 3, N_x_local))
                     X_f_loc_pert_tmp[:,:,:] = np.roll(np.roll(X_f_loc_pert_tmp.reshape(rolling_shape), shift=-yroll, axis=2 ), shift=-xroll, axis=3).reshape((self.N_e_active, 3, N_x_local))
 
                     mean_rolling_shape = (3, self.W_loc.shape[0], self.W_loc.shape[1]) # roll around axis 1 and 2
                     X_f_loc_mean_tmp[:,:] = np.roll(np.roll(X_f_loc_mean_tmp.reshape(mean_rolling_shape), shift=-yroll, axis=1 ), shift=-xroll, axis=2).reshape((3, N_x_local))
                 
-                
+                N_x_local_masked = np.sum(self.data_mask[L])
                 # FROM LOCAL ARRAY TO LOCAL VECTOR FOR FORECAST (we concatinate eta, hu and hv components)
-                X_f_loc_mean = np.append(X_f_loc_mean_tmp[0,:],np.append(X_f_loc_mean_tmp[1,:],X_f_loc_mean_tmp[2,:]))
-                X_f_loc[:,:] = X_f_loc_tmp.reshape((self.N_e_active, 3*N_x_local)).T
-
-                X_f_loc_pert[:,:] = X_f_loc_pert_tmp.reshape((self.N_e_active, 3*N_x_local)).T
+                X_f_loc = X_f_loc_tmp[:,:,data_mask_loc].reshape((self.N_e_active, 3*N_x_local_masked)).T
+                X_f_loc_mean = np.append(X_f_loc_mean_tmp[0,data_mask_loc],np.append(X_f_loc_mean_tmp[1,data_mask_loc],X_f_loc_mean_tmp[2,data_mask_loc]))
+                X_f_loc_pert = X_f_loc_pert_tmp[:,:,data_mask_loc].reshape((self.N_e_active, 3*N_x_local_masked)).T
                 
                     
                 # Local observations
@@ -476,9 +471,12 @@ class LEnKFOcean:
                 # eta, hu, hv
                 for i in range(3):
                     # Calculate weighted local analysis
-                    weighted_X_a_loc = X_a_loc[i*N_x_local:(i+1)*N_x_local,:]*(np.tile(self.W_loc.flatten().T, (self.N_e_active, 1)).T)
+                    weighted_X_a_loc_masked = X_a_loc[i*N_x_local_masked:(i+1)*N_x_local_masked,:]*(np.tile(self.W_loc.flatten()[data_mask_loc].T, (self.N_e_active, 1)).T)
                     # Here, we use np.tile(W_loc.flatten().T, (N_e_active, 1)).T to repeat W_loc as column vector N_e_active times 
                     
+                    # TOD0: fill full local area!!!
+                    weighted_X_a_loc = np.zeros((self.W_loc.shape[0], self.W_loc.shape[1], self.N_e_active))
+                    weighted_X_a_loc[data_mask_loc.reshape((self.W_loc.shape[0], self.W_loc.shape[1])),:] = weighted_X_a_loc_masked
                     if not (xroll == 0 and yroll == 0):
                         weighted_X_a_loc = np.roll(np.roll(weighted_X_a_loc[:,:].reshape((self.W_loc.shape[0], self.W_loc.shape[1], self.N_e_active)), 
                                                                                         shift=yroll, axis=0 ), 
