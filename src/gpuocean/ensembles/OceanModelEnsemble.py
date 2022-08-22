@@ -83,6 +83,7 @@ class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
         # Set bookkeeping variables 
         self.nx, self.ny = self.particles[0].nx, self.particles[0].ny
         self.dx, self.dy = self.particles[0].dx, self.particles[0].dy
+        self.t  = self.particles[0].t
             
     
     def attachDrifters(self, drifter_positions):
@@ -109,7 +110,7 @@ class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
     
     
     
-    def modelStep(self, sub_t, rank, update_dt=True):
+    def modelStep(self, sub_t, rank="", update_dt=True):
         """
         Function which makes all particles step until time t.
         """

@@ -48,6 +48,8 @@ class LEnKFOcean:
 
         self.ensemble = ensemble
         self.N_e = ensemble.getNumParticles()
+
+        self.Hm = ensemble.particles[0].downloadBathymetry()[1]
         
         self.observations = observations
         if observations is None:
@@ -345,10 +347,10 @@ class LEnKFOcean:
             self.N_e_active = ensemble.getNumActiveParticles()
 
         # Update drifter position
-        if self.ensemble.observation_type == dautils.ObservationType.StaticBuoys:
-            self.drifter_positions = self.ensemble.observeTrueDrifters()
+        if self.observations.observation_type == dautils.ObservationType.StaticBuoys:
+            self.drifter_positions = self.observations.get_drifter_position(self.ensemble.t)
         else:
-            self.drifter_positions = self.ensemble.observeTrueState()[:,0:2]
+            self.drifter_positions = self.observations.get_observation(self.ensemble.t, Hm=self.Hm)
 
         
         # Update localisation parameters if needed
@@ -358,7 +360,7 @@ class LEnKFOcean:
             self.groups = None
 
         # Precalculate rolling (for StaticBuoys this just have to be once)
-        if self.all_Ls is None or self.ensemble.observation_type != dautils.ObservationType.StaticBuoys:
+        if self.all_Ls is None or self.observations.observation_type != dautils.ObservationType.StaticBuoys:
             self.all_Ls = [None]*self.N_d
             self.all_xrolls = np.zeros(self.N_d, dtype=np.int)
             self.all_yrolls = np.zeros(self.N_d, dtype=np.int)
@@ -369,7 +371,7 @@ class LEnKFOcean:
                     self.getLocalIndices(self.drifter_positions[d,:], self.r_factor, \
                         self.ensemble.dx, self.ensemble.dy, self.ensemble.nx, self.ensemble.ny)
 
-        if self.groups is None or self.ensemble.observation_type != dautils.ObservationType.StaticBuoys:
+        if self.groups is None or self.observations.observation_type != dautils.ObservationType.StaticBuoys:
             self.initializeGroups()
             self.initializeLocalPatches()
 
@@ -403,11 +405,8 @@ class LEnKFOcean:
 
         X_a_loc_pert = None
 
-        if hasattr(ensemble, "mean_depth"):
-            observations = self.observations.get_observation(self.ensemble.t, self.ensemble.mean_depth)
-        else:
-            Hm = self.ensemble.particles[0].downloadBathymetry()[1]
-            observations = self.observations.get_observation(self.ensemble.t, Hm)
+
+        observations = self.observations.get_observation(self.ensemble.t, Hm=self.Hm)
         
         
         for g in range(len(self.groups)):
@@ -614,14 +613,14 @@ class LEnKFOcean:
         id_y = np.int(np.floor(observations_xy[1]/self.ensemble.dy))
         
 
-        if self.ensemble.observation_type == dautils.ObservationType.StaticBuoys and hasattr(self, "eta_compensation"):
+        if self.observations.observation_type == dautils.ObservationType.StaticBuoys and hasattr(self, "eta_compensation"):
             eta_compensation = self.eta_compensation
         else:
             eta_compensation = np.zeros(self.N_e_active)
             Hm = self.ensemble.particles[0].downloadBathymetry()[1][id_y,id_x]
             for e in range(self.N_e_active):
                 eta_compensation[e] = (Hm + X_f[e, 0, id_y, id_x])/Hm
-        if self.ensemble.observation_type == dautils.ObservationType.StaticBuoys and not hasattr(self, "eta_compensation"):
+        if self.observations.observation_type == dautils.ObservationType.StaticBuoys and not hasattr(self, "eta_compensation"):
             self.eta_compensation = eta_compensation
 
         D = Y_loc * eta_compensation - (HX_f_loc_mean[:,np.newaxis] + HX_f_loc_pert)
