@@ -405,11 +405,10 @@ class LEnKFOcean:
         X_f_loc_pert_tmp = np.zeros((self.N_e_active, 3, N_x_local))
         X_f_loc_mean_tmp = np.zeros((3, N_x_local))
 
-        X_a_loc_pert = None
+        weighted_X_a_loc = np.zeros((self.W_loc.shape[0], self.W_loc.shape[1], self.N_e_active))
 
 
-        observations = self.observations.get_observation(self.ensemble.t, Hm=self.Hm)
-        
+        observations = self.observations.get_observation(self.ensemble.t, Hm=self.Hm)        
         
         for g in range(len(self.groups)):
           
@@ -474,8 +473,7 @@ class LEnKFOcean:
                     weighted_X_a_loc_masked = X_a_loc[i*N_x_local_masked:(i+1)*N_x_local_masked,:]*(np.tile(self.W_loc.flatten()[data_mask_loc].T, (self.N_e_active, 1)).T)
                     # Here, we use np.tile(W_loc.flatten().T, (N_e_active, 1)).T to repeat W_loc as column vector N_e_active times 
                     
-                    # TOD0: fill full local area!!!
-                    weighted_X_a_loc = np.zeros((self.W_loc.shape[0], self.W_loc.shape[1], self.N_e_active))
+                    weighted_X_a_loc.fill(0)
                     weighted_X_a_loc[data_mask_loc.reshape((self.W_loc.shape[0], self.W_loc.shape[1])),:] = weighted_X_a_loc_masked
                     if not (xroll == 0 and yroll == 0):
                         weighted_X_a_loc = np.roll(np.roll(weighted_X_a_loc[:,:].reshape((self.W_loc.shape[0], self.W_loc.shape[1], self.N_e_active)), 
