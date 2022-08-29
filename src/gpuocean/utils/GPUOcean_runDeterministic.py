@@ -73,9 +73,13 @@ def initlonlat2initgpuocean(source_url, lon, lat,norkyst = True, num_cells_x = 1
     
     res = int(X[1]-X[0]) #Finding grid-resolution (assumed same in both horizontal directions)
 
+
+    if not isinstance(x, np.ndarray):
+        x = [x] 
+
     #Given x,y, num_cells_x, num_cells_y and resolution: specify domain in gpuocean
-    x0, x1 = x//res - num_cells_x//2, x//res + num_cells_x//2 
-    y0, y1 = y//res - num_cells_y//2, y//res + num_cells_y//2
+    x0, x1 = x[0]//res - num_cells_x//2, x[0]//res + num_cells_x//2 
+    y0, y1 = y[0]//res - num_cells_y//2, y[0]//res + num_cells_y//2
     
     #Find new x,y in gpuocean coordinates for initial position
     xinit = x - X[int(x0) + 2]
