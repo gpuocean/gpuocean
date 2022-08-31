@@ -55,7 +55,7 @@ class MulitResOceanStateEnsemble():
             self.ensembles[l] = OceanModelEnsemble.OceanModelEnsemble(gpu_ctx, sim_argses[l], data_args_l, numParticles_per_level[l], observation_variance=observation_variance_per_level[l])
 
     def __del__(self):
-        for l in self.L:
+        for l in range(self.L):
             self.ensembles[l].cleanUp()
         self.gpu_ctx = None
 
