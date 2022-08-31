@@ -33,13 +33,40 @@ class MulitResOceanStateEnsemble():
     Class for ensembles of ensembles of ocean states.
     """
         
-    def __init__(self, gpu_ctx, sim_args, data_args, levels, numParticles_per_level):
+    def __init__(self, gpu_ctx, sim_argses, data_args, levels, numParticles_per_level, observation_variance_per_level=None):
         
         self.gpu_ctx = gpu_ctx
         self.ensembles = [None]*len(levels)
         
-        assert (len(levels) == len(numParticles_per_level))
+        self.L = len(levels)
 
-        for l in range(len(levels)):
-            data_args_l = NetCDFInitialization.rescaleInitialConditions(data_args, scale=levels[l])
-            self.ensembles[l] = OceanModelEnsemble.OceanModelEnsemble(gpu_ctx, sim_args, data_args_l, numParticles_per_level[l])
+        assert (self.L == len(sim_argses))
+        assert (self.L == len(numParticles_per_level))
+        if observation_variance_per_level is not None:
+            assert (self.L == len(observation_variance_per_level))
+        else: 
+            observation_variance_per_level = [0.01**2] * self.L
+
+        for l in range(self.L):
+            if levels[l] != 1.0:
+                data_args_l = NetCDFInitialization.removeMetadata(NetCDFInitialization.rescaleInitialConditions(data_args, scale=levels[l]))
+            else:
+                data_args_l = NetCDFInitialization.removeMetadata(data_args)
+            self.ensembles[l] = OceanModelEnsemble.OceanModelEnsemble(gpu_ctx, sim_argses[l], data_args_l, numParticles_per_level[l], observation_variance=observation_variance_per_level[l])
+
+    def __del__(self):
+        for l in self.L:
+            self.ensembles[l].cleanUp()
+        self.gpu_ctx = None
+
+
+    def stepToObservation(self, observation_time, write_now=False):
+        """
+        Advance the ensemble to the given observation time, and mimics CDKLM16.dataAssimilationStep function
+        
+        Arguments:
+            observation_time: The end time for the simulation
+            write_now: Write result to NetCDF if an writer is active.
+        """
+        for l in range(self.L):
+            self.ensembles[l].stepToObservation(observation_time, write_now=write_now)
