@@ -519,12 +519,12 @@ def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
 def rescaleInitialConditions(old_ic, scale):
     ic = copy.deepcopy(old_ic)
     
-    ic['NX'] = int(old_ic['NX']*scale)
-    ic['NY'] = int(old_ic['NY']*scale)
+    ic['nx'] = int(old_ic['nx']*scale)
+    ic['ny'] = int(old_ic['ny']*scale)
     gc_x = old_ic['NX'] - old_ic['nx']
     gc_y = old_ic['NY'] - old_ic['ny']
-    ic['nx'] = ic['NX'] - gc_x
-    ic['ny'] = ic['NY'] - gc_y
+    ic['NX'] = ic['nx'] + gc_x
+    ic['NY'] = ic['ny'] + gc_y
     ic['dx'] = old_ic['dx']/scale
     ic['dy'] = old_ic['dy']/scale
     _, _, ic['H'] = OceanographicUtilities.rescaleIntersections(old_ic['H'], ic['NX']+1, ic['NY']+1)
