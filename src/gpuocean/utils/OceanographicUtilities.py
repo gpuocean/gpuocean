@@ -354,7 +354,7 @@ def rescaleIntersections(data, nx1, ny1, **kwargs):
         return (nx0-1)/(nx1-1), (ny0-1)/(ny1-1), out_data
     
     
-def calcGeostrophicBalance(eta, H_m, hu, hv, angle, f_beta, dx, dy, g=9.81, use_minmod=False, minmod_theta=1.3):
+def calcGeostrophicBalance(eta, H_m, hu, hv, angle, f_beta, dx, dy, g=9.81, use_minmod=False, minmod_theta=1.3, norkyst=False):
     
     #Calculate derivatives
     if (use_minmod):
@@ -362,6 +362,9 @@ def calcGeostrophicBalance(eta, H_m, hu, hv, angle, f_beta, dx, dy, g=9.81, use_
         DetaDy = minmodY(eta, minmod_theta)/dy
     else:
         DetaDx, DetaDy = np.gradient(eta)
+        # in NorKyst y is first axis and x is second axis
+        if norkyst: 
+            DetaDx, DetaDy = DetaDy, DetaDx
         DetaDx = DetaDx / dx
         DetaDy = DetaDy / dy
     
