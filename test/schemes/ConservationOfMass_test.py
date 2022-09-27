@@ -4,7 +4,8 @@ This software is part of GPU Ocean.
 
 Copyright (C) 2022 SINTEF Digital
 
-This python module implements regression tests for the CDKLM16 scheme.
+This python module implements regression tests conservation of mass
+related to Kelvin waves in a domain with mixed boundary conditions.
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

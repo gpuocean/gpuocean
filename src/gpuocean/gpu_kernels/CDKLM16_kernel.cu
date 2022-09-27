@@ -25,7 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "common.cu"
-
+#include "external_forcing.cu"
 
 texture<float, cudaTextureType2D> angle_tex;
 texture<float, cudaTextureType2D> coriolis_f_tex;
@@ -446,8 +446,9 @@ __global__ void cdklm_swe_2D(
         float* Hm_ptr_, const int Hm_pitch_,
         float land_value_,
 
-        //Wind stress parameters
+        //External forcing parameters
         const float wind_stress_t_,
+        const float atmospheric_pressure_t_,
 
         // Boundary conditions (1: wall, 2: periodic, 3: open boundary (flow relaxation scheme))
         // Note: these are packed north, east, south, west boolean bits into an int
@@ -824,8 +825,8 @@ __global__ void cdklm_swe_2D(
             // If not land
             if (R[0][j][i] != CDKLM_DRY_FLAG) {
                 // Wind
-                const float X = windStressX(wind_stress_t_, ti+0.5, tj+0.5, NX, NY);
-                const float Y = windStressY(wind_stress_t_, ti+0.5, tj+0.5, NX, NY);
+                const float X = windStressX(wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4);
+                const float Y = windStressY(wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4);
 
                 // Bottom topography source terms!
                 // -g*(eta + H)*(-1)*dH/dx   * dx
@@ -834,8 +835,8 @@ __global__ void cdklm_swe_2D(
                 const float RHyp = 0.5f*( Hi[H_j+1][H_i  ] + Hi[H_j+1][H_i+1] );
                 const float RHym = 0.5f*( Hi[H_j  ][H_i  ] + Hi[H_j  ][H_i+1] );
                 
-                float H_x = RHxp - RHxm;
-                float H_y = RHyp - RHym;
+                const float H_x = RHxp - RHxm;
+                const float H_y = RHyp - RHym;
                 
                 const float eta_sn = 0.5f*(eta_north + eta_south);
                 const float eta_we = 0.5f*(eta_west  + eta_east);
@@ -860,9 +861,14 @@ __global__ void cdklm_swe_2D(
                 const float hu_cor = right.x*hu_east_cor + right.y*hv_north_cor;
                 const float hv_cor = up.x*hu_east_cor + up.y*hv_north_cor;
 
+                // Atmospheric pressure
+                const float2 atm_p_central_diff = atmospheric_pressure_central_diff(atmospheric_pressure_t_,  ti+0.5, tj+0.5, NX+4, NY+4);
+                const float atm_pressure_x = -atm_p_central_diff.x*h/(2.0f*DX*RHO_O);
+                const float atm_pressure_y = -atm_p_central_diff.y*h/(2.0f*DY*RHO_O);
+
                 // Total source terms
-                st1 = X + hu_cor + bathymetry1/DX;
-                st2 = Y + hv_cor + bathymetry2/DY;
+                st1 = X + hu_cor + atm_pressure_x + bathymetry1/DX;
+                st2 = Y + hv_cor + atm_pressure_y + bathymetry2/DY;
             }
         }
 

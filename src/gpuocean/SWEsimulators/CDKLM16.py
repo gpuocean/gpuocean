@@ -31,7 +31,7 @@ import gc
 import logging
 from scipy.interpolate import interp2d
 
-from gpuocean.utils import Common, SimWriter, SimReader, WindStress
+from gpuocean.utils import Common, SimWriter, SimReader, WindStress, AtmosphericPressure
 from gpuocean.SWEsimulators import Simulator, OceanStateNoise
 from gpuocean.utils import OceanographicUtilities
 
@@ -55,11 +55,13 @@ class CDKLM16(Simulator.Simulator):
                  angle=np.array([[0]], dtype=np.float32), \
                  subsample_angle=10, \
                  latitude=None, \
+                 rho_o = 1025.0, \
                  t=0.0, \
                  theta=1.3, rk_order=2, \
                  coriolis_beta=0.0, \
                  max_wind_direction_perturbation = 0, \
-                 wind_stress=WindStress.WindStress(), \
+                 wind=WindStress.WindStress(), \
+                 atmospheric_pressure=AtmosphericPressure.AtmosphericPressure(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  boundary_conditions_data=Common.BoundaryConditionsData(), \
                  small_scale_perturbation=False, \
@@ -105,7 +107,8 @@ class CDKLM16(Simulator.Simulator):
         rk_order: Order of Runge Kutta method {1,2*,3}
         coriolis_beta: Coriolis linear factor -> f = f + beta*(y-y_0)
         max_wind_direction_perturbation: Large-scale model error emulation by per-time-step perturbation of wind direction by +/- max_wind_direction_perturbation (degrees)
-        wind_stress: Wind stress parameters
+        wind: Wind stress parameters
+        atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
         small_scale_perturbation: Boolean value for applying a stochastic model error
         small_scale_perturbation_amplitude: Amplitude (q0 coefficient) for model error
@@ -161,7 +164,8 @@ class CDKLM16(Simulator.Simulator):
                                       theta, rk_order, \
                                       coriolis_beta, \
                                       y_zero_reference_cell, \
-                                      wind_stress, \
+                                      wind, \
+                                      atmospheric_pressure, \
                                       write_netcdf, \
                                       ignore_ghostcells, \
                                       offset_x, offset_y, \
@@ -174,7 +178,7 @@ class CDKLM16(Simulator.Simulator):
         # eta[self.interior_domain_indices[2]:self.interior_domain_indices[0], \
         #     self.interior_domain_indices[3]:self.interior_domain_indices[1] ]
         self.interior_domain_indices = np.array([-2,-2,2,2])
-        
+
         defines={'block_width': block_width, 'block_height': block_height,
                          'KPSIMULATOR_DESING_EPS': "{:.12f}f".format(desingularization_eps),
                          'KPSIMULATOR_FLUX_SLOPE_EPS': "{:.12f}f".format(flux_slope_eps),
@@ -186,7 +190,8 @@ class CDKLM16(Simulator.Simulator):
                          'DX': "{:.12f}f".format(self.dx),
                          'DY': "{:.12f}f".format(self.dy),
                          'GRAV': "{:.12f}f".format(self.g),
-                         'FRIC': "{:.12f}f".format(self.r)
+                         'FRIC': "{:.12f}f".format(self.r),
+                         'RHO_O': "{:.12f}f".format(rho_o)
         }
         
         #Get kernels
@@ -211,9 +216,11 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPiffi")
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifffi")
         self.update_wind_stress(self.kernel, self.cdklm_swe_2D)
+        self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D)
         
+
         # CUDA functions for finding max time step size:
         self.num_threads_dt = num_threads_dt
         self.num_blocks_dt  = np.int32(self.global_size[0]*self.global_size[1])
@@ -350,7 +357,6 @@ class CDKLM16(Simulator.Simulator):
         self.coriolis_texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
         
         
-
         # Small scale perturbation:
         self.small_scale_perturbation = small_scale_perturbation
         self.small_scale_model_error = None
@@ -402,7 +408,7 @@ class CDKLM16(Simulator.Simulator):
         
         self.device_dt.release()
         self.max_dt_buffer.release()
-        
+ 
         self.gpu_ctx = None
         gc.collect()
            
@@ -423,7 +429,7 @@ class CDKLM16(Simulator.Simulator):
                + sim_name + " results."
         
         # read the most recent state 
-        H = sim_reader.getH();
+        H = sim_reader.getH()
         
         # get last timestep (including simulation time of last timestep)
         if time0 is None:
@@ -464,12 +470,8 @@ class CDKLM16(Simulator.Simulator):
         }    
         
         # Wind stress
-        try:
-            wind_stress_type = sim_reader.get("wind_stress_type")
-            wind = Common.WindStressParams(type=wind_stress_type)
-        except:
-            wind = WindStress.WindStress()
-        sim_params['wind_stress'] = wind
+        wind = WindStress.WindStress()
+        sim_params['wind'] = wind
             
         # Boundary conditions
         sim_params['boundary_conditions'] = sim_reader.getBC()
@@ -504,6 +506,8 @@ class CDKLM16(Simulator.Simulator):
                                              self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0)
         
         t_now = 0.0
+        #print("self.p_atm_factor_handle(self.t) = " + str(self.p_atm_factor_handle(self.t)))
+
         while (t_now < t_end):
         #for i in range(0, n):
             # Get new random wind direction (emulationg large-scale model error)
@@ -523,6 +527,7 @@ class CDKLM16(Simulator.Simulator):
             local_dt = np.float32(min(self.dt, np.float32(t_end - t_now)))
             
             wind_stress_t = np.float32(self.update_wind_stress(self.kernel, self.cdklm_swe_2D))
+            atmospheric_pressure_t = np.float32(self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D))
             self.bc_kernel.update_bc_values(self.gpu_stream, self.t)
 
             #self.bc_kernel.boundaryCondition(self.cl_queue, \
@@ -533,21 +538,21 @@ class CDKLM16(Simulator.Simulator):
 
                 self.callKernel(self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
                                 self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
-                                local_dt, wind_stress_t, 0)
+                                local_dt, wind_stress_t, atmospheric_pressure_t, 0)
 
                 self.bc_kernel.boundaryCondition(self.gpu_stream, \
                         self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1)
 
                 self.callKernel(self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
                                 self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
-                                local_dt, wind_stress_t, 1)
+                                local_dt, wind_stress_t, atmospheric_pressure_t, 1)
 
                 # Applying final boundary conditions after perturbation (if applicable)
                 
             elif (self.rk_order == 1):
                 self.callKernel(self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
                                 self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
-                                local_dt, wind_stress_t, 0)
+                                local_dt, wind_stress_t, atmospheric_pressure_t, 0)
                                 
                 self.gpu_data.swap()
 
@@ -558,21 +563,21 @@ class CDKLM16(Simulator.Simulator):
 
                 self.callKernel(self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
                                 self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
-                                local_dt, wind_stress_t, 0)
+                                local_dt, wind_stress_t, atmospheric_pressure_t, 0)
                 
                 self.bc_kernel.boundaryCondition(self.gpu_stream, \
                         self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1)
 
                 self.callKernel(self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
                                 self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
-                                local_dt, wind_stress_t, 1)
+                                local_dt, wind_stress_t, atmospheric_pressure_t, 1)
 
                 self.bc_kernel.boundaryCondition(self.gpu_stream, \
                         self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1)
 
                 self.callKernel(self.gpu_data.h1, self.gpu_data.hu1, self.gpu_data.hv1, \
                                 self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0, \
-                                local_dt, wind_stress_t, 2)
+                                local_dt, wind_stress_t, atmospheric_pressure_t, 2)
                 
                 # Applying final boundary conditions after perturbation (if applicable)
             
@@ -612,7 +617,7 @@ class CDKLM16(Simulator.Simulator):
     def callKernel(self, \
                    h_in, hu_in, hv_in, \
                    h_out, hu_out, hv_out, \
-                   local_dt, wind_stress_t, rk_step):
+                   local_dt, wind_stress_t, atmospheric_pressure_t, rk_step):
 
         #"Beautify" code a bit by packing four int8s into a single int32
         #Note: Must match code in kernel!
@@ -635,6 +640,7 @@ class CDKLM16(Simulator.Simulator):
                            self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
                            self.bathymetry.mask_value,
                            wind_stress_t, \
+                           atmospheric_pressure_t, \
                            boundary_conditions)
             
     

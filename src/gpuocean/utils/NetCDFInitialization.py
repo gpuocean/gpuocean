@@ -132,71 +132,6 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
     return bc_data
 
 
-def getWindSourceterm(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
-    """
-    timestep_indices => index into netcdf-array, e.g. [1, 3, 5]
-    timestep => time at timestep, e.g. [1800, 3600, 7200]
-    """
-    
-    if type(source_url_list) is not list:
-        source_url_list = [source_url_list]
-    
-    num_files = len(source_url_list)
-    
-    source_url = source_url_list[0]
-    
-    assert(num_files == len(timesteps)), str(num_files) +' vs '+ str(len(timesteps))
-    
-    if (timestep_indices is None):
-        timestep_indices = [None]*num_files
-        for i in range(num_files):
-            timestep_indices[i] = range(len(timesteps[i]))
-        
-    u_wind_list = [None]*num_files
-    v_wind_list = [None]*num_files
-    
-    for i in range(num_files):
-        try:
-            ncfile = Dataset(source_url_list[i])
-            u_wind_list[i] = ncfile.variables['Uwind'][timestep_indices[i], y0:y1, x0:x1]
-            v_wind_list[i] = ncfile.variables['Vwind'][timestep_indices[i], y0:y1, x0:x1]
-        except Exception as e:
-            raise e
-        finally:
-            ncfile.close()
-
-    u_wind = u_wind_list[0].filled(0)
-    v_wind = v_wind_list[0].filled(0)
-    for i in range(1, num_files):
-        u_wind = np.concatenate((u_wind, u_wind_list[i].filled(0)))
-        v_wind = np.concatenate((v_wind, v_wind_list[i].filled(0)))
-    
-    u_wind = u_wind.astype(np.float32)
-    v_wind = v_wind.astype(np.float32)
-    
-    wind_speed = np.sqrt(np.power(u_wind, 2) + np.power(v_wind, 2))
-
-    # C_drag as defined by Engedahl (1995)
-    #(See "Documentation of simple ocean models for use in ensemble predictions. Part II: Benchmark cases"
-    #at https://www.met.no/publikasjoner/met-report/met-report-2012 for details.) /
-    def computeDrag(wind_speed):
-        C_drag = np.where(wind_speed < 11, 0.0012, 0.00049 + 0.000065*wind_speed)
-        return C_drag
-    C_drag = computeDrag(wind_speed)
-
-    rho_a = 1.225 # Density of air
-    rho_w = 1025 # Density of water
-
-    #Wind stress is then 
-    # tau_s = rho_a * C_drag * |W|W
-    wind_stress = C_drag * wind_speed * rho_a / rho_w
-    wind_stress_u = wind_stress*u_wind
-    wind_stress_v = wind_stress*v_wind
-    
-    wind_source = WindStress.WindStress(t=np.ravel(timesteps).copy(), X=wind_stress_u, Y=wind_stress_v)
-    
-    return wind_source
-
 def getInitialConditionsNorKystCases(source_url, casename, **kwargs):
     """
     Initial conditions for pre-defined areas within the NorKyst-800 model domain. 
@@ -455,9 +390,6 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data)
     ic['boundary_conditions'] = Common.BoundaryConditions(north=3, south=3, east=3, west=3, spongeCells=sponge_cells)
     
-    #Wind stress (shear stress acting on the ocean surface)
-    ic['wind_stress'] = getWindSourceterm(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1)
-    
     #wind (wind speed in m/s used for forcing on drifter)
     ic['wind'] = getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1) 
     
@@ -480,8 +412,6 @@ def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
         source_url_list = [source_url_list]
     
     num_files = len(source_url_list)
-    
-    source_url = source_url_list[0]
     
     assert(num_files == len(timesteps)), str(num_files) +' vs '+ str(len(timesteps))
     
@@ -512,7 +442,9 @@ def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
     u_wind = u_wind.astype(np.float32)
     v_wind = v_wind.astype(np.float32)
     
-    wind_source = WindStress.WindStress(t=np.ravel(timesteps).copy(), X=u_wind, Y=v_wind)
+    source_filename = ' and '.join([url for url in source_url_list])
+
+    wind_source = WindStress.WindStress(t=np.ravel(timesteps).copy(), wind_u=u_wind, wind_v=v_wind, source_filename=source_filename)
     
     return wind_source
 
@@ -558,6 +490,5 @@ def removeMetadata(old_ic):
     ic.pop('sponge_cells', None)
     ic.pop('t0', None)
     ic.pop('timesteps', None)
-    ic.pop('wind', None)
     
     return ic
