@@ -448,6 +448,26 @@ def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
     
     return wind_source
 
+
+def get_texture(sim, tex_name):
+    """
+    Sampling the textures with in the gpu_ctx of a sim-object.
+    So far available: angle_tex, coriolis_f_tex!
+    """
+    texref = Common.CUDAArray2D(sim.gpu_stream, sim.nx, sim.ny, 2,2, np.zeros((sim.ny+4,sim.nx+4)))
+    get_tex = sim.kernel.get_function("get_texture")
+    get_tex.prepare("Pi")
+    if tex_name == "angle_tex":
+        get_tex.prepared_async_call(sim.global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(0))
+    elif tex_name == "coriolis_f_tex":
+        get_tex.prepared_async_call(sim.global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(1))
+    else:
+        print("Texture name unknown! Returning 0.0")
+    tex = texref.download(sim.gpu_stream)
+    texref.release()
+    return tex
+
+
 def rescaleInitialConditions(old_ic, scale):
     ic = copy.deepcopy(old_ic)
     
