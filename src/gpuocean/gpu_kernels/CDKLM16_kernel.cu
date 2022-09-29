@@ -77,6 +77,25 @@ inline float2 getNorth(const int i, const int j) {
 }
 
 
+extern "C"{
+__global__ void get_texture(float* tex_ptr_)
+{   
+
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    int col = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if(row < NX+4 && col < NY+4)
+    {
+        int index = col * (NX+4) + row;
+        float* const tex_row = (float*) ((char*) tex_ptr_);
+        const float s = row / (NX+4.0f);
+        const float t = col / (NY+4.0f);
+        tex_row[index] = tex2D(angle_tex, s, t);
+    }
+
+}
+}
+
 __device__ float3 CDKLM16_F_func(const float3 Q) {
     float3 F;
 
