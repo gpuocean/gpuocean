@@ -31,6 +31,10 @@ import pycuda.driver as cuda
 
 from gpuocean.utils import Common, SimWriter
 
+# for the chilf birth
+from gpuocean.utils import NetCDFInitialization, WindStress
+import copy
+
 import gc
 from abc import ABCMeta, abstractmethod
 import logging
@@ -146,7 +150,10 @@ class Simulator(object):
                        int(np.ceil(self.nx / float(self.local_size[0]))), \
                        int(np.ceil(self.ny / float(self.local_size[1]))) \
                       )
-                      
+        
+        # Originating from this Simulator, a locally rescaled simulation (a "child") can be derived
+        self.child = None
+
     """
     Function which updates the wind stress textures
     @param kernel_module Module (from get_kernel in CUDAContext)
@@ -437,3 +444,70 @@ class Simulator(object):
         if (self.boundary_conditions.isSponge()):
             assert(False), 'This function is deprecated - sponge cells should now be considered part of the interior domain'
     
+
+    def give_birth(self, gpu_ctx_refined, loc, scale, **kwargs):
+        """
+        Returning a locally refined/coarsened simulation,
+        initialised from self
+
+        loc - list with "cut-out" area in form [[y0,x0],[y1,x1]]
+        scale - factor for rescaling of resolution
+
+        kwargs - to overwrite settings, if required
+        """
+
+        # Dict with simulation information
+        sim_args = {}
+        sim_args["dt"] = 0.0
+        sim_args["write_netcdf"] = self.write_netcdf
+        sim_args["ignore_ghostcells"] = self.ignore_ghostcells
+        sim_args["offset_x"] = self.offset_x
+        sim_args["offset_y"] = self.offset_y
+        if hasattr(self, 'model_time_step'):
+            sim_args["model_time_step"] = self.model_time_step
+        if hasattr(self, 'courant_number'):
+            sim_args["courant_number"] = self.courant_number
+        sim_args["t"] = self.t
+
+        # Dict collecting local, but non-rescaled initalisation arguments
+        data_args_loc = {}
+
+        data_args_loc["eta0"], data_args_loc["hu0"], data_args_loc["hv0"] = [x[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]] for x in self.download()]
+
+        data_args_loc["NY"], data_args_loc["NX"] = np.array(data_args_loc["eta0"].shape)
+        data_args_loc["ny"], data_args_loc["nx"] = np.array(data_args_loc["eta0"].shape)-4
+
+        data_args_loc["dx"], data_args_loc["dy"] = self.dx, self.dy
+
+        data_args_loc["H"] = self.downloadBathymetry()[0][loc[0][0]:loc[1][0]+1,loc[0][1]:loc[1][1]+1]
+
+        data_args_loc["g"] = self.g
+        data_args_loc["r"] = self.r
+
+        data_args_loc["angle"] = NetCDFInitialization.get_texture(self, "angle_tex")[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]]
+
+        data_args_loc["f"] = NetCDFInitialization.get_texture(self, "coriolis_f_tex")[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]]
+
+        wind_y0 = np.floor(loc[0][0]/(self.ny+4)*self.wind_stress.wind_u.shape[1]).astype(int)
+        wind_x0 = np.floor(loc[0][1]/(self.nx+4)*self.wind_stress.wind_u.shape[2]).astype(int)
+
+        wind_y1 = np.ceil(loc[1][0]/(self.ny+4)*self.wind_stress.wind_u.shape[1]).astype(int)
+        wind_x1 = np.ceil(loc[1][1]/(self.nx+4)*self.wind_stress.wind_u.shape[2]).astype(int)
+
+        data_args_loc["wind"] = WindStress.WindStress(t=self.wind_stress.t, wind_u=self.wind_stress.wind_u[:,wind_y0:wind_y1,wind_x0:wind_x1], wind_v=self.wind_stress.wind_v[:,wind_y0:wind_y1,wind_x0:wind_x1])
+
+        data_args_loc["boundary_conditions"] = copy.deepcopy(self.boundary_conditions) # required argument in rescaling, but only used as dummy
+
+        data_args_refined = NetCDFInitialization.removeMetadata(NetCDFInitialization.rescaleInitialConditions(data_args_loc, scale=scale))
+
+        data_args_refined["boundary_conditions"] = copy.deepcopy(self.boundary_conditions)  # keeping the original number of sponge cells
+
+        # Replace specific kwargs in derived dicts
+        for key in set(kwargs).intersection(set(sim_args)):
+            sim_args[key] = kwargs[key]
+
+        for key in set(kwargs).intersection(set(data_args_refined)):
+            data_args_refined[key] = kwargs[key]
+
+        # Generate child
+        self.child = type(self)(gpu_ctx_refined, **sim_args, **data_args_refined, **kwargs)
