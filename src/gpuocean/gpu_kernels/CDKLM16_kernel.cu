@@ -77,8 +77,18 @@ inline float2 getNorth(const int i, const int j) {
 }
 
 
+/**
+  * Sample the textures in the context
+  * (the initialising Array-object is not stored,
+  * such that a work around is needed)
+  * NB! Inaccuracies along the boundary are inherited! 
+  *
+  * tex_code:
+  * 0 - angle_tex
+  * 1 - coriolis_f_tex
+  */
 extern "C"{
-__global__ void get_texture(float* tex_ptr_)
+__global__ void get_texture(float* tex_ptr_, const int tex_code)
 {   
 
     int row = blockIdx.x * blockDim.x + threadIdx.x;
@@ -90,7 +100,12 @@ __global__ void get_texture(float* tex_ptr_)
         float* const tex_row = (float*) ((char*) tex_ptr_);
         const float s = row / (NX+4.0f);
         const float t = col / (NY+4.0f);
-        tex_row[index] = tex2D(angle_tex, s, t);
+        if (tex_code==0){
+            tex_row[index] = tex2D(angle_tex, s, t);
+        }
+        else if (tex_code==1){
+            tex_row[index] = tex2D(coriolis_f_tex, s, t);
+        }
     }
 
 }
