@@ -99,18 +99,21 @@ class OceanStateNoise(object):
         # Check that the interpolation factor plays well with the grid size:
         assert ( interpolation_factor > 0 and interpolation_factor % 2 == 1), 'interpolation_factor must be a positive odd integer'
         
-        assert (nx % interpolation_factor == 0), 'nx must be divisible by the interpolation factor'
-        assert (ny % interpolation_factor == 0), 'ny must be divisible by the interpolation factor'
+        self.periodicNorthSouth = np.int32(boundaryConditions.isPeriodicNorthSouth())
+        if self.periodicNorthSouth:
+            assert (ny % interpolation_factor == 0), 'ny must be divisible by the interpolation factor'
+        self.periodicEastWest = np.int32(boundaryConditions.isPeriodicEastWest())
+        if self.periodicNorthSouth:
+            assert (nx % interpolation_factor == 0), 'nx must be divisible by the interpolation factor'
+        
         self.interpolation_factor = np.int32(interpolation_factor)
         
         # The size of the coarse grid 
-        self.coarse_nx = np.int32(nx/self.interpolation_factor)
-        self.coarse_ny = np.int32(ny/self.interpolation_factor)
+        self.coarse_nx = np.int32(np.ceil(nx/self.interpolation_factor))
+        self.coarse_ny = np.int32(np.ceil(ny/self.interpolation_factor))
         self.coarse_dx = np.float32(dx*self.interpolation_factor)
         self.coarse_dy = np.float32(dy*self.interpolation_factor)
         
-        self.periodicNorthSouth = np.int32(boundaryConditions.isPeriodicNorthSouth())
-        self.periodicEastWest = np.int32(boundaryConditions.isPeriodicEastWest())
         
         # Size of random field and seed
         # The SOAR function is a stencil which requires cutoff number of grid cells,
