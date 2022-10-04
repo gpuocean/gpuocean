@@ -511,3 +511,5 @@ class Simulator(object):
 
         # Generate child
         self.child = type(self)(gpu_ctx_refined, **sim_args, **data_args_refined, **kwargs)
+
+        self.child.loc = loc
