@@ -30,7 +30,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import numpy as np
 import gc
 
-from gpuocean.utils import Common, SimWriter, SimReader, WindStress
+from gpuocean.utils import Common, SimWriter, SimReader, WindStress, AtmosphericPressure
 from gpuocean.SWEsimulators import Simulator
    
 
@@ -49,6 +49,7 @@ class FBL(Simulator.Simulator):
                  coriolis_beta=0.0, \
                  y_zero_reference_cell = 1, \
                  wind_stress=WindStress.WindStress(), \
+                 atmospheric_pressure=AtmosphericPressure.AtmosphericPressure(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  write_netcdf=False, \
                  comm=None, \
@@ -72,6 +73,7 @@ class FBL(Simulator.Simulator):
         coriolis_beta: Coriolis linear factor -> f = f + beta*y
         y_zero_reference_cell: The cell representing y_0 in the above, defined as the lower face of the cell .
         wind_stress: Wind stress parameters
+        atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
         write_netcdf: Write the results after each superstep to a netCDF file
         comm: MPI communicator
@@ -131,6 +133,7 @@ class FBL(Simulator.Simulator):
                                   coriolis_beta, \
                                   y_zero_reference_cell, \
                                   wind_stress, \
+                                  atmospheric_pressure, \
                                   write_netcdf, \
                                   ignore_ghostcells, \
                                   offset_x, offset_y, \

@@ -3,7 +3,7 @@
 """
 This software is part of GPU Ocean. 
 
-Copyright (C) 2018, 2019 SINTEF Digital
+Copyright (C) 2018, 2019, 2022 SINTEF Digital
 Copyright (C) 2018, 2019 Norwegian Meteorological Institute
 
 This python module implements wind forcing, which is used onto 
@@ -38,7 +38,7 @@ from gpuocean.utils.Common import deprecated
 
 class WindStress():
     
-    def __init__(self, source_filename=None, t=None, X=None, Y=None):
+    def __init__(self, source_filename=None, t=None, X=None, Y=None, u_wind=None, v_wind=None):
         
         self.source_filename = source_filename
         self.t = [0]
@@ -48,6 +48,15 @@ class WindStress():
         self.numWindSteps = 1
         
         if t is not None:
+            if (X is None and Y is None) and (u_wind is not None or v_wind is not None):
+                assert(u_wind is not None), "missing wind in x u_wind"
+                assert(v_wind is not None), "missing wind in y v_wind"
+            
+                assert(len(t) == len(u_wind)), str(len(t)) + " vs " + str(len(u_wind))
+                assert(len(t) == len(v_wind)), str(len(t)) + " vs " + str(len(v_wind))
+
+                X, Y = self._compute_wind_stress_from_wind(u_wind, v_wind)
+
             assert(X is not None), "missing wind forcing X"
             assert(Y is not None), "missing wind forcing Y"
             
@@ -64,9 +73,37 @@ class WindStress():
             self.X = X
             self.Y = Y
             
+    def _compute_wind_stress_from_wind(self, u_wind, v_wind):
+ 
+        if type(u_wind) is list:
+            u_wind = np.stack(u_wind, axis=0)
+        if type(v_wind) is list:
+            v_wind = np.stack(v_wind, axis=0)
+        
+        print(type(u_wind), type(v_wind))
+        u_wind = u_wind.astype(np.float32)
+        v_wind = v_wind.astype(np.float32)
+        
+        wind_speed = np.sqrt(np.power(u_wind, 2) + np.power(v_wind, 2))
 
+        # C_drag as defined by Engedahl (1995)
+        #(See "Documentation of simple ocean models for use in ensemble predictions. Part II: Benchmark cases"
+        #at https://www.met.no/publikasjoner/met-report/met-report-2012 for details.) /
+        def computeDrag(wind_speed):
+            C_drag = np.where(wind_speed < 11, 0.0012, 0.00049 + 0.000065*wind_speed)
+            return C_drag
+        C_drag = computeDrag(wind_speed)
 
-            
+        rho_a = 1.225 # Density of air
+        rho_w = 1025 # Density of water
+
+        #Wind stress is then 
+        # tau_s = rho_a * C_drag * |W|W
+        wind_stress = C_drag * wind_speed * rho_a / rho_w
+        wind_stress_u = wind_stress*u_wind
+        wind_stress_v = wind_stress*v_wind
+    
+        return wind_stress_u, wind_stress_v
             
 
     

@@ -37,11 +37,12 @@ from schemes.KP07_test import KP07test
 from schemes.NetCDF_test import NetCDFtest
 from schemes.NetCDF_test import NetCDFtest
 from schemes.ConservationOfMass_test import ConservationOfMassTest
+from schemes.RealisticForcing_Test import RealisticForcingTest
 
 
 def printSupportedSchemes():
     print("Supported schemes:")
-    print("0: All, 1: FBL, 2: CTCS, 3: CDKLM16, 4: KP07, 5: NetCDF interface, 6: Conservation of mass")
+    print("0: All, 1: FBL, 2: CTCS, 3: CDKLM16, 4: KP07, 5: NetCDF interface, 6: Conservation of mass, 7: Realistic forcing")
     
 
 if (len(sys.argv) < 2):
@@ -64,7 +65,8 @@ if (jenkins):
 # Define the tests that will be part of our test suite:
 test_classes_to_run = None
 if scheme == 0:
-    test_classes_to_run = [FBLtest, CTCStest, CDKLM16test, KP07test, NetCDFtest, ConservationOfMassTest]
+    test_classes_to_run = [FBLtest, CTCStest, CDKLM16test, KP07test, NetCDFtest, 
+                           ConservationOfMassTest, RealisticForcingTest]
 elif scheme == 1:
     test_classes_to_run = [FBLtest]
 elif scheme == 2:
@@ -77,6 +79,8 @@ elif scheme == 5:
     test_classes_to_run = [NetCDFtest]
 elif scheme == 6:
     test_classes_to_run = [ConservationOfMassTest]
+elif scheme == 7:
+    test_classes_to_run = [RealisticForcingTest]
 else:
     print("Error: " + str(scheme) + " is not a supported scheme...")
     printSupportedSchemes()
