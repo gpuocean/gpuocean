@@ -38,73 +38,92 @@ from gpuocean.utils.Common import deprecated
 
 class WindStress():
     
-    def __init__(self, source_filename=None, t=None, X=None, Y=None, u_wind=None, v_wind=None):
+    def __init__(self, source_filename=None, t=None, wind_u=None, wind_v=None, stress_u=None, stress_v=None):
         
         self.source_filename = source_filename
         self.t = [0]
-        self.X = [np.zeros((1,1), dtype=np.float32, order='C')]
-        self.Y = [np.zeros((1,1), dtype=np.float32, order='C')]
+        self.wind_u = [np.zeros((1,1), dtype=np.float32, order='C')]
+        self.wind_v = [np.zeros((1,1), dtype=np.float32, order='C')]
+        self.stress_u = None
+        self.stress_v = None
         
         self.numWindSteps = 1
         
         if t is not None:
-            if (X is None and Y is None) and (u_wind is not None or v_wind is not None):
-                assert(u_wind is not None), "missing wind in x u_wind"
-                assert(v_wind is not None), "missing wind in y v_wind"
+            assert(wind_u is not None or stress_u is not None), "any information in x direction missing, provide wind or wind stress"
+            assert(wind_v is not None or stress_v is not None), "any information in y direction missing, provide wind or wind stress"
             
-                assert(len(t) == len(u_wind)), str(len(t)) + " vs " + str(len(u_wind))
-                assert(len(t) == len(v_wind)), str(len(t)) + " vs " + str(len(v_wind))
+            if (wind_u is not None or wind_v is not None):
+                assert(len(t) == len(wind_u)), str(len(t)) + " vs " + str(len(wind_u))
+                assert(len(t) == len(wind_v)), str(len(t)) + " vs " + str(len(wind_v))
 
-                X, Y = self._compute_wind_stress_from_wind(u_wind, v_wind)
+            if (stress_u is not None or stress_v is not None):
+                assert(len(t) == len(stress_u)), str(len(t)) + " vs " + str(len(stress_u))
+                assert(len(t) == len(stress_v)), str(len(t)) + " vs " + str(len(stress_v))
 
-            assert(X is not None), "missing wind forcing X"
-            assert(Y is not None), "missing wind forcing Y"
-            
-            assert(len(t) == len(X)), str(len(t)) + " vs " + str(len(X))
-            assert(len(t) == len(Y)), str(len(t)) + " vs " + str(len(Y))
 
             self.numWindSteps = len(t)
             
-            for i in range(len(X)):
-                assert (X[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
-                assert (Y[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
+            for i in range(self.numWindSteps):
+                if wind_u is not None:
+                    # if wind_u is not None, then it is assumed that also wind_v is provided
+                    assert (wind_u[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
+                    assert (wind_v[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
+                if stress_u is not None:
+                    # if stress_u is not None, then it is assumed that also stress_v is provided
+                    assert (stress_u[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
+                    assert (stress_v[i].dtype == 'float32'), "Wind data needs to be of type np.float32"
             
             self.t = t
-            self.X = X
-            self.Y = Y
             
-    def _compute_wind_stress_from_wind(self, u_wind, v_wind):
- 
-        if type(u_wind) is list:
-            u_wind = np.stack(u_wind, axis=0)
-        if type(v_wind) is list:
-            v_wind = np.stack(v_wind, axis=0)
+            self.wind_u = wind_u
+            self.wind_v = wind_v
+
+            self.stress_u = stress_u
+            self.stress_v = stress_v 
+
+            
+    def compute_wind_stress_from_wind(self, wind_u=None, wind_v=None):
+
+        if wind_u is None:
+            wind_u = self.wind_u
+        if wind_v is None:
+            wind_v = self.wind_v
+
+        self.stress_u, self.stress_v = [], []
+
+        # if type(wind_u) is list:
+        #     wind_u = np.stack(wind_u, axis=0)
+        # if type(wind_v) is list:
+        #     wind_v = np.stack(wind_v, axis=0)
         
-        print(type(u_wind), type(v_wind))
-        u_wind = u_wind.astype(np.float32)
-        v_wind = v_wind.astype(np.float32)
-        
-        wind_speed = np.sqrt(np.power(u_wind, 2) + np.power(v_wind, 2))
+        # wind_u = wind_u.astype(np.float32)
+        # wind_v = wind_v.astype(np.float32)
 
-        # C_drag as defined by Engedahl (1995)
-        #(See "Documentation of simple ocean models for use in ensemble predictions. Part II: Benchmark cases"
-        #at https://www.met.no/publikasjoner/met-report/met-report-2012 for details.) /
-        def computeDrag(wind_speed):
-            C_drag = np.where(wind_speed < 11, 0.0012, 0.00049 + 0.000065*wind_speed)
-            return C_drag
-        C_drag = computeDrag(wind_speed)
+        for i in range(self.numWindSteps): 
 
-        rho_a = 1.225 # Density of air
-        rho_w = 1025 # Density of water
+            wind_speed = np.sqrt(np.power(wind_u[i], 2) + np.power(wind_v[i], 2))
 
-        #Wind stress is then 
-        # tau_s = rho_a * C_drag * |W|W
-        wind_stress = C_drag * wind_speed * rho_a / rho_w
-        wind_stress_u = wind_stress*u_wind
-        wind_stress_v = wind_stress*v_wind
+            # C_drag as defined by Engedahl (1995)
+            #(See "Documentation of simple ocean models for use in ensemble predictions. Part II: Benchmark cases"
+            #at https://www.met.no/publikasjoner/met-report/met-report-2012 for details.) /
+            def computeDrag(wind_speed):
+                C_drag = np.where(wind_speed < 11, 0.0012, 0.00049 + 0.000065*wind_speed)
+                return C_drag
+            C_drag = computeDrag(wind_speed)
+
+            rho_a = 1.225 # Density of air
+            rho_w = 1025 # Density of water
+
+            #Wind stress is then 
+            # tau_s = rho_a * C_drag * |W|W
+            stress = C_drag * wind_speed * rho_a / rho_w
+            self.stress_u.append( stress*wind_u[i] )
+            self.stress_v.append( stress*wind_v[i] )
     
-        return wind_stress_u, wind_stress_v
-            
+
+########################################################
+## All below this point is depreciated            
 
     
 class WIND_STRESS_PARAMS(Structure):
