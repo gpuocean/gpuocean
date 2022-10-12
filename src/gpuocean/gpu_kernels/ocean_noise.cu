@@ -455,7 +455,7 @@ __global__ void geostrophicBalance(
     __syncthreads();
 
     // Evaluate geostrophic balance and write eta, hu and hv to global memory
-    if ( (ti > 1) && (tj > 1) && (ti < nx_+2) && (tj < ny_+2)) {
+    if (  (ti < nx_) && (tj < ny_)) {
 
         //Compute pointer to current row in the U array
         float* const eta_row = (float*) ((char*) eta_ptr_ + eta_pitch_*(tj));
