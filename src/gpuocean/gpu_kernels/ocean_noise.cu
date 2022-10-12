@@ -727,7 +727,7 @@ __global__ void bicubicInterpolation(
     __syncthreads();
     
     // Obtain geostrophic balance and add results to global memory
-    if ( (ti > 1) && (tj > 1) && (ti < nx_+2) && (tj < ny_+2)) {
+    if ( (ti < nx_) && (tj < ny_)) {
 
         // Indices within the d_eta shared memory
         const int eta_tx = tx + 1;
