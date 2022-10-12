@@ -455,7 +455,7 @@ __global__ void geostrophicBalance(
     __syncthreads();
 
     // Evaluate geostrophic balance and write eta, hu and hv to global memory
-    if (  (ti < nx_) && (tj < ny_)) {
+    if ( (ti >= ghost_cells_x_) && (tj >= ghost_cells_y_) && (ti < nx_ + ghost_cells_x_) && (tj < ny_ + ghost_cells_y_) ) {
 
         //Compute pointer to current row in the U array
         float* const eta_row = (float*) ((char*) eta_ptr_ + eta_pitch_*(tj));
@@ -727,7 +727,7 @@ __global__ void bicubicInterpolation(
     __syncthreads();
     
     // Obtain geostrophic balance and add results to global memory
-    if ( (ti < nx_) && (tj < ny_)) {
+    if ( (ti >= ghost_cells_x_) && (tj >= ghost_cells_y_) && (ti < nx_ + ghost_cells_x_) && (tj < ny_ + ghost_cells_y_)) {
 
         // Indices within the d_eta shared memory
         const int eta_tx = tx + 1;
