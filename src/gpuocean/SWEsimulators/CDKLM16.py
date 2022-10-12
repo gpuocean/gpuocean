@@ -510,13 +510,24 @@ class CDKLM16(Simulator.Simulator):
 
         while (t_now < t_end):
         #for i in range(0, n):
-            if self.child is not None:
+            ############################
+            # Temporary child code 
+            if len(self.children) > 0:
                 eta, hu, hv = self.download()
+
                 t0 = self.t
-                bc_data_north_t0 = [x[self.child.loc[1][0]+1, self.child.loc[0][1]:self.child.loc[1][1]] for x in [eta, hu, hv]]
-                bc_data_south_t0 = [x[self.child.loc[0][0]-1, self.child.loc[0][1]:self.child.loc[1][1]] for x in [eta, hu, hv]]
-                bc_data_west_t0 = [x[self.child.loc[0][0]:self.child.loc[1][0], self.child.loc[0][1]-1] for x in [eta, hu, hv]]
-                bc_data_east_t0 = [x[self.child.loc[0][0]:self.child.loc[1][0], self.child.loc[1][1]+1] for x in [eta, hu, hv]]
+
+                bc_data_north_t0 = []
+                bc_data_south_t0 = []
+                bc_data_west_t0 = []
+                bc_data_east_t0 = []
+                for child in self.children:
+                    bc_data_north_t0.append([x[child.loc[1][0]+1, child.loc[0][1]:child.loc[1][1]] for x in [eta, hu, hv]])
+                    bc_data_south_t0.append([x[child.loc[0][0]-1, child.loc[0][1]:child.loc[1][1]] for x in [eta, hu, hv]])
+                    bc_data_west_t0.append([x[child.loc[0][0]:child.loc[1][0], child.loc[0][1]-1] for x in [eta, hu, hv]])
+                    bc_data_east_t0.append([x[child.loc[0][0]:child.loc[1][0], child.loc[1][1]+1] for x in [eta, hu, hv]])
+
+
             # Get new random wind direction (emulationg large-scale model error)
             if(self.max_wind_direction_perturbation > 0.0 and self.wind_stress.type() == 1):
                 # max perturbation +/- max_wind_direction_perturbation deg within original wind direction (at t=0)
@@ -606,33 +617,38 @@ class CDKLM16(Simulator.Simulator):
         if self.write_netcdf and write_now:
             self.sim_writer.writeTimestep(self)
 
-        if self.child is not None:
+        ############################
+        # Temporary child code 
+        if len(self.children) > 0:
             eta, hu, hv = self.download()
+            
             t1 = self.t
-            bc_data_north_t1 = [x[self.child.loc[1][0]+1, self.child.loc[0][1]:self.child.loc[1][1]] for x in [eta, hu, hv]]
-            bc_data_south_t1 = [x[self.child.loc[0][0]-1, self.child.loc[0][1]:self.child.loc[1][1]] for x in [eta, hu, hv]]
-            bc_data_west_t1 = [x[self.child.loc[0][0]:self.child.loc[1][0], self.child.loc[0][1]-1] for x in [eta, hu, hv]]
-            bc_data_east_t1 = [x[self.child.loc[0][0]:self.child.loc[1][0], self.child.loc[1][1]+1] for x in [eta, hu, hv]]
+            
+            for c, child in enumerate(self.children):
+                bc_data_north_t1 = [x[child.loc[1][0]+1, child.loc[0][1]:child.loc[1][1]] for x in [eta, hu, hv]]
+                bc_data_south_t1 = [x[child.loc[0][0]-1, child.loc[0][1]:child.loc[1][1]] for x in [eta, hu, hv]]
+                bc_data_west_t1 = [x[child.loc[0][0]:child.loc[1][0], child.loc[0][1]-1] for x in [eta, hu, hv]]
+                bc_data_east_t1 = [x[child.loc[0][0]:child.loc[1][0], child.loc[1][1]+1] for x in [eta, hu, hv]]
 
-            t = [t0, t1]
-            north = Common.SingleBoundaryConditionData(h = [bc_data_north_t0[0], bc_data_north_t1[0]],\
-                                                        hu = [bc_data_north_t0[1], bc_data_north_t1[1]],\
-                                                        hv = [bc_data_north_t0[2], bc_data_north_t1[2]])
-            south = Common.SingleBoundaryConditionData(h = [bc_data_south_t0[0], bc_data_south_t1[0]],\
-                                                        hu = [bc_data_south_t0[1], bc_data_south_t1[1]],\
-                                                        hv = [bc_data_south_t0[2], bc_data_south_t1[2]])
-            east = Common.SingleBoundaryConditionData(h = [bc_data_east_t0[0], bc_data_east_t1[0]],\
-                                                        hu = [bc_data_east_t0[1], bc_data_east_t1[1]],\
-                                                        hv = [bc_data_east_t0[2], bc_data_east_t1[2]])
-            west = Common.SingleBoundaryConditionData(h = [bc_data_west_t0[0], bc_data_west_t1[0]],\
-                                                        hu = [bc_data_west_t0[1], bc_data_west_t1[1]],\
-                                                        hv = [bc_data_west_t0[2], bc_data_west_t1[2]])
+                t = [t0, t1]
+                north = Common.SingleBoundaryConditionData(h = [bc_data_north_t0[c][0], bc_data_north_t1[0]],\
+                                                            hu = [bc_data_north_t0[c][1], bc_data_north_t1[1]],\
+                                                            hv = [bc_data_north_t0[c][2], bc_data_north_t1[2]])
+                south = Common.SingleBoundaryConditionData(h = [bc_data_south_t0[c][0], bc_data_south_t1[0]],\
+                                                            hu = [bc_data_south_t0[c][1], bc_data_south_t1[1]],\
+                                                            hv = [bc_data_south_t0[c][2], bc_data_south_t1[2]])
+                east = Common.SingleBoundaryConditionData(h = [bc_data_east_t0[c][0], bc_data_east_t1[0]],\
+                                                            hu = [bc_data_east_t0[c][1], bc_data_east_t1[1]],\
+                                                            hv = [bc_data_east_t0[c][2], bc_data_east_t1[2]])
+                west = Common.SingleBoundaryConditionData(h = [bc_data_west_t0[c][0], bc_data_west_t1[0]],\
+                                                            hu = [bc_data_west_t0[c][1], bc_data_west_t1[1]],\
+                                                            hv = [bc_data_west_t0[c][2], bc_data_west_t1[2]])
 
-            bc_data = Common.BoundaryConditionsData(t=t, north=north, south=south, east=east, west=west)
+                bc_data = Common.BoundaryConditionsData(t=t, north=north, south=south, east=east, west=west)
 
-            self.child.bc_kernel = Common.BoundaryConditionsArakawaA(self.child.gpu_ctx, self.child.nx, self.child.ny, 2, 2, \
-                                                           self.child.boundary_conditions, bc_data)
-            self.child.step(t_end=t_end, apply_stochastic_term=apply_stochastic_term, write_now=write_now, update_dt=update_dt)
+                child.bc_kernel = Common.BoundaryConditionsArakawaA(child.gpu_ctx, child.nx, child.ny, 2, 2, \
+                                                            child.boundary_conditions, bc_data)
+                child.step(t_end=t_end, apply_stochastic_term=apply_stochastic_term, write_now=write_now, update_dt=update_dt)
             
         return self.t
 

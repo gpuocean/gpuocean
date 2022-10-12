@@ -152,7 +152,7 @@ class Simulator(object):
                       )
         
         # Originating from this Simulator, a locally rescaled simulation (a "child") can be derived
-        self.child = None
+        self.children = []
 
     """
     Function which updates the wind stress textures
@@ -456,6 +456,13 @@ class Simulator(object):
         kwargs - to overwrite settings, if required
         """
 
+        # Check inputs!
+        assert (loc[0]<loc[1]), "Invalid area: the 0-coordinates have to be lower than the 1-coordindates"
+
+        # Checking that local areas do NOT overlap or touch!
+        for child in self.children:
+            assert (child.loc[0][0] > loc[1][0] or child.loc[1][0] < loc[0][0] or child.loc[1][1] < loc[0][1] or child.loc[0][1] > loc[1][1]), "Local areas must not overlap"
+
         # Dict with simulation information
         sim_args = {}
         sim_args["dt"] = 0.0
@@ -510,6 +517,6 @@ class Simulator(object):
             data_args_refined[key] = kwargs[key]
 
         # Generate child
-        self.child = type(self)(gpu_ctx_refined, **sim_args, **data_args_refined, **kwargs)
+        self.children.append(type(self)(gpu_ctx_refined, **sim_args, **data_args_refined, **kwargs))
 
-        self.child.loc = loc
+        self.children[-1].loc = loc
