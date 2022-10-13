@@ -520,3 +520,4 @@ class Simulator(object):
         self.children.append(type(self)(gpu_ctx_refined, **sim_args, **data_args_refined, **kwargs))
 
         self.children[-1].loc = loc
+        self.children[-1].rescale_factor = scale
