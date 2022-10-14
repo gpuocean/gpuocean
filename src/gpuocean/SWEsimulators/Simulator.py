@@ -151,8 +151,16 @@ class Simulator(object):
                        int(np.ceil(self.ny / float(self.local_size[1]))) \
                       )
         
+        ## Multi-Resolution Parameters
         # Originating from this Simulator, a locally rescaled simulation (a "child") can be derived
         self.children = []
+        # Bookkeeping for the current simulation
+        self.level = 0
+        self.level_rescale_factor = 1.0
+        self.global_rescale_factor = 1.0
+        self.level_local_area = [[0,0],[None,None]] # indices of area within parent sim
+        self.global_local_area = [[0,0],[1,1]] # ratios of area within root sim 
+
 
     """
     Function which updates the wind stress textures
@@ -450,7 +458,7 @@ class Simulator(object):
         Returning a locally refined/coarsened simulation,
         initialised from self
 
-        loc - list with "cut-out" area in form [[y0,x0],[y1,x1]]
+        loc - list with "cut-out" area by indices in form [[y0,x0],[y1,x1]]
         scale - factor for rescaling of resolution
 
         kwargs - to overwrite settings, if required
@@ -519,5 +527,11 @@ class Simulator(object):
         # Generate child
         self.children.append(type(self)(gpu_ctx_refined, **sim_args, **data_args_refined, **kwargs))
 
-        self.children[-1].loc = loc
-        self.children[-1].rescale_factor = scale
+        self.children[-1].level = self.level + 1
+        self.children[-1].level_rescale_factor = scale
+        self.children[-1].global_rescale_factor = self.global_rescale_factor * scale
+        self.children[-1].level_local_area = loc
+        self.children[-1].global_local_area = [ [self.global_local_area[0][0] + loc[0][0]/(self.ny+4), \
+                                                    self.global_local_area[0][1] + loc[0][1]/(self.nx+4) ], \
+                                                [self.global_local_area[0][0] + loc[1][0]/(self.ny+4), \
+                                                    self.global_local_area[0][1] + loc[1][1]/(self.nx+4) ] ]
