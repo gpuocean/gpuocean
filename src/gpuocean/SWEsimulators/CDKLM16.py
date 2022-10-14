@@ -522,10 +522,10 @@ class CDKLM16(Simulator.Simulator):
                 bc_data_west_t0 = []
                 bc_data_east_t0 = []
                 for child in self.children:
-                    bc_data_north_t0.append([x[child.loc[1][0]+1, child.loc[0][1]:child.loc[1][1]] for x in [eta, hu, hv]])
-                    bc_data_south_t0.append([x[child.loc[0][0]-1, child.loc[0][1]:child.loc[1][1]] for x in [eta, hu, hv]])
-                    bc_data_west_t0.append([x[child.loc[0][0]:child.loc[1][0], child.loc[0][1]-1] for x in [eta, hu, hv]])
-                    bc_data_east_t0.append([x[child.loc[0][0]:child.loc[1][0], child.loc[1][1]+1] for x in [eta, hu, hv]])
+                    bc_data_north_t0.append([x[child.level_local_area[1][0]+1, child.level_local_area[0][1]:child.level_local_area[1][1]] for x in [eta, hu, hv]])
+                    bc_data_south_t0.append([x[child.level_local_area[0][0]-1, child.level_local_area[0][1]:child.level_local_area[1][1]] for x in [eta, hu, hv]])
+                    bc_data_west_t0.append([x[child.level_local_area[0][0]:child.level_local_area[1][0], child.level_local_area[0][1]-1] for x in [eta, hu, hv]])
+                    bc_data_east_t0.append([x[child.level_local_area[0][0]:child.level_local_area[1][0], child.level_local_area[1][1]+1] for x in [eta, hu, hv]])
 
 
             # Get new random wind direction (emulationg large-scale model error)
@@ -625,10 +625,10 @@ class CDKLM16(Simulator.Simulator):
             t1 = self.t
             
             for c, child in enumerate(self.children):
-                bc_data_north_t1 = [x[child.loc[1][0]+1, child.loc[0][1]:child.loc[1][1]] for x in [eta, hu, hv]]
-                bc_data_south_t1 = [x[child.loc[0][0]-1, child.loc[0][1]:child.loc[1][1]] for x in [eta, hu, hv]]
-                bc_data_west_t1 = [x[child.loc[0][0]:child.loc[1][0], child.loc[0][1]-1] for x in [eta, hu, hv]]
-                bc_data_east_t1 = [x[child.loc[0][0]:child.loc[1][0], child.loc[1][1]+1] for x in [eta, hu, hv]]
+                bc_data_north_t1 = [x[child.level_local_area[1][0]+1, child.level_local_area[0][1]:child.level_local_area[1][1]] for x in [eta, hu, hv]]
+                bc_data_south_t1 = [x[child.level_local_area[0][0]-1, child.level_local_area[0][1]:child.level_local_area[1][1]] for x in [eta, hu, hv]]
+                bc_data_west_t1 = [x[child.level_local_area[0][0]:child.level_local_area[1][0], child.level_local_area[0][1]-1] for x in [eta, hu, hv]]
+                bc_data_east_t1 = [x[child.level_local_area[0][0]:child.level_local_area[1][0], child.level_local_area[1][1]+1] for x in [eta, hu, hv]]
 
                 t = [t0, t1]
                 north = Common.SingleBoundaryConditionData(h = [bc_data_north_t0[c][0], bc_data_north_t1[0]],\
