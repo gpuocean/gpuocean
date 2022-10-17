@@ -67,6 +67,9 @@ class CDKLM16pair():
         if self.l > 0:
             self.level_rescale_factor = sim.children[0].level_rescale_factor
 
+        self.slave_l = self.deepest_level(self.slave_sim, 0)
+        assert self.l > self.slave_l, "Slave should be the coarser simulation"
+
         # Model error instance
         self.interpolation_factor = interpolation_factor
         self.small_scale_model_error = None
