@@ -466,6 +466,7 @@ class Simulator(object):
 
         # Check inputs!
         assert (loc[0]<loc[1]), "Invalid area: the 0-coordinates have to be lower than the 1-coordindates"
+        assert np.all( (np.array(loc[1]) - np.array(loc[0]))*scale % 1 == 0 ), "Rescaling of local area must result in integer number of cells"
 
         # Checking that local areas do NOT overlap or touch!
         for child in self.children:
@@ -535,3 +536,10 @@ class Simulator(object):
                                                     self.global_local_area[0][1] + loc[0][1]/(self.nx+4) ], \
                                                 [self.global_local_area[0][0] + loc[1][0]/(self.ny+4), \
                                                     self.global_local_area[0][1] + loc[1][1]/(self.nx+4) ] ]
+
+    def kill_child(self, idx = 0):
+        """
+        Removing child simulator
+        """
+        self.children[idx].cleanUp()
+        self.children.pop(idx)
