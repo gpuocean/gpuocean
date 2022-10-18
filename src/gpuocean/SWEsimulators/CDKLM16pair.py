@@ -41,7 +41,7 @@ class CDKLM16pair():
     Class that solves the SW equations using the Coriolis well balanced reconstruction scheme, as given by the publication of Chertock, Dudzinski, Kurganov and Lukacova-Medvidova (CDFLM) in 2016.
     """
 
-    def __init__(self, sim, slave_sim, small_scale_model_error=False, interpolation_factor=1):
+    def __init__(self, sim, slave_sim, small_scale_perturbation=False, small_scale_perturbation_amplitude=None, small_scale_perturbation_interpolation_factor=1):
         """
         Initialization routine
 
@@ -71,9 +71,10 @@ class CDKLM16pair():
         assert self.l > self.slave_l, "Slave should be the coarser simulation"
 
         # Model error instance
-        self.interpolation_factor = interpolation_factor
+        self.soar_q0 = small_scale_perturbation_amplitude
+        self.interpolation_factor = small_scale_perturbation_interpolation_factor
         self.small_scale_model_error = None
-        if small_scale_model_error:
+        if small_scale_perturbation:
             self.pert_stream = cuda.Stream()
             self.construct_model_error()
 
@@ -92,12 +93,13 @@ class CDKLM16pair():
 
         self.small_scale_model_error = OceanStateNoise.OceanStateNoise(self.sim.gpu_ctx, self.pert_stream, self.fine_NX, self.fine_NY, self.fine_dx, self.fine_dy, \
                                                                     self.sim.boundary_conditions, staggered=False, \
+                                                                    soar_q0=self.soar_q0, \
                                                                     interpolation_factor=self.interpolation_factor, \
                                                                     angle= NetCDFInitialization.get_texture(self.sim, "angle_tex"), \
                                                                     coriolis_f=NetCDFInitialization.get_texture(self.sim, "coriolis_f_tex"))
         
 
-    def step(self, t, apply_stochastic_term=False, interpolation_factor=1):
+    def step(self, t, apply_stochastic_term=False):
         """
         Evolves the sim pair by `t` seconds
         """
