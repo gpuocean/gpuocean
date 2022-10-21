@@ -467,6 +467,27 @@ def get_texture(sim, tex_name):
     texref.release()
     return tex
 
+def sample_texture(sim, tex_name, Nx, Ny, x0, x1, y0, y1):
+    """
+    Sampling the textures with in the gpu_ctx of a sim-object
+    with arbitrary sampling window.
+    So far available: angle_tex, coriolis_f_tex!
+    """
+    texref = Common.CUDAArray2D(sim.gpu_stream, Nx, Ny, 2,2, np.zeros((Ny+4,Nx+4)))
+    get_tex = sim.kernel.get_function("sample_texture")
+    get_tex.prepare("Piffffii")
+    if tex_name == "angle_tex":
+        get_tex.prepared_async_call(sim.global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(0),
+                                    np.float32(x0), np.float32(x1), np.float32(y0), np.float32(y1), np.int32(Nx+4), np.int32(Ny+4))
+    elif tex_name == "coriolis_f_tex":
+        get_tex.prepared_async_call(sim.global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(1),
+                                    np.float32(x0), np.float32(x1), np.float32(y0), np.float32(y1), np.int32(Nx+4), np.int32(Ny+4))
+    else:
+        print("Texture name unknown! Returning 0.0")
+    tex = texref.download(sim.gpu_stream)
+    texref.release()
+    return tex
+
 
 def rescaleInitialConditions(old_ic, scale):
     ic = copy.deepcopy(old_ic)
