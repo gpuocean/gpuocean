@@ -86,6 +86,8 @@ inline float2 getNorth(const int i, const int j) {
   * tex_code:
   * 0 - angle_tex
   * 1 - coriolis_f_tex
+  * 2 - windstress_X_current (NOTE: not original wind, but stress!)
+  * 3 - windstress_Y_current (NOTE: not original wind, but stress!)
   */
 extern "C"{
 __global__ void get_texture(float* tex_ptr_, const int tex_code)
@@ -98,13 +100,19 @@ __global__ void get_texture(float* tex_ptr_, const int tex_code)
     {
         int index = col * (NX+4) + row;
         float* const tex_row = (float*) ((char*) tex_ptr_);
-        const float s = row / (NX+4.0f);
-        const float t = col / (NY+4.0f);
+        const float s = (row + 0.5f) / (NX+4.0f); // +0.5 to get values at cell centers
+        const float t = (col + 0.5f) / (NY+4.0f); // +0.5 to get values at cell centers
         if (tex_code==0){
             tex_row[index] = tex2D(angle_tex, s, t);
         }
         else if (tex_code==1){
             tex_row[index] = tex2D(coriolis_f_tex, s, t);
+        }
+        else if (tex_code==2){
+            tex_row[index] = tex2D(windstress_X_current, s, t);
+        }
+        else if (tex_code==3){
+            tex_row[index] = tex2D(windstress_Y_current, s, t);
         }
     }
 
@@ -139,6 +147,12 @@ extern "C"{
             }
             else if (tex_code==1){
                 tex_row[index] = tex2D(coriolis_f_tex, s, t);
+            }
+            else if (tex_code==2){
+                tex_row[index] = tex2D(windstress_X_current, s, t);
+            }
+            else if (tex_code==3){
+                tex_row[index] = tex2D(windstress_Y_current, s, t);
             }
         }
     
