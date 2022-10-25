@@ -457,10 +457,15 @@ def get_texture(sim, tex_name):
     texref = Common.CUDAArray2D(sim.gpu_stream, sim.nx, sim.ny, 2,2, np.zeros((sim.ny+4,sim.nx+4)))
     get_tex = sim.kernel.get_function("get_texture")
     get_tex.prepare("Pi")
+    global_size = (int(np.ceil( (sim.nx+4) / float(sim.local_size[0]))), int(np.ceil( (sim.ny +4) / float(sim.local_size[1]))) )
     if tex_name == "angle_tex":
-        get_tex.prepared_async_call(sim.global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(0))
+        get_tex.prepared_async_call(global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(0))
     elif tex_name == "coriolis_f_tex":
-        get_tex.prepared_async_call(sim.global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(1))
+        get_tex.prepared_async_call(global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(1))
+    elif tex_name == "windstress_X_current":
+        get_tex.prepared_async_call(global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(2))
+    elif tex_name == "windstress_Y_current":
+        get_tex.prepared_async_call(global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(3))
     else:
         print("Texture name unknown! Returning 0.0")
     tex = texref.download(sim.gpu_stream)
