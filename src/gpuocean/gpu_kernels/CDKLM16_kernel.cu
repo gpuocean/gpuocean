@@ -126,6 +126,8 @@ __global__ void get_texture(float* tex_ptr_, const int tex_code)
   * x1 - right coordinate in [0,1] horizontal-direction
   * y0 - bottom coordinate in [0,1] vertical-direction
   * y1 - top coordinate in [0,1] vertical-direction
+  *
+  * x0, x1, y0, y1 are interpreted as cell centers
   */
 
 extern "C"{
@@ -140,8 +142,8 @@ extern "C"{
         {
             int index = col * Nx + row;
             float* const tex_row = (float*) ((char*) tex_ptr_);
-            const float s = x0 + row * (x1-x0)/Nx;
-            const float t = y0 + col * (y1-y0)/Ny;
+            const float s = x0 + row * (x1-x0)/(Nx-1); // since x0 and x1 are cell centers, follows correction (Nx-1)
+            const float t = y0 + col * (y1-y0)/(Ny-1);
             if (tex_code==0){
                 tex_row[index] = tex2D(angle_tex, s, t);
             }
