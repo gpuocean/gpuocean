@@ -25,6 +25,8 @@ import unittest
 
 import numpy as np
 import pycuda.driver as cuda
+import sys
+import gc
 
 from testUtils import *
 
@@ -75,17 +77,15 @@ class CUDACDKLMTextureTest(unittest.TestCase):
         self.texref = None 
         
     def tearDown(self):
-        if self.tests_failed:
-            print("Device name: " + self.device_name)
-        if not self.explicit_free:
-            self.cudaarray.release()
         if self.texref is not None:
             self.texref.release()
         del self.gpu_ctx
 
-    ### UTILS ### 
 
-    def set_texture(self):
+    ### START TESTS ###
+
+    def test_get_texture_back(self):
+
         GPUtexref = self.kernel.get_texref("angle_tex")
 
         self.gpu_stream.synchronize()
@@ -99,13 +99,6 @@ class CUDACDKLMTextureTest(unittest.TestCase):
 
         self.gpu_ctx.synchronize()
 
-
-    ### START TESTS ###
-
-    def test_get_texture_back(self):
-
-        self.set_texture()
-
         ## Sample texture
         local_size = (self.defines["block_width"], self.defines["block_height"], 1) 
         global_size = (int(np.ceil(self.Nx / float(local_size[0]))), int(np.ceil(self.Ny / float(local_size[1]))) ) 
@@ -118,12 +111,24 @@ class CUDACDKLMTextureTest(unittest.TestCase):
         get_tex.prepared_async_call(global_size, local_size, self.gpu_stream, self.texref.data.gpudata, np.int32(0))
         
         # Evaluate
-        self.assertEqual(self.texref.get(), self.field)
+        host_texref = self.texref.data.get()
+        self.assertEqual(host_texref.tolist(), self.field.tolist())
         
         
     def test_sample_finer_texture(self):
 
-        self.set_texture()
+        GPUtexref = self.kernel.get_texref("angle_tex")
+
+        self.gpu_stream.synchronize()
+        self.gpu_ctx.synchronize()
+
+        GPUtexref.set_array(cuda.np_to_array(self.field, order="C"))
+        GPUtexref.set_filter_mode(cuda.filter_mode.LINEAR) #bilinear interpolation
+        GPUtexref.set_address_mode(0, cuda.address_mode.CLAMP) #no indexing outside domain
+        GPUtexref.set_address_mode(1, cuda.address_mode.CLAMP)
+        GPUtexref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
+
+        self.gpu_ctx.synchronize()
 
         ## Sample texture
         local_size = (self.defines["block_width"], self.defines["block_height"], 1) 
@@ -144,4 +149,5 @@ class CUDACDKLMTextureTest(unittest.TestCase):
         # We average over two neighboring cells
         # Furthermore, we ignore the first and last cell 
         # Due to the chosen type of interpolation on the texture, one cannot expect to match the original values there 
-        self.assertAlmostEqual(0.5*(texref_host[1:] + texref_host[:-1])[::2][1:-1], self.field[0][1:-1], 4)
+        texref_host_averaged = 0.5*(texref_host[1:] + texref_host[:-1])[::2][1:-1]
+        self.assertAlmostEqual(texref_host_averaged.tolist(), self.field[0][1:-1].tolist(), 4)
