@@ -315,7 +315,8 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
                          sponge_cells={'north':20, 'south': 20, 'east': 20, 'west': 20}, \
                          erode_land=0, 
                          download_data=True,
-                         reduced_gravity_interface=None):
+                         reduced_gravity_interface=None # Obsolete?
+                         ):
     ic = {}
     
     if type(source_url_list) is not list:
@@ -369,6 +370,21 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         
         #Find x, y (in Norkyst800 reference system, origin at norkyst800 origin)
         proj_str= '+proj=stere +ellps=WGS84 +lat_0=90.0 +lat_ts=60.0 +x_0=3192800 +y_0=1784000 +lon_0=70'
+        #Check for other projection information in ncfile
+        if np.any(np.array(list(map(lambda x: x.lower().startswith("projection"), ncfile.variables.keys())))):
+            try: 
+                ncfile = Dataset(source_url)
+                proj_var_str = [key for key in ncfile.variables.keys() if key.lower().startswith("proj")][0]
+                proj_str = ncfile.variables[proj_var_str].__getattr__('proj4')
+            except Exception as e:
+                raise e
+            finally:
+                ncfile.close()
+
+            if "N" in proj_str:
+                print("Manually removing north identifier!")
+                proj_str = proj_str.replace("N","")
+
         proj = pyproj.Proj(proj_str)
         
         x_rho, y_rho = proj(lon_rho, lat_rho, inverse = False)
@@ -418,8 +434,13 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     for i in range(num_files):
         timesteps[i] = timesteps[i] - t0
     
+    #Fallback if input quantities are not properly masked
+    mask = eta0.mask.copy()
+    if eta0.data.shape != eta0.mask.shape:
+        mask = (H_m == land_value)
+
     #Generate intersections bathymetry
-    H_m_mask = eta0.mask.copy()
+    H_m_mask = mask.copy()
     H_m = np.ma.array(H_m, mask=H_m_mask)
     for i in range(erode_land):
         new_water = H_m.mask ^ binary_erosion(H_m.mask)
@@ -439,10 +460,10 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         print("Cut the bathymetry: no reconstruction!")
     
     #Generate physical variables
-    eta0 = np.ma.array(eta0.filled(0), mask=eta0.mask.copy())
+    eta0 = np.ma.array(eta0.filled(0), mask=mask[1:-1, 1:-1].copy())
     if reduced_gravity_interface == None:
-        hu0 = np.ma.array(h0*u0, mask=eta0.mask.copy())
-        hv0 = np.ma.array(h0*v0, mask=eta0.mask.copy())
+        hu0 = np.ma.array(h0*u0, mask=mask[1:-1, 1:-1].copy())
+        hv0 = np.ma.array(h0*v0, mask=mask[1:-1, 1:-1].copy())
     else:
         hu0 = depth_integration(source_url, reduced_gravity_interface, x0, x1, y0, y1, "u")
         hv0 = depth_integration(source_url, reduced_gravity_interface, x0, x1, y0, y1, "v")
@@ -475,7 +496,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     
     #Physical variables
     ic['H'] = H_i
-    ic['eta0'] = fill_coastal_data(eta0)
+    ic['eta0'] = eta0 #fill_coastal_data(eta0)
     ic['hu0'] = hu0
     ic['hv0'] = hv0
     
