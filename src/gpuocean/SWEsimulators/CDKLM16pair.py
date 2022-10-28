@@ -32,7 +32,7 @@ import numpy as np
 
 # Needed for the random perturbation:
 import pycuda.driver as cuda
-from gpuocean.SWEsimulators import OceanStateNoise
+from gpuocean.SWEsimulators import Simulator, OceanStateNoise
 from gpuocean.utils import Common, NetCDFInitialization, OceanographicUtilities
 
 
@@ -41,11 +41,15 @@ class CDKLM16pair():
     Class that solves the SW equations using the Coriolis well balanced reconstruction scheme, as given by the publication of Chertock, Dudzinski, Kurganov and Lukacova-Medvidova (CDFLM) in 2016.
     """
 
-    def __init__(self, sim, slave_sim, small_scale_perturbation=False, small_scale_perturbation_amplitude=None, small_scale_perturbation_interpolation_factor=1):
+    def __init__(self, sim, slave_sim, 
+                    small_scale_perturbation=False, 
+                    small_scale_perturbation_amplitude=None, 
+                    small_scale_perturbation_interpolation_factor=1):
         """
         Initialization routine
 
-        sim - CDKLM16 simulation
+        sim          - CDKLM16 simulation
+        slave_sim    - CDKLM16 simulation
         """
         
         # Check whether sims can be combined 
@@ -63,7 +67,7 @@ class CDKLM16pair():
         # Bookkeeping for the multi-res structure
         # FIXME: At the moment only one child and constant rescaling assumed!
         self.l = self.deepest_level(self.sim, 0)
-        self.level_rescale_factor = None
+        self.level_rescale_factor = 1.0
         if self.l > 0:
             self.level_rescale_factor = sim.children[0].level_rescale_factor
 
@@ -95,8 +99,8 @@ class CDKLM16pair():
                                                                     self.sim.boundary_conditions, staggered=False, \
                                                                     soar_q0=self.soar_q0, \
                                                                     interpolation_factor=self.interpolation_factor, \
-                                                                    angle= NetCDFInitialization.get_texture(self.sim, "angle_tex"), \
-                                                                    coriolis_f=NetCDFInitialization.get_texture(self.sim, "coriolis_f_tex"))
+                                                                    angle=Simulator.Simulator.get_texture(self.sim, "angle_tex"), \
+                                                                    coriolis_f=Simulator.Simulator.get_texture(self.sim, "coriolis_f_tex"))
         
 
     def step(self, t, apply_stochastic_term=False):
