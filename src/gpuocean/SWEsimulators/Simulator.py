@@ -556,7 +556,10 @@ class Simulator(object):
         data_args_loc_refined["hv0"] = np.ma.array(hv0_loc_refined_data, mask=hv0_loc_refined_mask)
         print("Use halo mask according to bathymetry")
 
-        data_args_loc_refined["H"] = np.pad(OceanographicUtilities.rescaleIntersections(self.downloadBathymetry()[0][loc[0][0]:loc[1][0]+1,loc[0][1]:loc[1][1]+1], data_args_loc_refined["nx"]+1, data_args_loc_refined["ny"]+1)[2], ((2,2),(2,2)), mode="edge")
+        H_loc_refined = OceanographicUtilities.rescaleIntersections(self.downloadBathymetry()[0][loc[0][0]:loc[1][0]+1,loc[0][1]:loc[1][1]+1], data_args_loc_refined["nx"]+1, data_args_loc_refined["ny"]+1)[2]
+        H_loc_refined_data = np.pad(H_loc_refined.data, ((2,2),(2,2)), mode="edge")
+        H_loc_refined_mask = np.pad(H_loc_refined.mask, ((2,2),(2,2)), mode="edge")
+        data_args_loc_refined["H"] = np.ma.array(H_loc_refined_data, mask= H_loc_refined_mask)
         print("Construct halo mask according to finer bathymetry information!")
 
         data_args_loc_refined["dx"], data_args_loc_refined["dy"] = self.dx/scale, self.dy/scale 
