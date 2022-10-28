@@ -510,9 +510,11 @@ class CDKLM16(Simulator.Simulator):
 
         while (t_now < t_end):
         #for i in range(0, n):
+            
             ############################
             # Temporary child code 
             if len(self.children) > 0:
+                # Store BC for children
                 eta, hu, hv = self.download()
 
                 t0 = self.t
@@ -526,6 +528,7 @@ class CDKLM16(Simulator.Simulator):
                     bc_data_south_t0.append([x[child.level_local_area[0][0]-1, child.level_local_area[0][1]:child.level_local_area[1][1]] for x in [eta, hu, hv]])
                     bc_data_west_t0.append([x[child.level_local_area[0][0]:child.level_local_area[1][0], child.level_local_area[0][1]-1] for x in [eta, hu, hv]])
                     bc_data_east_t0.append([x[child.level_local_area[0][0]:child.level_local_area[1][0], child.level_local_area[1][1]+1] for x in [eta, hu, hv]])
+            # (end temporary child code)
 
 
             # Get new random wind direction (emulationg large-scale model error)
@@ -625,6 +628,7 @@ class CDKLM16(Simulator.Simulator):
             t1 = self.t
             
             for c, child in enumerate(self.children):
+                # Set BC for child
                 bc_data_north_t1 = [x[child.level_local_area[1][0]+1, child.level_local_area[0][1]:child.level_local_area[1][1]] for x in [eta, hu, hv]]
                 bc_data_south_t1 = [x[child.level_local_area[0][0]-1, child.level_local_area[0][1]:child.level_local_area[1][1]] for x in [eta, hu, hv]]
                 bc_data_west_t1 = [x[child.level_local_area[0][0]:child.level_local_area[1][0], child.level_local_area[0][1]-1] for x in [eta, hu, hv]]
@@ -648,7 +652,24 @@ class CDKLM16(Simulator.Simulator):
 
                 child.bc_kernel = Common.BoundaryConditionsArakawaA(child.gpu_ctx, child.nx, child.ny, 2, 2, \
                                                             child.boundary_conditions, bc_data)
+                
+                # Step child 
                 child.step(t_end=t_end, apply_stochastic_term=apply_stochastic_term, write_now=write_now, update_dt=update_dt)
+
+                # Replacing parent values in child local areas 
+                eta_child, hu_child, hv_child = child.download(interior_domain_only=True)
+
+                loc = child.level_local_area
+                eta_loc = OceanographicUtilities.rescaleMidpoints(eta_child, loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
+                hu_loc  = OceanographicUtilities.rescaleMidpoints(hu_child,  loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
+                hv_loc  = OceanographicUtilities.rescaleMidpoints(hv_child,  loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
+
+                eta[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]] = eta_loc
+                hu[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]]  = hu_loc
+                hv[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]]  = hv_loc
+            
+            self.upload(eta, hu, hv)
+        # (end temporary child code)
             
         return self.t
 
