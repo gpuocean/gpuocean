@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #Import packages we need
 import numpy as np
+import copy
 import gc
 import logging
 from scipy.interpolate import interp2d
@@ -499,6 +500,8 @@ class CDKLM16(Simulator.Simulator):
             perturbation (if any) should be applied after every simulation time step
             by adding SOAR-generated random fields using OceanNoiseState.perturbSim(...)
         """
+        self.gpu_stream.synchronize()   
+        self.gpu_ctx.synchronize()
         
         if self.t == 0:
             self.bc_kernel.update_bc_values(self.gpu_stream, self.t)
@@ -620,10 +623,14 @@ class CDKLM16(Simulator.Simulator):
         if self.write_netcdf and write_now:
             self.sim_writer.writeTimestep(self)
 
+        self.gpu_stream.synchronize()   
+        self.gpu_ctx.synchronize()
         ############################
         # Temporary child code 
         if len(self.children) > 0:
-            eta, hu, hv = self.download()
+            
+            eta, hu, hv = copy.deepcopy(self.download()) 
+            # NOTE: The deepcopy is important that the gpudata does not get "confused"
             
             t1 = self.t
             
@@ -669,7 +676,9 @@ class CDKLM16(Simulator.Simulator):
                 hv[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]]  = hv_loc
             
             self.upload(eta, hu, hv)
-        # (end temporary child code)
+            self.gpu_stream.synchronize()   
+            self.gpu_ctx.synchronize()
+        # # (end temporary child code)
             
         return self.t
 
