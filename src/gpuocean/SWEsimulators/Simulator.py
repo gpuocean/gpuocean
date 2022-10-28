@@ -32,7 +32,7 @@ import pycuda.driver as cuda
 from gpuocean.utils import Common, SimWriter
 
 # for the chilf birth
-from gpuocean.utils import NetCDFInitialization, WindStress
+from gpuocean.utils import WindStress, OceanographicUtilities
 import copy
 
 import gc
@@ -452,6 +452,53 @@ class Simulator(object):
         if (self.boundary_conditions.isSponge()):
             assert(False), 'This function is deprecated - sponge cells should now be considered part of the interior domain'
     
+    @staticmethod
+    def get_texture(sim, tex_name):
+        """
+        Sampling the textures with in the gpu_ctx of a sim-object.
+        So far available: angle_tex, coriolis_f_tex!
+        """
+        texref = Common.CUDAArray2D(sim.gpu_stream, sim.nx, sim.ny, 2,2, np.zeros((sim.ny+4,sim.nx+4)))
+        get_tex = sim.kernel.get_function("get_texture")
+        get_tex.prepare("Pi")
+        global_size = (int(np.ceil( (sim.nx+4) / float(sim.local_size[0]))), int(np.ceil( (sim.ny +4) / float(sim.local_size[1]))) )
+        if tex_name == "angle_tex":
+            get_tex.prepared_async_call(global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(0))
+        elif tex_name == "coriolis_f_tex":
+            get_tex.prepared_async_call(global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(1))
+        elif tex_name == "windstress_X_current":
+            get_tex.prepared_async_call(global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(2))
+        elif tex_name == "windstress_Y_current":
+            get_tex.prepared_async_call(global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(3))
+        else:
+            print("Texture name unknown! Returning 0.0")
+        tex = texref.download(sim.gpu_stream)
+        texref.release()
+        return tex
+
+    @staticmethod
+    def sample_texture(sim, tex_name, Nx, Ny, x0, x1, y0, y1):
+        """
+        Sampling the textures with in the gpu_ctx of a sim-object
+        with arbitrary sampling window.
+        So far available: angle_tex, coriolis_f_tex!
+        """
+        texref = Common.CUDAArray2D(sim.gpu_stream, Nx, Ny, 2,2, np.zeros((Ny+4,Nx+4)))
+        get_tex = sim.kernel.get_function("sample_texture")
+        get_tex.prepare("Piffffii")
+        global_size = (int(np.ceil( (Nx+4) / float(sim.local_size[0]))), int(np.ceil( (Ny +4) / float(sim.local_size[1]))) )
+        if tex_name == "angle_tex":
+            get_tex.prepared_async_call(global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(0),
+                                        np.float32(x0), np.float32(x1), np.float32(y0), np.float32(y1), np.int32(Nx+4), np.int32(Ny+4))
+        elif tex_name == "coriolis_f_tex":
+            get_tex.prepared_async_call(global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(1),
+                                        np.float32(x0), np.float32(x1), np.float32(y0), np.float32(y1), np.int32(Nx+4), np.int32(Ny+4))
+        else:
+            print("Texture name unknown! Returning 0.0")
+        tex = texref.download(sim.gpu_stream)
+        texref.release()
+        return tex
+
 
     def give_birth(self, gpu_ctx_refined, loc, scale, **kwargs):
         """
@@ -485,48 +532,104 @@ class Simulator(object):
             sim_args["courant_number"] = self.courant_number
         sim_args["t"] = self.t
 
-        # Dict collecting local, but non-rescaled initalisation arguments
-        data_args_loc = {}
+        # Dict collecting locally rescaled IC and BC
+        data_args_loc_refined = {}
 
-        data_args_loc["eta0"], data_args_loc["hu0"], data_args_loc["hv0"] = [x[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]] for x in self.download()]
+        eta0_loc, hu0_loc, hv0_loc = [x[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]] for x in self.download()]
 
-        data_args_loc["NY"], data_args_loc["NX"] = np.array(data_args_loc["eta0"].shape)
-        data_args_loc["ny"], data_args_loc["nx"] = np.array(data_args_loc["eta0"].shape)-4
+        ny_loc, nx_loc = np.array(eta0_loc.shape)
+        data_args_loc_refined["ny"], data_args_loc_refined["nx"] = int(ny_loc * scale), int(nx_loc * scale)
 
-        data_args_loc["dx"], data_args_loc["dy"] = self.dx, self.dy
+        eta0_loc_refined = OceanographicUtilities.rescaleMidpoints(eta0_loc, data_args_loc_refined["nx"], data_args_loc_refined["ny"])[2]
+        eta0_loc_refined_data = np.pad( eta0_loc_refined.data, ((2,2),(2,2)), mode="edge")
+        eta0_loc_refined_mask = np.pad( eta0_loc_refined.mask, ((2,2),(2,2)), mode="edge")
+        data_args_loc_refined["eta0"] = np.ma.array(eta0_loc_refined_data, mask=eta0_loc_refined_mask)
 
-        data_args_loc["H"] = self.downloadBathymetry()[0][loc[0][0]:loc[1][0]+1,loc[0][1]:loc[1][1]+1]
+        hu0_loc_refined = OceanographicUtilities.rescaleMidpoints(hu0_loc, data_args_loc_refined["nx"], data_args_loc_refined["ny"])[2]
+        hu0_loc_refined_data = np.pad( hu0_loc_refined.data, ((2,2),(2,2)), mode="edge")
+        hu0_loc_refined_mask = np.pad( hu0_loc_refined.mask, ((2,2),(2,2)), mode="edge")
+        data_args_loc_refined["hu0"] = np.ma.array(hu0_loc_refined_data, mask=hu0_loc_refined_mask)
 
-        data_args_loc["g"] = self.g
-        data_args_loc["r"] = self.r
+        hv0_loc_refined = OceanographicUtilities.rescaleMidpoints(hv0_loc, data_args_loc_refined["nx"], data_args_loc_refined["ny"])[2]
+        hv0_loc_refined_data = np.pad( hv0_loc_refined.data, ((2,2),(2,2)), mode="edge")
+        hv0_loc_refined_mask = np.pad( hv0_loc_refined.mask, ((2,2),(2,2)), mode="edge")
+        data_args_loc_refined["hv0"] = np.ma.array(hv0_loc_refined_data, mask=hv0_loc_refined_mask)
+        print("Use halo mask according to bathymetry")
 
-        data_args_loc["angle"] = NetCDFInitialization.get_texture(self, "angle_tex")[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]]
+        data_args_loc_refined["H"] = np.pad(OceanographicUtilities.rescaleIntersections(self.downloadBathymetry()[0][loc[0][0]:loc[1][0]+1,loc[0][1]:loc[1][1]+1], data_args_loc_refined["nx"]+1, data_args_loc_refined["ny"]+1)[2], ((2,2),(2,2)), mode="edge")
+        print("Construct halo mask according to finer bathymetry information!")
 
-        data_args_loc["f"] = NetCDFInitialization.get_texture(self, "coriolis_f_tex")[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]]
+        data_args_loc_refined["dx"], data_args_loc_refined["dy"] = self.dx/scale, self.dy/scale 
 
-        wind_y0 = np.floor(loc[0][0]/(self.ny+4)*self.wind_stress.wind_u.shape[1]).astype(int)
-        wind_x0 = np.floor(loc[0][1]/(self.nx+4)*self.wind_stress.wind_u.shape[2]).astype(int)
+        data_args_loc_refined["g"] = self.g
+        data_args_loc_refined["r"] = self.r
 
-        wind_y1 = np.ceil(loc[1][0]/(self.ny+4)*self.wind_stress.wind_u.shape[1]).astype(int)
-        wind_x1 = np.ceil(loc[1][1]/(self.nx+4)*self.wind_stress.wind_u.shape[2]).astype(int)
+        # Cell centers of the edge cells in the halo
+        tex_x0 = loc[0][1]/(self.nx+4) - 1.5/(self.nx+4)/scale
+        tex_x1 = loc[1][1]/(self.nx+4) + 1.5/(self.nx+4)/scale
 
-        data_args_loc["wind"] = WindStress.WindStress(t=self.wind_stress.t, wind_u=self.wind_stress.wind_u[:,wind_y0:wind_y1,wind_x0:wind_x1], wind_v=self.wind_stress.wind_v[:,wind_y0:wind_y1,wind_x0:wind_x1])
+        tex_y0 = loc[0][0]/(self.ny+4) - 1.5/(self.ny+4)/scale
+        tex_y1 = loc[1][0]/(self.ny+4) + 1.5/(self.ny+4)/scale
 
-        data_args_loc["boundary_conditions"] = copy.deepcopy(self.boundary_conditions) # required argument in rescaling, but only used as dummy
+        data_args_loc_refined["angle"] = Simulator.sample_texture(self, "angle_tex", data_args_loc_refined["nx"], data_args_loc_refined["ny"], tex_x0, tex_x1, tex_y0, tex_y1)
 
-        data_args_refined = NetCDFInitialization.removeMetadata(NetCDFInitialization.rescaleInitialConditions(data_args_loc, scale=scale))
+        data_args_loc_refined["f"] = Simulator.sample_texture(self, "coriolis_f_tex", data_args_loc_refined["nx"], data_args_loc_refined["ny"], tex_x0, tex_x1, tex_y0, tex_y1)
 
-        data_args_refined["boundary_conditions"] = copy.deepcopy(self.boundary_conditions)  # keeping the original number of sponge cells
+
+        wind_t = self.wind_stress.t
+
+        def windstress_t(sim, wind_t_idx, coord, nx, ny, x0, x1, y0, y1):
+            ## Set wind as texture
+            if coord == "x":
+                GPUtexref = sim.kernel.get_texref("windstress_X_current")
+            elif coord == "y":
+                GPUtexref = sim.kernel.get_texref("windstress_Y_current")
+
+            sim.gpu_stream.synchronize()
+            sim.gpu_ctx.synchronize()
+
+            if coord == "x":
+                GPUtexref.set_array(cuda.np_to_array(sim.wind_stress.stress_u[wind_t_idx], order="C"))
+            elif coord == "y":
+                GPUtexref.set_array(cuda.np_to_array(sim.wind_stress.stress_v[wind_t_idx], order="C"))
+            GPUtexref.set_filter_mode(cuda.filter_mode.LINEAR) #bilinear interpolation
+            GPUtexref.set_address_mode(0, cuda.address_mode.CLAMP) #no indexing outside domain
+            GPUtexref.set_address_mode(1, cuda.address_mode.CLAMP)
+            GPUtexref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
+
+            sim.gpu_ctx.synchronize()
+
+            
+            texref = Common.CUDAArray2D(sim.gpu_stream, nx, ny, 2,2, np.zeros((ny+4,nx+4)))
+            get_tex = sim.kernel.get_function("sample_texture")
+            get_tex.prepare("Piffffii")
+            if coord == "x":
+                get_tex.prepared_async_call(sim.global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(2),
+                                            np.float32(x0), np.float32(x1), np.float32(y0), np.float32(y1), np.int32(nx+4), np.int32(ny+4))
+            elif coord == "y":
+                get_tex.prepared_async_call(sim.global_size,sim.local_size,sim.gpu_stream, texref.data.gpudata, np.int32(3),
+                                            np.float32(x0), np.float32(x1), np.float32(y0), np.float32(y1), np.int32(nx+4), np.int32(ny+4))
+            tex = texref.download(sim.gpu_stream)
+            texref.release()
+            return tex
+
+        stress_u = [windstress_t(self, t_idx, "x", data_args_loc_refined["nx"], data_args_loc_refined["ny"], tex_x0, tex_x1, tex_y0, tex_y1) for t_idx in range(len(wind_t))]
+        stress_v = [windstress_t(self, t_idx, "y", data_args_loc_refined["nx"], data_args_loc_refined["ny"], tex_x0, tex_x1, tex_y0, tex_y1) for t_idx in range(len(wind_t))]
+
+        data_args_loc_refined["wind"] = WindStress.WindStress(t=wind_t, stress_u=stress_u, stress_v=stress_v)
+
+        data_args_loc_refined["boundary_conditions"] = copy.deepcopy(self.boundary_conditions)
+
 
         # Replace specific kwargs in derived dicts
         for key in set(kwargs).intersection(set(sim_args)):
             sim_args[key] = kwargs[key]
 
-        for key in set(kwargs).intersection(set(data_args_refined)):
-            data_args_refined[key] = kwargs[key]
+        for key in set(kwargs).intersection(set(data_args_loc_refined)):
+            data_args_loc_refined[key] = kwargs[key]
 
         # Generate child
-        self.children.append(type(self)(gpu_ctx_refined, **sim_args, **data_args_refined, **kwargs))
+        self.children.append(type(self)(gpu_ctx_refined, **sim_args, **data_args_loc_refined, **kwargs))
 
         self.children[-1].level = self.level + 1
         self.children[-1].level_rescale_factor = scale
