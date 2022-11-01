@@ -158,8 +158,10 @@ class Simulator(object):
         self.level = 0
         self.level_rescale_factor = 1.0
         self.global_rescale_factor = 1.0
-        self.level_local_area = [[0,0],[None,None]] # indices of area within parent sim
-        self.global_local_area = [[0,0],[1,1]] # ratios of area within root sim 
+        self.level_local_area = [[self.ghost_cells_y, self.ghost_cells_x],
+                                [self.ghost_cells_y+self.ny, self.ghost_cells_y+self.nx]] # indices of area within parent sim
+        self.global_local_area = [[self.ghost_cells_y/(self.ny+2*self.ghost_cells_y), self.ghost_cells_x/(self.nx+2*self.ghost_cells_x)],
+                                [(self.ghost_cells_y+self.ny)/(self.ny+2*self.ghost_cells_y), (self.ghost_cells_x+self.nx)/(self.nx+2*self.ghost_cells_x)]] # ratios of area within root sim 
 
 
     """
@@ -505,7 +507,9 @@ class Simulator(object):
         Returning a locally refined/coarsened simulation,
         initialised from self
 
-        loc - list with "cut-out" area by indices in form [[y0,x0],[y1,x1]]
+        loc   - list with "cut-out" area 
+                by indices in form [[y0,x0],[y1,x1]]
+                where indices account for interior_domain_only
         scale - factor for rescaling of resolution
 
         kwargs - to overwrite settings, if required
@@ -517,7 +521,10 @@ class Simulator(object):
 
         # Checking that local areas do NOT overlap or touch!
         for child in self.children:
-            assert (child.loc[0][0] > loc[1][0] or child.loc[1][0] < loc[0][0] or child.loc[1][1] < loc[0][1] or child.loc[0][1] > loc[1][1]), "Local areas must not overlap"
+            assert (child.level_local_area[0][0] > child.level_local_area[1][0] 
+                    or child.level_local_area[1][0] < child.level_local_area[0][0] 
+                    or child.level_local_area[1][1] < child.level_local_area[0][1] 
+                    or child.level_local_area[0][1] > child.level_local_area[1][1]), "Local areas must not overlap"
 
         # Dict with simulation information
         sim_args = {}
@@ -535,7 +542,9 @@ class Simulator(object):
         # Dict collecting locally rescaled IC and BC
         data_args_loc_refined = {}
 
-        eta0_loc, hu0_loc, hv0_loc = [x[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]] for x in self.download()]
+        eta0_loc, hu0_loc, hv0_loc = [ x[ loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y, 
+                                            loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x ] 
+                                        for x in self.download() ]
 
         ny_loc, nx_loc = np.array(eta0_loc.shape)
         data_args_loc_refined["ny"], data_args_loc_refined["nx"] = int(ny_loc * scale), int(nx_loc * scale)
@@ -556,7 +565,10 @@ class Simulator(object):
         data_args_loc_refined["hv0"] = np.ma.array(hv0_loc_refined_data, mask=hv0_loc_refined_mask)
         print("Use halo mask according to bathymetry")
 
-        H_loc_refined = OceanographicUtilities.rescaleIntersections(self.downloadBathymetry()[0][loc[0][0]:loc[1][0]+1,loc[0][1]:loc[1][1]+1], data_args_loc_refined["nx"]+1, data_args_loc_refined["ny"]+1)[2]
+        H_loc_refined = OceanographicUtilities.rescaleIntersections(
+                                            self.downloadBathymetry()[0][loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y+1, 
+                                                                            loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x+1], 
+                                            data_args_loc_refined["nx"]+1, data_args_loc_refined["ny"]+1)[2]
         H_loc_refined_data = np.pad(H_loc_refined.data, ((2,2),(2,2)), mode="edge")
         H_loc_refined_mask = np.pad(H_loc_refined.mask, ((2,2),(2,2)), mode="edge")
         data_args_loc_refined["H"] = np.ma.array(H_loc_refined_data, mask= H_loc_refined_mask)
@@ -567,16 +579,20 @@ class Simulator(object):
         data_args_loc_refined["g"] = self.g
         data_args_loc_refined["r"] = self.r
 
-        # Cell centers of the edge cells in the halo
-        tex_x0 = loc[0][1]/(self.nx+4) - 1.5/(self.nx+4)/scale
-        tex_x1 = loc[1][1]/(self.nx+4) + 1.5/(self.nx+4)/scale
+        # Cell centers of the edge cells in the ghost cell halo
+        tex_x0 = (loc[0][1]+self.ghost_cells_x)/(self.nx+4) - 1.5/(self.nx+4)/scale
+        tex_x1 = (loc[1][1]+self.ghost_cells_x)/(self.nx+4) + 1.5/(self.nx+4)/scale
 
-        tex_y0 = loc[0][0]/(self.ny+4) - 1.5/(self.ny+4)/scale
-        tex_y1 = loc[1][0]/(self.ny+4) + 1.5/(self.ny+4)/scale
+        tex_y0 = (loc[0][0]+self.ghost_cells_y)/(self.ny+4) - 1.5/(self.ny+4)/scale
+        tex_y1 = (loc[1][0]+self.ghost_cells_y)/(self.ny+4) + 1.5/(self.ny+4)/scale
 
-        data_args_loc_refined["angle"] = Simulator.sample_texture(self, "angle_tex", data_args_loc_refined["nx"], data_args_loc_refined["ny"], tex_x0, tex_x1, tex_y0, tex_y1)
+        data_args_loc_refined["angle"] = Simulator.sample_texture(self, "angle_tex", 
+                                                                    data_args_loc_refined["nx"], data_args_loc_refined["ny"], 
+                                                                    tex_x0, tex_x1, tex_y0, tex_y1)
 
-        data_args_loc_refined["f"] = Simulator.sample_texture(self, "coriolis_f_tex", data_args_loc_refined["nx"], data_args_loc_refined["ny"], tex_x0, tex_x1, tex_y0, tex_y1)
+        data_args_loc_refined["f"] = Simulator.sample_texture(self, "coriolis_f_tex", 
+                                                                    data_args_loc_refined["nx"], data_args_loc_refined["ny"], 
+                                                                    tex_x0, tex_x1, tex_y0, tex_y1)
 
 
         wind_t = self.wind_stress.t
@@ -638,10 +654,12 @@ class Simulator(object):
         self.children[-1].level_rescale_factor = scale
         self.children[-1].global_rescale_factor = self.global_rescale_factor * scale
         self.children[-1].level_local_area = loc
-        self.children[-1].global_local_area = [ [self.global_local_area[0][0] + loc[0][0]/(self.ny+4), \
-                                                    self.global_local_area[0][1] + loc[0][1]/(self.nx+4) ], \
-                                                [self.global_local_area[0][0] + loc[1][0]/(self.ny+4), \
-                                                    self.global_local_area[0][1] + loc[1][1]/(self.nx+4) ] ]
+        global_local_area_x = self.global_local_area[1][1] - self.global_local_area[1][0] 
+        global_local_area_y = self.global_local_area[0][1] - self.global_local_area[0][0]
+        self.children[-1].global_local_area = [ [self.global_local_area[0][0] + loc[0][0]/self.ny*global_local_area_y, \
+                                                    self.global_local_area[0][1] + loc[0][1]/self.nx*global_local_area_x ], \
+                                                [self.global_local_area[0][0] + loc[1][0]/self.ny*global_local_area_y, \
+                                                    self.global_local_area[0][1] + loc[1][1]/self.nx*global_local_area_x ] ]
 
     def kill_child(self, idx = 0):
         """
