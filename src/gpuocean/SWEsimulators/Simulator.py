@@ -658,8 +658,8 @@ class Simulator(object):
         self.children[-1].level_rescale_factor = scale
         self.children[-1].global_rescale_factor = self.global_rescale_factor * scale
         self.children[-1].level_local_area = loc
-        global_local_area_x = self.global_local_area[1][1] - self.global_local_area[1][0] 
-        global_local_area_y = self.global_local_area[0][1] - self.global_local_area[0][0]
+        global_local_area_x = self.global_local_area[1][1] - self.global_local_area[0][1] 
+        global_local_area_y = self.global_local_area[1][0] - self.global_local_area[0][0]
         self.children[-1].global_local_area = [ [self.global_local_area[0][0] + loc[0][0]/self.ny*global_local_area_y, \
                                                     self.global_local_area[0][1] + loc[0][1]/self.nx*global_local_area_x ], \
                                                 [self.global_local_area[0][0] + loc[1][0]/self.ny*global_local_area_y, \
