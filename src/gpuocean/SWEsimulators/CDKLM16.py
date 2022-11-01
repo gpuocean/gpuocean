@@ -43,7 +43,8 @@ import pycuda.driver as cuda
 
 class CDKLM16(Simulator.Simulator):
     """
-    Class that solves the SW equations using the Coriolis well balanced reconstruction scheme, as given by the publication of Chertock, Dudzinski, Kurganov and Lukacova-Medvidova (CDFLM) in 2016.
+    Class that solves the SW equations using the Coriolis well balanced reconstruction scheme, 
+    as given by the publication of Chertock, Dudzinski, Kurganov and Lukacova-Medvidova (CDFLM) in 2016.
     """
 
     def __init__(self, \
@@ -527,10 +528,18 @@ class CDKLM16(Simulator.Simulator):
                 bc_data_west_t0 = []
                 bc_data_east_t0 = []
                 for child in self.children:
-                    bc_data_north_t0.append([x[child.level_local_area[1][0]+1, child.level_local_area[0][1]:child.level_local_area[1][1]] for x in [eta, hu, hv]])
-                    bc_data_south_t0.append([x[child.level_local_area[0][0]-1, child.level_local_area[0][1]:child.level_local_area[1][1]] for x in [eta, hu, hv]])
-                    bc_data_west_t0.append([x[child.level_local_area[0][0]:child.level_local_area[1][0], child.level_local_area[0][1]-1] for x in [eta, hu, hv]])
-                    bc_data_east_t0.append([x[child.level_local_area[0][0]:child.level_local_area[1][0], child.level_local_area[1][1]+1] for x in [eta, hu, hv]])
+                    bc_data_north_t0.append([x[ child.level_local_area[1][0]+self.ghost_cells_y+1, 
+                                                child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
+                                            for x in [eta, hu, hv]])
+                    bc_data_south_t0.append([x[ child.level_local_area[0][0]+self.ghost_cells_y-1, 
+                                                child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
+                                            for x in [eta, hu, hv]])
+                    bc_data_west_t0.append([x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
+                                                child.level_local_area[0][1]+self.ghost_cells_x-1 ] 
+                                            for x in [eta, hu, hv]])
+                    bc_data_east_t0.append([x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
+                                                child.level_local_area[1][1]+self.ghost_cells_x+1 ] 
+                                            for x in [eta, hu, hv]])
             # (end temporary child code)
 
 
@@ -623,23 +632,33 @@ class CDKLM16(Simulator.Simulator):
         if self.write_netcdf and write_now:
             self.sim_writer.writeTimestep(self)
 
-        self.gpu_stream.synchronize()   
-        self.gpu_ctx.synchronize()
+
         ############################
         # Temporary child code 
+        self.gpu_stream.synchronize()   
+        self.gpu_ctx.synchronize()
+
         if len(self.children) > 0:
             
             eta, hu, hv = copy.deepcopy(self.download()) 
-            # NOTE: The deepcopy is important that the gpudata does not get "confused"
+            # NOTE: The deepcopy is important that the gpudata does not get "confused" (mask of hu and hv may be effected)
             
             t1 = self.t
             
             for c, child in enumerate(self.children):
                 # Set BC for child
-                bc_data_north_t1 = [x[child.level_local_area[1][0]+1, child.level_local_area[0][1]:child.level_local_area[1][1]] for x in [eta, hu, hv]]
-                bc_data_south_t1 = [x[child.level_local_area[0][0]-1, child.level_local_area[0][1]:child.level_local_area[1][1]] for x in [eta, hu, hv]]
-                bc_data_west_t1 = [x[child.level_local_area[0][0]:child.level_local_area[1][0], child.level_local_area[0][1]-1] for x in [eta, hu, hv]]
-                bc_data_east_t1 = [x[child.level_local_area[0][0]:child.level_local_area[1][0], child.level_local_area[1][1]+1] for x in [eta, hu, hv]]
+                bc_data_north_t1 = [x[ child.level_local_area[1][0]+self.ghost_cells_y+1, 
+                                        child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
+                                    for x in [eta, hu, hv]]
+                bc_data_south_t1 = [x[ child.level_local_area[0][0]+self.ghost_cells_y-1, 
+                                        child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
+                                    for x in [eta, hu, hv]]
+                bc_data_west_t1 = [x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
+                                        child.level_local_area[0][1]+self.ghost_cells_x-1 ] 
+                                    for x in [eta, hu, hv]]
+                bc_data_east_t1 = [x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
+                                        child.level_local_area[1][1]+self.ghost_cells_x+1 ] 
+                                    for x in [eta, hu, hv]]
 
                 t = [t0, t1]
                 north = Common.SingleBoundaryConditionData(h = [bc_data_north_t0[c][0], bc_data_north_t1[0]],\
@@ -663,22 +682,27 @@ class CDKLM16(Simulator.Simulator):
                 # Step child 
                 child.step(t_end=t_end, apply_stochastic_term=apply_stochastic_term, write_now=write_now, update_dt=update_dt)
 
-                # Replacing parent values in child local areas 
+                # Replacing parent values in local area of the child 
                 eta_child, hu_child, hv_child = child.download(interior_domain_only=True)
 
                 loc = child.level_local_area
+                # TODO: If bathymetry changes, this has to be adapted here!
                 eta_loc = OceanographicUtilities.rescaleMidpoints(eta_child, loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
                 hu_loc  = OceanographicUtilities.rescaleMidpoints(hu_child,  loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
                 hv_loc  = OceanographicUtilities.rescaleMidpoints(hv_child,  loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
 
-                eta[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]] = eta_loc
-                hu[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]]  = hu_loc
-                hv[loc[0][0]:loc[1][0],loc[0][1]:loc[1][1]]  = hv_loc
+                eta[loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y, 
+                    loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x]  = eta_loc
+                hu[loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y, 
+                    loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x]  = hu_loc
+                hv[loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y, 
+                    loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x]  = hv_loc
             
             self.upload(eta, hu, hv)
+
             self.gpu_stream.synchronize()   
             self.gpu_ctx.synchronize()
-        # # (end temporary child code)
+        # (end temporary child code)
             
         return self.t
 

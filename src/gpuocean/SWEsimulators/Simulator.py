@@ -549,6 +549,19 @@ class Simulator(object):
         ny_loc, nx_loc = np.array(eta0_loc.shape)
         data_args_loc_refined["ny"], data_args_loc_refined["nx"] = int(ny_loc * scale), int(nx_loc * scale)
 
+        # The variable and bathymetry values in the ghost cells are not relevant, 
+        # since they are anyways overwritten by the BC kernels
+
+        # TODO: If bathymetry changes, this has to be adapted here!
+        H_loc_refined = OceanographicUtilities.rescaleIntersections(
+                                            self.downloadBathymetry()[0][loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y+1, 
+                                                                            loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x+1], 
+                                            data_args_loc_refined["nx"]+1, data_args_loc_refined["ny"]+1)[2]
+        H_loc_refined_data = np.pad(H_loc_refined.data, ((2,2),(2,2)), mode="edge")
+        H_loc_refined_mask = np.pad(H_loc_refined.mask, ((2,2),(2,2)), mode="edge")
+        data_args_loc_refined["H"] = np.ma.array(H_loc_refined_data, mask= H_loc_refined_mask)
+
+        # TODO: If bathymetry changes, this has to be adapted here!
         eta0_loc_refined = OceanographicUtilities.rescaleMidpoints(eta0_loc, data_args_loc_refined["nx"], data_args_loc_refined["ny"])[2]
         eta0_loc_refined_data = np.pad( eta0_loc_refined.data, ((2,2),(2,2)), mode="edge")
         eta0_loc_refined_mask = np.pad( eta0_loc_refined.mask, ((2,2),(2,2)), mode="edge")
@@ -563,16 +576,7 @@ class Simulator(object):
         hv0_loc_refined_data = np.pad( hv0_loc_refined.data, ((2,2),(2,2)), mode="edge")
         hv0_loc_refined_mask = np.pad( hv0_loc_refined.mask, ((2,2),(2,2)), mode="edge")
         data_args_loc_refined["hv0"] = np.ma.array(hv0_loc_refined_data, mask=hv0_loc_refined_mask)
-        print("Use halo mask according to bathymetry")
 
-        H_loc_refined = OceanographicUtilities.rescaleIntersections(
-                                            self.downloadBathymetry()[0][loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y+1, 
-                                                                            loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x+1], 
-                                            data_args_loc_refined["nx"]+1, data_args_loc_refined["ny"]+1)[2]
-        H_loc_refined_data = np.pad(H_loc_refined.data, ((2,2),(2,2)), mode="edge")
-        H_loc_refined_mask = np.pad(H_loc_refined.mask, ((2,2),(2,2)), mode="edge")
-        data_args_loc_refined["H"] = np.ma.array(H_loc_refined_data, mask= H_loc_refined_mask)
-        print("Construct halo mask according to finer bathymetry information!")
 
         data_args_loc_refined["dx"], data_args_loc_refined["dy"] = self.dx/scale, self.dy/scale 
 
