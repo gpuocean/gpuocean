@@ -641,7 +641,7 @@ class Simulator(object):
 
         data_args_loc_refined["wind"] = WindStress.WindStress(t=wind_t, stress_u=stress_u, stress_v=stress_v)
 
-        data_args_loc_refined["boundary_conditions"] = copy.deepcopy(self.boundary_conditions)
+        data_args_loc_refined["boundary_conditions"] = Common.BoundaryConditions(north=3, east=3, south=3, west=3)
 
 
         # Replace specific kwargs in derived dicts
