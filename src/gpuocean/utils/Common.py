@@ -1401,7 +1401,7 @@ class Bathymetry:
                 self.global_size, self.local_size, self.gpu_stream, \
                 self.nx, self.ny, self.halo_x, self.halo_y, \
                 self.Bi.data.gpudata, self.Bi.pitch)
-        else:
+        elif (self.boundary_conditions.north == 1) and (self.boundary_conditions.south == 1):
             self.closed_boundary_intersections_NS.prepared_async_call( \
                 self.global_size, self.local_size, self.gpu_stream, \
                 self.nx, self.ny, self.halo_x, self.halo_y, \
@@ -1413,7 +1413,7 @@ class Bathymetry:
                 self.global_size, self.local_size, self.gpu_stream, \
                 self.nx, self.ny, self.halo_x, self.halo_y, \
                 self.Bi.data.gpudata, self.Bi.pitch)
-        else:
+        elif (self.boundary_conditions.north == 1) and (self.boundary_conditions.south == 1):
             self.closed_boundary_intersections_EW.prepared_async_call( \
                 self.global_size, self.local_size, self.gpu_stream, \
                 self.nx, self.ny, self.halo_x, self.halo_y, \
