@@ -8,16 +8,15 @@ channels:
 dependencies:
 - python=3.7
 - conda-build
+- ipykernel
 - numpy
 - matplotlib=3.3.3
-- jupyter
 - netcdf4
 - pytest
 - xmlrunner
 - scipy
 - pandas
 - pytables
-- nb_conda_kernels
 - nbdime
 - mpi4py
 - openssl
@@ -26,6 +25,7 @@ dependencies:
 - pyproj
 - pytools
 - ffmpeg
+- seawater
 # Activate environment and install the following packages using pip:
 # $ conda activate gpuocean
 # $ pip3 install --trusted-host files.pythonhosted.org --no-deps -U pycuda
