@@ -203,6 +203,8 @@ class CDKLM16pair():
                                                               np.int32(2.0), np.int32(2.0),
 
                                                               np.float32(level_sim.g), np.float32(0.0), np.float32(0.0), np.float32(0.0),
+                                                              np.float32(level_sim.global_local_area[0][1]), np.float32(level_sim.global_local_area[1][1]),
+                                                              np.float32(level_sim.global_local_area[0][0]), np.float32(level_sim.global_local_area[1][0]),
 
                                                               parent_eta_pert.data.gpudata, parent_eta_pert.pitch,
 

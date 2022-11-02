@@ -583,6 +583,7 @@ class Simulator(object):
         data_args_loc_refined["r"] = self.r
 
         # Cell centers of the edge cells in the ghost cell halo
+        # (Compared to `global_local_area` these always refer to the parent and not to the root)
         tex_x0 = (loc[0][1]+self.ghost_cells_x)/(self.nx+4) - 1.5/(self.nx+4)/scale
         tex_x1 = (loc[1][1]+self.ghost_cells_x)/(self.nx+4) + 1.5/(self.nx+4)/scale
 

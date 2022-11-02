@@ -34,13 +34,18 @@ texture<float, cudaTextureType2D> angle_tex;
   * @param nx_ Number of cells in internal domain (excluding the four ghost cells)
   * @param ny_ Number of cells in internal domain (excluding the four ghost cells)
   * The texture is assumed to also cover the ghost cells (same shape/extent as eta)
+  * @param x0 Interval start for x-direction within [0,1] where only a subarea of the texture should be considered
+  * @param x1 Interval end for x-direction within [0,1]
+  * @param y0 Interval start for y-direction within [0,1]
+  * @param y1 Interval end for y-direction within [0,1]
   */
 __device__
-inline float coriolisF(const int i, const int j, const int nx_, const int ny_) {
+inline float coriolisF(const int i, const int j, const int nx_, const int ny_, 
+                        const float x0, const float x1, const float y0, const float y1) {
     //nx+4 to account for ghost cells
     //+0.5f to go to center of texel
-    const float s = (i+0.5f) / (nx_+4.0f); 
-    const float t = (j+0.5f) / (ny_+4.0f);
+    const float s = x0 + (i+0.5f) / (nx_+4.0f) * (x1-x0); 
+    const float t = y0 + (j+0.5f) / (ny_+4.0f) * (y1-y0);
     //FIXME: Should implement so that subsampling does not get border issues, see
     //https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#table-lookup
     return tex2D(coriolis_f_tex, s, t);
@@ -54,13 +59,18 @@ inline float coriolisF(const int i, const int j, const int nx_, const int ny_) {
   * @param j Cell number along y-axis
   * @param nx_ Number of cells in internal domain (excluding the four ghost cells)
   * @param ny_ Number of cells in internal domain (excluding the four ghost cells)
+  * @param x0 Interval start for x-direction within [0,1] where only a subarea of the texture should be considered
+  * @param x1 Interval end for x-direction within [0,1]
+  * @param y0 Interval start for y-direction within [0,1]
+  * @param y1 Interval end for y-direction within [0,1]
   */
 __device__
-inline float2 getNorth(const int i, const int j, const int nx_, const int ny_) {
+inline float2 getNorth(const int i, const int j, const int nx_, const int ny_, 
+                        const float x0, const float x1, const float y0, const float y1) {
     //nx+4 to account for ghost cells
     //+0.5f to go to center of texel
-    const float s = (i+0.5f) / (nx_+4.0f);
-    const float t = (j+0.5f) / (ny_+4.0f);
+    const float s = x0 + (i+0.5f) / (nx_+4.0f) * (x1-x0); 
+    const float t = y0 + (j+0.5f) / (ny_+4.0f) * (y1-y0);
     const float angle = tex2D(angle_tex, s, t);
     //FIXME: Should implement so that subsampling does not get border issues, see
     //https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#table-lookup
@@ -384,6 +394,8 @@ __global__ void geostrophicBalance(
 
         // physical parameters
         const float g_, const float f_, const float beta_, const float y0_reference_cell_,
+        // subdomain for the textures
+        const float x0, const float x1, const float y0, const float y1,
         
         // d_eta values (coarse grid) - size [nx + 4, ny + 4]
         float* coarse_ptr_, const int coarse_pitch_,
@@ -467,12 +479,12 @@ __global__ void geostrophicBalance(
         const int eta_ty = ty+1;
 
         // Get vector towards north.
-        const float2 north = getNorth(ti, tj, nx_, ny_);
+        const float2 north = getNorth(ti, tj, nx_, ny_, x0, x1, y0, y1);
         
         // FIXME: Read from correct texture always
         float coriolis = f_ + beta_ * ((ti+0.5f)*dx_*north.x + (tj+0.5f)*dy_*north.y);
         if (f_ == 0) {
-            coriolis = coriolisF(ti, tj, nx_, ny_);
+            coriolis = coriolisF(ti, tj, nx_, ny_, x0, x1, y0, y1);
         }
         
         
@@ -734,12 +746,12 @@ __global__ void bicubicInterpolation(
         const int eta_ty = ty + 1;
         
         // Get vector towards north.
-        const float2 north = getNorth(ti, tj, nx_, ny_);
+        const float2 north = getNorth(ti, tj, nx_, ny_, 0.0f, 1.0f, 0.0f, 1.0f);
         
         // FIXME: Read from correct texture always
         float coriolis = f_ + beta_ * ((ti+0.5f)*dx_*north.x + (tj+0.5f)*dy_*north.y);
         if (f_ == 0) {
-            coriolis = coriolisF(ti, tj, nx_, ny_);
+            coriolis = coriolisF(ti, tj, nx_, ny_, 0.0f, 1.0f, 0.0f, 1.0f);
         }
         
         // Slope of perturbation of eta
@@ -783,9 +795,6 @@ extern "C" {
             // Size of coarse data
             const int coarse_nx_, const int coarse_ny_,
             const float coarse_dx_, const float coarse_dy_,
-        
-            // physical parameters
-            const float g_, const float f_, const float beta_, const float y0_reference_cell_,
             
             // d_eta values (coarse grid) - size [nx + 4, ny + 4]
             float* coarse_ptr_, const int coarse_pitch_,
