@@ -159,9 +159,8 @@ class Simulator(object):
         self.level_rescale_factor = 1.0
         self.global_rescale_factor = 1.0
         self.level_local_area = [[self.ghost_cells_y, self.ghost_cells_x],
-                                [self.ghost_cells_y+self.ny, self.ghost_cells_y+self.nx]] # indices of area within parent sim
-        self.global_local_area = [[self.ghost_cells_y/(self.ny+2*self.ghost_cells_y), self.ghost_cells_x/(self.nx+2*self.ghost_cells_x)],
-                                [(self.ghost_cells_y+self.ny)/(self.ny+2*self.ghost_cells_y), (self.ghost_cells_x+self.nx)/(self.nx+2*self.ghost_cells_x)]] # ratios of area within root sim 
+                                [self.ghost_cells_y+self.ny, self.ghost_cells_y+self.nx]] # indices of interior domain within parent sim
+        self.global_local_area = [[0, 0], [1, 1]] # ratios of full domain with ghost cells within root sim 
 
 
     """
@@ -658,12 +657,23 @@ class Simulator(object):
         self.children[-1].level_rescale_factor = scale
         self.children[-1].global_rescale_factor = self.global_rescale_factor * scale
         self.children[-1].level_local_area = loc
+
         global_local_area_x = self.global_local_area[1][1] - self.global_local_area[0][1] 
         global_local_area_y = self.global_local_area[1][0] - self.global_local_area[0][0]
-        self.children[-1].global_local_area = [ [self.global_local_area[0][0] + loc[0][0]/self.ny*global_local_area_y, \
-                                                    self.global_local_area[0][1] + loc[0][1]/self.nx*global_local_area_x ], \
-                                                [self.global_local_area[0][0] + loc[1][0]/self.ny*global_local_area_y, \
-                                                    self.global_local_area[0][1] + loc[1][1]/self.nx*global_local_area_x ] ]
+
+        global_tex_x0 = self.global_local_area[0][1] + (loc[0][1]+self.ghost_cells_x)/(self.nx+2*self.ghost_cells_x)*global_local_area_x
+        global_tex_x1 = self.global_local_area[0][1] + (loc[1][1]+self.ghost_cells_x)/(self.nx+2*self.ghost_cells_x)*global_local_area_x
+        global_tex_x  = global_tex_x1 - global_tex_x0
+        global_tex_x0 = global_tex_x0 - 2.0/self.children[-1].nx*global_tex_x
+        global_tex_x1 = global_tex_x1 + 2.0/self.children[-1].nx*global_tex_x
+
+        global_tex_y0 = self.global_local_area[0][0] + (loc[0][0]+self.ghost_cells_y)/(self.ny+2*self.ghost_cells_y)*global_local_area_y
+        global_tex_y1 = self.global_local_area[0][0] + (loc[1][0]+self.ghost_cells_y)/(self.ny+2*self.ghost_cells_y)*global_local_area_y
+        global_tex_y  = global_tex_y1 - global_tex_y0
+        global_tex_y0 = global_tex_y0 - 2.0/self.children[-1].ny*global_tex_y
+        global_tex_y1 = global_tex_y1 + 2.0/self.children[-1].ny*global_tex_y
+
+        self.children[-1].global_local_area = [ [ global_tex_y0, global_tex_x0 ], [ global_tex_y1, global_tex_x1 ] ]
 
     def kill_child(self, idx = 0):
         """

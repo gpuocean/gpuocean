@@ -110,7 +110,7 @@ class CDKLM16pair():
                                                                     coriolis_f=Simulator.Simulator.get_texture(self.sim, "coriolis_f_tex"))
 
         self.small_scale_model_error.bicubicInterpolationEtaKernel = self.small_scale_model_error.kernels.get_function("bicubicInterpolationEta")
-        self.small_scale_model_error.bicubicInterpolationEtaKernel.prepare("iiffiiffffffPiPi")
+        self.small_scale_model_error.bicubicInterpolationEtaKernel.prepare("iiffiiffPiPi")
         
 
     def step(self, t, apply_stochastic_term=False):
@@ -166,9 +166,6 @@ class CDKLM16pair():
                                                                 self.small_scale_model_error.coarse_nx, self.small_scale_model_error.coarse_ny,
                                                                 self.small_scale_model_error.coarse_dx, self.small_scale_model_error.coarse_dy,
                                                                 
-                                                                np.float32(self.sim.g), np.float32(np.average(self.sim.f)),
-                                                                np.float32(self.sim.coriolis_beta), np.float32(0.0),
-                                                                
                                                                 self.small_scale_model_error.coarse_buffer.data.gpudata, self.small_scale_model_error.coarse_buffer.pitch,
                                                                 eta_pert.data.gpudata, eta_pert.pitch)
         
@@ -188,24 +185,24 @@ class CDKLM16pair():
             global_local_area_x = level_sim.global_local_area[1][1] - level_sim.global_local_area[0][1]
             global_local_area_y = level_sim.global_local_area[1][0] - level_sim.global_local_area[0][0]
 
-            x1 = np.linspace((level_sim.global_local_area[0][1]/(global_local_area_x/level_sim.nx) - 1.5)*level_sim.dx, 
-                                (level_sim.global_local_area[1][1]/(global_local_area_x/level_sim.nx) + 1.5)*level_sim.dx, 
+            x1 = np.linspace((level_sim.global_local_area[0][1]/(global_local_area_x/(level_sim.nx+4)) + 0.5)*level_sim.dx, 
+                                (level_sim.global_local_area[1][1]/(global_local_area_x/(level_sim.nx+4)) - 0.5)*level_sim.dx, 
                             level_sim.nx+4)
-            y1 = np.linspace((level_sim.global_local_area[0][0]/(global_local_area_y/level_sim.ny) - 1.5)*level_sim.dy, 
-                                (level_sim.global_local_area[1][0]/(global_local_area_y/level_sim.ny) + 1.5)*level_sim.dy,
+            y1 = np.linspace((level_sim.global_local_area[0][0]/(global_local_area_y/(level_sim.ny+4)) + 0.5)*level_sim.dy, 
+                                (level_sim.global_local_area[1][0]/(global_local_area_y/(level_sim.ny+4)) - 0.5)*level_sim.dy,
                             level_sim.ny+4)
 
             parent_eta_pertHOST = interp(x1,y1)
             parent_eta_pert = Common.CUDAArray2D(self.pert_stream, level_sim.nx, level_sim.ny, 2, 2, np.float32(parent_eta_pertHOST))
 
             # generating geostrophic balance and update gpudata
-            # FIXME: Write a kernel that uses proper angle and coriolis values! 
+            # NOTE: using f=0, triggers gpu_ctx is evaluated
             self.small_scale_model_error.geostrophicBalanceKernel.prepared_async_call(self.small_scale_model_error.global_size_geo_balance, self.small_scale_model_error.local_size, self.pert_stream,
                                                               np.int32(level_sim.nx), np.int32(level_sim.ny),
                                                               np.int32(level_sim.dx), np.int32(level_sim.dy),
                                                               np.int32(2.0), np.int32(2.0),
 
-                                                              np.float32(level_sim.g), np.float32(np.average(level_sim.f)), np.float32(level_sim.coriolis_beta), np.float32(0.0),
+                                                              np.float32(level_sim.g), np.float32(0.0), np.float32(0.0), np.float32(0.0),
 
                                                               parent_eta_pert.data.gpudata, parent_eta_pert.pitch,
 
