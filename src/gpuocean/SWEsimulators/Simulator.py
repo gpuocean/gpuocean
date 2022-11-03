@@ -548,8 +548,9 @@ class Simulator(object):
         ny_loc, nx_loc = np.array(eta0_loc.shape)
         data_args_loc_refined["ny"], data_args_loc_refined["nx"] = int(ny_loc * scale), int(nx_loc * scale)
 
-        # The variable and bathymetry values in the ghost cells are not relevant, 
-        # since they are anyways overwritten by the BC kernels
+        print("The bathymetry is only intersection-rescaled and padded in the ghost cells. \n\
+                Please implement a better informed bathymetry refinement \n\
+                and search for \"TODO: If bathymetry changes, this has to be adapted here!\" in the source code.")
 
         # TODO: If bathymetry changes, this has to be adapted here!
         H_loc_refined = OceanographicUtilities.rescaleIntersections(
@@ -559,6 +560,9 @@ class Simulator(object):
         H_loc_refined_data = np.pad(H_loc_refined.data, ((2,2),(2,2)), mode="edge")
         H_loc_refined_mask = np.pad(H_loc_refined.mask, ((2,2),(2,2)), mode="edge")
         data_args_loc_refined["H"] = np.ma.array(H_loc_refined_data, mask= H_loc_refined_mask)
+
+        # The variable values in the ghost cells are not relevant, 
+        # since they are anyways overwritten by the BC kernels
 
         # TODO: If bathymetry changes, this has to be adapted here!
         eta0_loc_refined = OceanographicUtilities.rescaleMidpoints(eta0_loc, data_args_loc_refined["nx"], data_args_loc_refined["ny"])[2]
