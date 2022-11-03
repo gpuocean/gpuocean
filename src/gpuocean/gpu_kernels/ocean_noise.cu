@@ -496,25 +496,19 @@ __global__ void geostrophicBalance(
         const float eta_diff_y = (d_eta[eta_ty+1][eta_tx  ] - d_eta[eta_ty-1][eta_tx  ]) / (2.0f*dy_);
 
         // perturbation of hu and hv
-        const float d_hu = -(g_/coriolis)*h_mid*eta_diff_y;
-        const float d_hv =  (g_/coriolis)*h_mid*eta_diff_x;        
+        float d_hu = -(g_/coriolis)*h_mid*eta_diff_y;
+        float d_hv =  (g_/coriolis)*h_mid*eta_diff_x;        
 
-        if (true) {
-            eta_row[ti] += d_eta[eta_ty][eta_tx];
-             hu_row[ti] += d_hu;
-             hv_row[ti] += d_hv;
-        } else {
-            eta_row[ti] = d_eta[eta_ty][eta_tx];
-            hu_row[ti] = d_hu;
-            hv_row[ti] = d_hv;
+        // Set the perturbation to zero if the cell is on land
+        if (dry_cell) {
+            d_eta[eta_ty][eta_tx] = 0.0f;
+            d_hu = 0.0f;
+            d_hv = 0.0f;
         }
         
-        if (dry_cell) {
-            eta_row[ti] = 0.0f;
-            hu_row[ti]  = 0.0f;
-            hv_row[ti]  = 0.0f;
-            
-        }
+        eta_row[ti] += d_eta[eta_ty][eta_tx];
+        hu_row[ti] += d_hu; 
+        hv_row[ti] += d_hv;
     }
 }
 } // extern "C"
