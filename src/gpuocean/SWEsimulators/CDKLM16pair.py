@@ -37,7 +37,12 @@ from gpuocean.utils import Common, NetCDFInitialization, OceanographicUtilities
 
 class CDKLM16pair():
     """
-    Class that solves the SW equations using the Coriolis well balanced reconstruction scheme, as given by the publication of Chertock, Dudzinski, Kurganov and Lukacova-Medvidova (CDFLM) in 2016.
+    Class that solves the SW equations using the Coriolis well balanced reconstruction scheme, 
+    as given by the publication of Chertock, Dudzinski, Kurganov and Lukacova-Medvidova (CDFLM) in 2016,
+    for a pair of sims. 
+
+    I.e. the simulation partners share the same realisation of the model error,
+    which is adapted in this class 
     """
 
     def __init__(self, sim, slave_sim=None, 
@@ -52,8 +57,15 @@ class CDKLM16pair():
 
         sim          - CDKLM16 simulation
         slave_sim    - CDKLM16 simulation
+
+        small_scale_perturbation_dx - dx for which model error is sampled 
+        small_scale_perturbation_dy - dx for which model error is sampled 
+
         """
         
+        # NOTE: CDKLM16 instances cannot be copied due to pycuda conflicts,
+        # hence we need to initialise two independent simulations outside this class
+        self.sim = sim
         # Check whether sims can be combined 
         if slave_sim is not None:
             assert sim.nx == slave_sim.nx
@@ -61,21 +73,14 @@ class CDKLM16pair():
             assert sim.dx == slave_sim.dx
             assert sim.dy == slave_sim.dy
             assert sim.t == slave_sim.t
-
-        # Note CDKLM16 instances cannot be copied due to pycuda conflicts,
-        # hence we need to initialise two independent simulations outside this class
-        self.sim = sim
         self.slave_sim = slave_sim
 
         # Bookkeeping for the multi-res structure
         # FIXME: At the moment only one child and constant rescaling assumed!
-        self.l = self.deepest_level(self.sim, 0)
-        self.level_rescale_factor = 1.0
-        if self.l > 0:
-            self.level_rescale_factor = sim.children[0].level_rescale_factor
+        self.l = self.deepest_level(self.sim)
 
         if slave_sim is not None:
-            self.slave_l = self.deepest_level(self.slave_sim, 0)
+            self.slave_l = self.deepest_level(self.slave_sim)
             assert self.l > self.slave_l, "Slave should be the coarser simulation"
 
         # Model error instance
@@ -123,17 +128,8 @@ class CDKLM16pair():
             self.slave_sim.step(t)
 
         # Model error
-        if apply_stochastic_term:
-            # Sanity check whether levels have changed
-            l = self.deepest_level(self.sim, 0)
-            if l != self.l:
-                self.l = l
-                self.construct_model_error()
-
-            if self.small_scale_model_error is not None:
-                self.perturbSimPair()
-            else:
-                print("Model error ignored since not initialised")
+        if apply_stochastic_term and self.small_scale_model_error is not None:
+            self.perturbSimPair()
 
         return self.sim.t
 
@@ -216,31 +212,29 @@ class CDKLM16pair():
                                                               level_sim.bathymetry.mask_value)
           
 
-
         def perturb_all_levels(sim):
             """
             Recursion to add perturbation based on eta_pert onto all levels
             """
-            # FIXME: Avoid multiple interpolation and find smarter way to navigate through tree!!!
+            # perturb current simulations
             perturb_level(sim)
-            if len(sim.children) > 0:
-                perturb_all_levels(sim.children[0]) 
+            # perturb the child simulations
+            for child in sim.children:
+                perturb_all_levels(child) 
+            # FIXME: Avoid multiple interpolation (for master and slave) and find smarter way to navigate through tree!!!
 
+
+        # Calling the recursive perturbation function
         perturb_all_levels(self.sim)
         if self.slave_sim is not None:
             perturb_all_levels(self.slave_sim)
 
 
     @staticmethod
-    def deepest_level(sim, l, scale=None):
+    def deepest_level(sim, l=0):
         if len(sim.children) == 0:
             return l
         else:
-            assert len(sim.children) <= 1, "Pairs only implemented for single-child simulations" # extension is just matter of implementation, but no theoretical issues
-            if scale is not None:
-                assert sim.children[0].level_rescale_factor == scale, "Pairs only implemented for constant rescaling" # extension is just matter of implementation, but no theoretical issues
-            else:
-                scale = sim.children[0].level_rescale_factor
-            return max([CDKLM16pair.deepest_level(child,l+1, scale) for child in sim.children])
+            return max([CDKLM16pair.deepest_level(child,l+1) for child in sim.children])
     
 
