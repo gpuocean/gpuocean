@@ -546,6 +546,9 @@ class Simulator(object):
                                         for x in self.download() ]
 
         ny_loc, nx_loc = np.array(eta0_loc.shape)
+        
+        if (ny_loc*scale % 1 != 0 or nx_loc*scale % 1 != 0):
+            print("WARNING: The scaling does not result in an integer number of grid cells. I will take the closest integer and continue.")
         data_args_loc_refined["ny"], data_args_loc_refined["nx"] = int(ny_loc * scale), int(nx_loc * scale)
 
         print("The bathymetry is only intersection-rescaled and padded in the ghost cells: \n\
