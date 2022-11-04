@@ -548,9 +548,11 @@ class Simulator(object):
         ny_loc, nx_loc = np.array(eta0_loc.shape)
         data_args_loc_refined["ny"], data_args_loc_refined["nx"] = int(ny_loc * scale), int(nx_loc * scale)
 
-        print("The bathymetry is only intersection-rescaled and padded in the ghost cells. \n\
-                Please implement a better informed bathymetry refinement \n\
+        print("The bathymetry is only intersection-rescaled and padded in the ghost cells: \n\
+                Please implement a better informed bathymetry refinement! \n\
                 and search for \"TODO: If bathymetry changes, this has to be adapted here!\" in the source code.")
+        # Consider to use the midpoint information for rescaling
+        # and ensure proper masking in a similar way as in NetCDFInitialisation
 
         # TODO: If bathymetry changes, this has to be adapted here!
         H_loc_refined = OceanographicUtilities.rescaleIntersections(
@@ -567,18 +569,16 @@ class Simulator(object):
         # TODO: If bathymetry changes, this has to be adapted here!
         eta0_loc_refined = OceanographicUtilities.rescaleMidpoints(eta0_loc, data_args_loc_refined["nx"], data_args_loc_refined["ny"])[2]
         eta0_loc_refined_data = np.pad( eta0_loc_refined.data, ((2,2),(2,2)), mode="edge")
-        eta0_loc_refined_mask = np.pad( eta0_loc_refined.mask, ((2,2),(2,2)), mode="edge")
-        data_args_loc_refined["eta0"] = np.ma.array(eta0_loc_refined_data, mask=eta0_loc_refined_mask)
+        loc_refined_mask = np.pad( copy.copy(eta0_loc_refined.mask), ((2,2),(2,2)), mode="edge")
+        data_args_loc_refined["eta0"] = np.ma.array(eta0_loc_refined_data, mask=loc_refined_mask)
 
         hu0_loc_refined = OceanographicUtilities.rescaleMidpoints(hu0_loc, data_args_loc_refined["nx"], data_args_loc_refined["ny"])[2]
         hu0_loc_refined_data = np.pad( hu0_loc_refined.data, ((2,2),(2,2)), mode="edge")
-        hu0_loc_refined_mask = np.pad( hu0_loc_refined.mask, ((2,2),(2,2)), mode="edge")
-        data_args_loc_refined["hu0"] = np.ma.array(hu0_loc_refined_data, mask=hu0_loc_refined_mask)
+        data_args_loc_refined["hu0"] = np.ma.array(hu0_loc_refined_data, mask=loc_refined_mask)
 
         hv0_loc_refined = OceanographicUtilities.rescaleMidpoints(hv0_loc, data_args_loc_refined["nx"], data_args_loc_refined["ny"])[2]
         hv0_loc_refined_data = np.pad( hv0_loc_refined.data, ((2,2),(2,2)), mode="edge")
-        hv0_loc_refined_mask = np.pad( hv0_loc_refined.mask, ((2,2),(2,2)), mode="edge")
-        data_args_loc_refined["hv0"] = np.ma.array(hv0_loc_refined_data, mask=hv0_loc_refined_mask)
+        data_args_loc_refined["hv0"] = np.ma.array(hv0_loc_refined_data, mask=loc_refined_mask)
 
 
         data_args_loc_refined["dx"], data_args_loc_refined["dy"] = self.dx/scale, self.dy/scale 
