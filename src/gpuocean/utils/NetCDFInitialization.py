@@ -381,10 +381,6 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
             finally:
                 ncfile.close()
 
-            if "N" in proj_str:
-                print("Manually removing north identifier!")
-                proj_str = proj_str.replace("N","")
-
         proj = pyproj.Proj(proj_str)
         
         x_rho, y_rho = proj(lon_rho, lat_rho, inverse = False)
