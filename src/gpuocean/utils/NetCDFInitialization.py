@@ -91,13 +91,21 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
                 h = H + zeta
                 
                 if norkyst_data:
-                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
-                    hu = hu.filled(0) #zero on land
-                else: 
-                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+2]
-                    hu = hu.filled(0) #zero on land
-                    hu = (hu[:,1:] + hu[:, :-1]) * 0.5   
-                hu = h*hu
+                    u = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
+                    u = u.filled(0) #zero on land
+                else:
+                    try:
+                        u = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+2]
+                        u = u.filled(0) #zero on land
+                        u = (u[:,1:] + u[:, :-1]) * 0.5   
+                    except:
+                        u = ncfile.variables['u'][timestep_index, :, y0-1:y1+1, x0-1:x1+2]
+                        u = u.filled(fill_value = 0.0)
+                        u = (u[:, :,1:] + u[:, :, :-1]) * 0.5
+                        
+                        integrator = MLD_integrator(source_url_list[i], H, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1)
+                        u = np.sum(integrator * u, axis=0)/h
+                hu = h*u
 
 
                 bc_hu['north'][bc_index] = hu[-1, 1:-1]
@@ -106,13 +114,21 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
                 bc_hu['west'][bc_index] = hu[1:-1, 0]
 
                 if norkyst_data:
-                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
-                    hv = hv.filled(0) #zero on land
+                    v = ncfile.variables['vbar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
+                    v = v.filled(0) #zero on land
                 else:
-                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+2, x0-1:x1+1]
-                    hv = hv.filled(0) #zero on land
-                    hv = (hv[1:,:] + hv[:-1, :]) * 0.5
-                hv = h*hv
+                    try:
+                        v = ncfile.variables['vbar'][timestep_index, y0-1:y1+2, x0-1:x1+1]
+                        v = v.filled(0) #zero on land
+                        v = (v[1:,:] + v[:-1, :]) * 0.5
+                    except:
+                        v = ncfile.variables['v'][timestep_index, :, y0-1:y1+2, x0-1:x1+1]
+                        v = v.filled(fill_value = 0.0)
+                        v = (v[:, 1:, :] + v[:, :-1, :]) * 0.5
+                        
+                        integrator = MLD_integrator(source_url_list[i], H, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1)
+                        v = np.sum(integrator * v, axis=0)/h 
+                hv = h*v
 
 
                 bc_hv['north'][bc_index] = hv[-1, 1:-1]
@@ -505,10 +521,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     # ic['f'], ic['coriolis_beta'] = OceanographicUtilities.calcCoriolisParams(OceanographicUtilities.degToRad(latitude[0, 0]))
     
     #Boundary conditions
-    try:
-        ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data)
-    except Exception as e:
-        print("Construction of boundary conditions data failed! Error: "+ str(e))
+    ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data)
     ic['boundary_conditions'] = Common.BoundaryConditions(north=3, south=3, east=3, west=3, spongeCells=sponge_cells)
     
     #Wind stress (shear stress acting on the ocean surface)
