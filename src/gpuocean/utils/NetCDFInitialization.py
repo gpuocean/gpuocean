@@ -38,7 +38,7 @@ from scipy.ndimage.filters import convolve, gaussian_filter
 from gpuocean.utils import Common, WindStress, OceanographicUtilities
 
 
-def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data, reduced_gravity_interface=None):
+def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data):
     """
     timestep_indices => index into netcdf-array, e.g. [1, 3, 5]
     timestep => time at timestep, e.g. [1800, 3600, 7200]
@@ -90,35 +90,30 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
 
                 h = H + zeta
                 
-                if reduced_gravity_interface == None:
-                    if norkyst_data:
-                        hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
-                        hu = hu.filled(0) #zero on land
-                    else: 
-                        hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+2]
-                        hu = hu.filled(0) #zero on land
-                        hu = (hu[:,1:] + hu[:, :-1]) * 0.5   
-                    hu = h*hu
+                if norkyst_data:
+                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
+                    hu = hu.filled(0) #zero on land
+                else: 
+                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+2]
+                    hu = hu.filled(0) #zero on land
+                    hu = (hu[:,1:] + hu[:, :-1]) * 0.5   
+                hu = h*hu
 
-                else:
-                    hu = depth_integration(ncfile, reduced_gravity_interface, x0-1, x1+1, y0-1, y1+1, "u", timestep_index)
 
                 bc_hu['north'][bc_index] = hu[-1, 1:-1]
                 bc_hu['south'][bc_index] = hu[0, 1:-1]
                 bc_hu['east'][bc_index] = hu[1:-1, -1]
                 bc_hu['west'][bc_index] = hu[1:-1, 0]
 
-                if reduced_gravity_interface == None:
-                    if norkyst_data:
-                        hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
-                        hv = hv.filled(0) #zero on land
-                    else:
-                        hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+2, x0-1:x1+1]
-                        hv = hv.filled(0) #zero on land
-                        hv = (hv[1:,:] + hv[:-1, :]) * 0.5
-                    hv = h*hv
+                if norkyst_data:
+                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
+                    hv = hv.filled(0) #zero on land
                 else:
-                    hv = depth_integration(ncfile, reduced_gravity_interface, x0-1, x1+1, y0-1, y1+1, "v", timestep_index)
+                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+2, x0-1:x1+1]
+                    hv = hv.filled(0) #zero on land
+                    hv = (hv[1:,:] + hv[:-1, :]) * 0.5
+                hv = h*hv
+
 
                 bc_hv['north'][bc_index] = hv[-1, 1:-1]
                 bc_hv['south'][bc_index] = hv[0, 1:-1]
@@ -308,14 +303,14 @@ def checkCachedNetCDF(source_url, download_data=True):
     return source_url
 
 def getInitialConditions(source_url_list, x0, x1, y0, y1, \
+                         t0_index=0, \
                          timestep_indices=None, \
                          norkyst_data = True,
                          land_value=5.0, \
                          iterations=10, \
                          sponge_cells={'north':20, 'south': 20, 'east': 20, 'west': 20}, \
                          erode_land=0, 
-                         download_data=True,
-                         reduced_gravity_interface=None # Obsolete?
+                         download_data=True
                          ):
     ic = {}
     
@@ -334,9 +329,9 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         try:
             ncfile = Dataset(source_url)
             H_m = ncfile.variables['h'][y0-1:y1+1, x0-1:x1+1]
-            eta0 = ncfile.variables['zeta'][0, y0-1:y1+1, x0-1:x1+1]
-            u0 = ncfile.variables['ubar'][0, y0:y1, x0:x1]
-            v0 = ncfile.variables['vbar'][0, y0:y1, x0:x1]
+            eta0 = ncfile.variables['zeta'][t0_index, y0-1:y1+1, x0-1:x1+1]
+            u0 = ncfile.variables['ubar'][t0_index, y0:y1, x0:x1]
+            v0 = ncfile.variables['vbar'][t0_index, y0:y1, x0:x1]
             angle = ncfile.variables['angle'][y0:y1, x0:x1]
             latitude = ncfile.variables['lat'][y0:y1, x0:x1]
             x = ncfile.variables['X'][x0:x1]
@@ -354,11 +349,11 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         try:
             ncfile = Dataset(source_url)
             H_m = ncfile.variables['h'][y0-1:y1+1, x0-1:x1+1]
-            eta0 = ncfile.variables['zeta'][0, y0-1:y1+1, x0-1:x1+1]
+            eta0 = ncfile.variables['zeta'][t0_index, y0-1:y1+1, x0-1:x1+1]
 
             try: 
-                u0 = ncfile.variables['ubar'][0, y0:y1, x0:x1+1]
-                v0 = ncfile.variables['vbar'][0, y0:y1+1, x0:x1]
+                u0 = ncfile.variables['ubar'][t0_index, y0:y1, x0:x1+1]
+                v0 = ncfile.variables['vbar'][t0_index, y0:y1+1, x0:x1]
                 #Find u,v at cell centers
                 u0 = u0.filled(fill_value = 0.0)
                 v0 = v0.filled(fill_value = 0.0)
@@ -366,8 +361,8 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
                 u0 = (u0[:,1:] + u0[:, :-1]) * 0.5
                 v0 = (v0[1:,:] + v0[:-1, :]) * 0.5
             except:
-                u0 = ncfile.variables['u'][0, :, y0:y1, x0:x1+1]
-                v0 = ncfile.variables['v'][0, :, y0:y1+1, x0:x1]
+                u0 = ncfile.variables['u'][t0_index, :, y0:y1, x0:x1+1]
+                v0 = ncfile.variables['v'][t0_index, :, y0:y1+1, x0:x1]
                 #Find u,v at cell centers
                 u0 = u0.filled(fill_value = 0.0)
                 v0 = v0.filled(fill_value = 0.0)
@@ -428,8 +423,12 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
             if (timestep_indices[i] is not None):
                 timesteps[i] = ncfile.variables[time_str][timestep_indices[i][:]]
             else:
-                timesteps[i] = ncfile.variables[time_str][:]
-                timestep_indices[i] = range(len(timesteps[i]))
+                if i == 0: 
+                    timesteps[i] = ncfile.variables[time_str][t0_index:]
+                    timestep_indices[i] = range(t0_index, len(ncfile.variables[time_str][:]))
+                else:
+                    timesteps[i] = ncfile.variables[time_str][:]
+                    timestep_indices[i] = range(len(timesteps[i]))
         except Exception as e:
             print('exception in obtaining timestep for file '+str(i))
             raise e
@@ -440,6 +439,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     t0 = timesteps[0][0]
     for ts in timesteps:
         t0 = min(t0, min(ts))
+
     
     assert(np.all(np.diff(timesteps)>=0))
     for i in range(num_files):
@@ -460,26 +460,16 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         H_m[new_water] = land_value+eps
         eta0[new_water] = eta0_dil[new_water]
     
-    if reduced_gravity_interface == None:
-        H_i, _ = OceanographicUtilities.midpointsToIntersections(H_m, land_value=land_value, iterations=iterations)
-        eta0 = eta0[1:-1, 1:-1]
-        h0 = OceanographicUtilities.intersectionsToMidpoints(H_i).filled(land_value) + eta0.filled(0.0)
-    else: 
-        H_i, _ = OceanographicUtilities.midpointsToIntersections(H_m, land_value=land_value, iterations=iterations)
-        H_i = np.ma.minimum(H_i, reduced_gravity_interface)
-        eta0 = eta0[1:-1, 1:-1]
-        print("Cut the bathymetry: no reconstruction!")
+    H_i, _ = OceanographicUtilities.midpointsToIntersections(H_m, land_value=land_value, iterations=iterations)
+    eta0 = eta0[1:-1, 1:-1]
+    h0 = OceanographicUtilities.intersectionsToMidpoints(H_i).filled(land_value) + eta0.filled(0.0)
+
     
     #Generate physical variables
     eta0 = np.ma.array(eta0.filled(0), mask=mask[1:-1, 1:-1].copy())
-    if reduced_gravity_interface == None:
-        hu0 = np.ma.array(h0*u0, mask=mask[1:-1, 1:-1].copy())
-        hv0 = np.ma.array(h0*v0, mask=mask[1:-1, 1:-1].copy())
-    else:
-        hu0 = depth_integration(source_url, reduced_gravity_interface, x0, x1, y0, y1, "u")
-        hv0 = depth_integration(source_url, reduced_gravity_interface, x0, x1, y0, y1, "v")
-        print("Depth integration with trapeziodal rule, ignoring eta")
-    
+    hu0 = np.ma.array(h0*u0, mask=mask[1:-1, 1:-1].copy())
+    hv0 = np.ma.array(h0*v0, mask=mask[1:-1, 1:-1].copy())
+
     #Spong cells for e.g., flow relaxation boundary conditions
     ic['sponge_cells'] = sponge_cells
     
@@ -498,11 +488,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     
     #Gravity and friction
     #FIXME: Friction coeff from netcdf?
-    if reduced_gravity_interface == None:
-        ic['g'] = 9.81
-    else: 
-        ic['g'] = 0.1
-        print("Reduce gravity (fixed value used)")
+    ic['g'] = 9.81
     ic['r'] = 3.0e-3
     
     #Physical variables
@@ -520,11 +506,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     
     #Boundary conditions
     try:
-        if reduced_gravity_interface == None:
-            ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data)
-        else:
-            ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data, reduced_gravity_interface)
-            print("Depth integration with trapeziodal rule, ignoring eta")
+        ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data)
     except Exception as e:
         print("Construction of boundary conditions data failed! Error: "+ str(e))
     ic['boundary_conditions'] = Common.BoundaryConditions(north=3, south=3, east=3, west=3, spongeCells=sponge_cells)
