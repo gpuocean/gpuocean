@@ -355,8 +355,30 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
             ncfile = Dataset(source_url)
             H_m = ncfile.variables['h'][y0-1:y1+1, x0-1:x1+1]
             eta0 = ncfile.variables['zeta'][0, y0-1:y1+1, x0-1:x1+1]
-            u0 = ncfile.variables['ubar'][0, y0:y1, x0:x1+1]
-            v0 = ncfile.variables['vbar'][0, y0:y1+1, x0:x1]
+
+            try: 
+                u0 = ncfile.variables['ubar'][0, y0:y1, x0:x1+1]
+                v0 = ncfile.variables['vbar'][0, y0:y1+1, x0:x1]
+                #Find u,v at cell centers
+                u0 = u0.filled(fill_value = 0.0)
+                v0 = v0.filled(fill_value = 0.0)
+        
+                u0 = (u0[:,1:] + u0[:, :-1]) * 0.5
+                v0 = (v0[1:,:] + v0[:-1, :]) * 0.5
+            except:
+                u0 = ncfile.variables['u'][0, :, y0:y1, x0:x1+1]
+                v0 = ncfile.variables['v'][0, :, y0:y1+1, x0:x1]
+                #Find u,v at cell centers
+                u0 = u0.filled(fill_value = 0.0)
+                v0 = v0.filled(fill_value = 0.0)
+        
+                u0 = (u0[:, :,1:] + u0[:, :, :-1]) * 0.5
+                v0 = (v0[:, 1:,:] + v0[:, :-1, :]) * 0.5
+                
+                integrator = MLD_integrator(source_url, H_m[1:-1,1:-1], x0=x0, x1=x1, y0=y0, y1=y1)
+                u0 = np.sum(integrator * u0, axis=0)/(H_m[1:-1,1:-1])
+                v0 = np.sum(integrator * v0, axis=0)/(H_m[1:-1,1:-1])
+
             angle = ncfile.variables['angle'][y0:y1, x0:x1]
             #lon, lat at cell centers:
             lat_rho = ncfile.variables['lat_rho'][y0:y1, x0:x1]
@@ -385,13 +407,6 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         
         x_rho, y_rho = proj(lon_rho, lat_rho, inverse = False)
         x, y = x_rho[0], y_rho[:,0]
-        
-        #Find u,v at cell centers
-        u0 = u0.filled(fill_value = 0.0)
-        v0 = v0.filled(fill_value = 0.0)
-   
-        u0 = (u0[:,1:] + u0[:, :-1]) * 0.5
-        v0 = (v0[1:,:] + v0[:-1, :]) * 0.5
         
         time_str = 'ocean_time'
 
@@ -504,11 +519,14 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     # ic['f'], ic['coriolis_beta'] = OceanographicUtilities.calcCoriolisParams(OceanographicUtilities.degToRad(latitude[0, 0]))
     
     #Boundary conditions
-    if reduced_gravity_interface == None:
-        ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data)
-    else:
-        ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data, reduced_gravity_interface)
-        print("Depth integration with trapeziodal rule, ignoring eta")
+    try:
+        if reduced_gravity_interface == None:
+            ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data)
+        else:
+            ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data, reduced_gravity_interface)
+            print("Depth integration with trapeziodal rule, ignoring eta")
+    except Exception as e:
+        print("Construction of boundary conditions data failed! Error: "+ str(e))
     ic['boundary_conditions'] = Common.BoundaryConditions(north=3, south=3, east=3, west=3, spongeCells=sponge_cells)
     
     #Wind stress (shear stress acting on the ocean surface)
