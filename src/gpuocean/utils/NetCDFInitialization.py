@@ -590,6 +590,43 @@ def fill_coastal_data(maarr):
     return maarr
 
 
+def correct_coastal_MLD(mld, source_url, coords=[0,None,0,None], rel_tol=0.25, abs_tol=1, K=20, land_value=0.0):
+    """
+    The MLD in shallow coastal may be restricted by the bottom topography. 
+    rel_tol - parameter between [0,1] for the tolerated relative thickness of the lower layer
+    abs_tol - parameter in meter for the tolerated absolute thickness of the lower layer
+    If a MLD value is not tolerated, it is replaced by the K-th nearest neighbor average of tolerated values
+
+    FIXME: The iterated call does not necessarily result in 0 corrections, since corrected values loose relation to the checked condition 
+    """
+
+    x0, x1 = coords[0], coords[1]
+    y0, y1 = coords[2], coords[3]
+
+    s_nc = Dataset(source_url)
+    s_hs = s_nc["h"][y0:y1,x0:x1]
+
+    bad_yx = np.where(np.logical_and(np.logical_or(np.abs(mld - s_hs) < rel_tol*s_hs, np.abs(mld - s_hs) < abs_tol), s_hs!=land_value))
+    bad_mask = np.where(np.logical_or((s_hs==land_value), np.logical_or(np.abs(mld - s_hs) < rel_tol*s_hs, np.abs(mld - s_hs) < abs_tol)),1,0)
+
+    Xidx = np.arange(0, mld.shape[1])
+    Yidx = np.arange(0, mld.shape[0])
+
+    xx, yy = np.meshgrid(Xidx, Yidx)
+
+    for i in range(len(bad_yx[0])):
+        dists = (xx-bad_yx[1][i])**2 + (yy-bad_yx[0][i])**2 + 1e5*bad_mask
+        sum = 0.0
+        for k in range(K): 
+            sum += mld[np.unravel_index(dists.argmin(), dists.shape)]
+            dists[np.unravel_index(dists.argmin(), dists.shape)] = 1e5
+        mld[bad_yx[0][i],bad_yx[1][i]] = sum/K
+
+    print(str(len(bad_yx[0])) + " values corrected")
+
+    return mld
+
+
 def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
     """
     timestep_indices => index into netcdf-array, e.g. [1, 3, 5]
