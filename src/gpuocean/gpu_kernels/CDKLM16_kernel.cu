@@ -300,9 +300,12 @@ float3 computeFFaceFlux(const int i, const int j, const int bx,
     const float3 Qm = make_float3(hm, Rm.x, Rm.y);
 
     // Check if wet-dry face: if so balance potential energy of water level
-    if ((eta_bar_m == CDKLM_DRY_FLAG && eta_bar_p != CDKLM_DRY_FLAG)
-        || (eta_bar_m != CDKLM_DRY_FLAG && eta_bar_p == CDKLM_DRY_FLAG)) {
+    if (eta_bar_m == CDKLM_DRY_FLAG && eta_bar_p != CDKLM_DRY_FLAG) {
         return make_float3(0.0f, 0.5f*GRAV*Qp.x*Qp.x, 0.0f);
+    }
+
+    if (eta_bar_m != CDKLM_DRY_FLAG && eta_bar_p == CDKLM_DRY_FLAG){
+        return make_float3(0.0f, 0.5f*GRAV*Qm.x*Qm.x, 0.0f);
     }
 
     // Computed flux
@@ -370,11 +373,14 @@ float3 computeGFaceFlux(const int i, const int j, const int by,
     const float3 Qm = make_float3(hm, Rm.y, Rm.x);
 
     // Check if wet-dry face: if so balance potential energy of water level
-    if ((eta_bar_m == CDKLM_DRY_FLAG && eta_bar_p != CDKLM_DRY_FLAG)
-        || (eta_bar_m != CDKLM_DRY_FLAG && eta_bar_p == CDKLM_DRY_FLAG)) {
+    if (eta_bar_m == CDKLM_DRY_FLAG && eta_bar_p != CDKLM_DRY_FLAG) {
         return make_float3(0.0f, 0.0f, 0.5f*GRAV*Qp.x*Qp.x);
     }
 
+    if (eta_bar_m != CDKLM_DRY_FLAG && eta_bar_p == CDKLM_DRY_FLAG){
+        return make_float3(0.0f, 0.0f, 0.5f*GRAV*Qm.x*Qm.x);
+    }
+    
     // Computed flux
     // Note that we swap back u and v
     const float3 flux = CDKLM16_flux(Qm, Qp);
