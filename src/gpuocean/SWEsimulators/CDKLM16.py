@@ -218,7 +218,7 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifffi")
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPPPPPPPPPPPPPiPifffi")
         self.update_wind_stress(self.kernel, self.cdklm_swe_2D)
         self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D)
         
@@ -247,6 +247,23 @@ class CDKLM16(Simulator.Simulator):
         
         # Create data by uploading to device
         self.gpu_data = Common.SWEDataArakawaA(self.gpu_stream, nx, ny, ghost_cells_x, ghost_cells_y, eta0, hu0, hv0)
+
+        # Buffers for flux accumulation (used for multilevel simulations)
+        # NOTE: Ghost cells included for simplicity!
+        init_to_zeros = np.zeros(ny+ghost_cells_y*2, dtype=np.float32)
+        self.accF1east  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        self.accF2east  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        self.accF3east  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        self.accF1west  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        self.accF2west  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        self.accF3west  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        init_to_zeros = np.zeros(nx+ghost_cells_x*2, dtype=np.float32)
+        self.accG1north  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
+        self.accG2north  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
+        self.accG3north  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
+        self.accG1south  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
+        self.accG2south  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
+        self.accG3south  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
 
         # Allocate memory for calculating maximum timestep
         host_dt = np.zeros((self.global_size[1], self.global_size[0]), dtype=np.float32)
@@ -407,6 +424,19 @@ class CDKLM16(Simulator.Simulator):
         if self.geoEq_Ly is not None:
             self.geoEq_Ly.release()
         self.bathymetry.release()
+
+        self.accF1east.release()
+        self.accF2east.release()
+        self.accF3east.release()
+        self.accF1west.release()
+        self.accF2west.release()
+        self.accF3west.release()
+        self.accG1north.release()
+        self.accG2north.release()
+        self.accG3north.release()
+        self.accG1south.release()
+        self.accG2south.release()
+        self.accG3south.release()
         
         self.device_dt.release()
         self.max_dt_buffer.release()
@@ -697,6 +727,13 @@ class CDKLM16(Simulator.Simulator):
                     loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x]  = hu_loc
                 hv[loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y, 
                     loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x]  = hv_loc
+
+                # Flux correction
+                # 1. Accumulate fluxes in child grids - *DONE* (might have to add some weights/scaling factors, see next step)
+                # 2. Diff w/parent grid (remember to take different grid resolutions and time step sizes into account) - *CONT HERE*
+                # 3. Correct parend grid fluxes ("rerun" time integration to correct state variables)
+                # See old AMR code and paper (https://link.springer.com/article/10.1007/s10915-014-9883-4#Sec5) for details
+
             
             self.upload(eta, hu, hv)
 
@@ -741,6 +778,18 @@ class CDKLM16(Simulator.Simulator):
                            h_out.data.gpudata, h_out.pitch, \
                            hu_out.data.gpudata, hu_out.pitch, \
                            hv_out.data.gpudata, hv_out.pitch, \
+                           self.accF1east.data.gpudata, \
+                           self.accF2east.data.gpudata, \
+                           self.accF3east.data.gpudata, \
+                           self.accF1west.data.gpudata, \
+                           self.accF2west.data.gpudata, \
+                           self.accF3west.data.gpudata, \
+                           self.accG1north.data.gpudata, \
+                           self.accG2north.data.gpudata, \
+                           self.accG3north.data.gpudata, \
+                           self.accG1south.data.gpudata, \
+                           self.accG2south.data.gpudata, \
+                           self.accG3south.data.gpudata, \
                            self.bathymetry.Bi.data.gpudata, self.bathymetry.Bi.pitch, \
                            self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
                            self.bathymetry.mask_value,
@@ -890,6 +939,42 @@ class CDKLM16(Simulator.Simulator):
     
     def downloadDt(self):
         return self.device_dt.download(self.gpu_stream)
+    
+    def downloadAccF1east(self):
+        return self.accF1east.download(self.gpu_stream)
+
+    def downloadAccF2east(self):
+        return self.accF2east.download(self.gpu_stream)
+
+    def downloadAccF3east(self):
+        return self.accF3east.download(self.gpu_stream)
+
+    def downloadAccF1west(self):
+        return self.accF1west.download(self.gpu_stream)
+
+    def downloadAccF2west(self):
+        return self.accF2west.download(self.gpu_stream)
+
+    def downloadAccF3west(self):
+        return self.accF3west.download(self.gpu_stream)
+
+    def downloadAccG1north(self):
+        return self.accG1north.download(self.gpu_stream)
+
+    def downloadAccG2north(self):
+        return self.accG2north.download(self.gpu_stream)
+
+    def downloadAccG3north(self):
+        return self.accG3north.download(self.gpu_stream)
+
+    def downloadAccG1south(self):
+        return self.accG1south.download(self.gpu_stream)
+
+    def downloadAccG2south(self):
+        return self.accG2south.download(self.gpu_stream)
+
+    def downloadAccG3south(self):
+        return self.accG3south.download(self.gpu_stream)
 
     def downloadGeoEqNorm(self):
         

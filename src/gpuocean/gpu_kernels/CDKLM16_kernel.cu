@@ -196,7 +196,7 @@ __device__ float3 CDKLM16_flux(float3 Qm, float3 Qp) {
         cp = sqrtf(GRAV*Qp.x); // sqrt(GRAV*h)
     }
 
-    // Contribution from plus cell
+    // Contribution from minus cell
     float3 Fm = make_float3(0.0f, 0.0f, 0.0f);
     float um = 0.0f;
     float cm = 0.0f;
@@ -526,6 +526,20 @@ __global__ void cdklm_swe_2D(
         float* hu1_ptr_, const int hu1_pitch_,
         float* hv1_ptr_, const int hv1_pitch_,
 
+        //Accumulated net flux accross global interfaces
+        float* accF1east_ptr_,
+        float* accF2east_ptr_,
+        float* accF3east_ptr_,
+        float* accF1west_ptr_,
+        float* accF2west_ptr_,
+        float* accF3west_ptr_,
+        float* accG1north_ptr_,
+        float* accG2north_ptr_,
+        float* accG3north_ptr_,
+        float* accG1south_ptr_,
+        float* accG2south_ptr_,
+        float* accG3south_ptr_,
+
         //Bathymery
         float* Hi_ptr_, const int Hi_pitch_,
         float* Hm_ptr_, const int Hm_pitch_,
@@ -770,21 +784,36 @@ __global__ void cdklm_swe_2D(
         const float coriolis_f_left    = coriolisF(ti-1,   tj);
         const float coriolis_f_right   = coriolisF(ti+1,   tj);
 
+        // net flux plus/east interface
+        const float3 Fip = computeFFaceFlux(
+                            tx+1, ty, bx, 
+                            R, Qx, Hi,
+                            coriolis_f_central, coriolis_f_right, 
+                            bc_east, bc_west,
+                            north);
+
+        // net flux minus/west interface
+        const float3 Fim = computeFFaceFlux(
+                            tx , ty, bx,  
+                            R, Qx, Hi,
+                            coriolis_f_left, coriolis_f_central, 
+                            bc_east, bc_west, 
+                            north);
+
+        // accumulate fluxes - to be used in flux correction step for multilevel simulations
+        if (ti == NX) {
+            accF1east_ptr_[tj] += Fip.x;
+            accF2east_ptr_[tj] += Fip.y;
+            accF3east_ptr_[tj] += Fip.z;
+        }
+        if (ti == 3) {
+            accF1west_ptr_[tj] += Fim.x;
+            accF2west_ptr_[tj] += Fim.y;
+            accF3west_ptr_[tj] += Fim.z;
+        }
+
         // Compute flux along x axis
-        flux_diff = (  
-                computeFFaceFlux(
-                    tx+1, ty, bx, 
-                    R, Qx, Hi,
-                    coriolis_f_central, coriolis_f_right, 
-                    bc_east, bc_west,
-                    north)
-                - 
-                computeFFaceFlux(
-                    tx , ty, bx,  
-                    R, Qx, Hi,
-                    coriolis_f_left, coriolis_f_central, 
-                    bc_east, bc_west, 
-                    north)) / DX;
+        flux_diff = (Fip-Fim) / DX;
     }
     __syncthreads();
     
@@ -866,22 +895,38 @@ __global__ void cdklm_swe_2D(
     { // scope
         const float coriolis_f_lower   = coriolisF(  ti, tj-1);
         const float coriolis_f_upper   = coriolisF(  ti, tj+1);
-    
-        //Compute fluxes along the y axis
-        flux_diff = flux_diff + 
-            (computeGFaceFlux(
+
+        // net flux plus/north interface
+        const float3 Gip = computeGFaceFlux(
                 tx, ty+1, by, 
                 R, Qx, Hi, 
                 coriolis_f_central, coriolis_f_upper, 
                 bc_north, bc_south, 
-                east)
-            - 
-            computeGFaceFlux(
+                east);
+
+        // net flux minus/south interface
+        const float3 Gim = computeGFaceFlux(
                 tx, ty, by,  
                 R, Qx, Hi, 
                 coriolis_f_lower, coriolis_f_central, 
                 bc_north, bc_south, 
-                east)) / DY;
+                east);
+
+        // accumulate fluxes - to be used in flux correction step for multilevel simulations
+        if (tj == NY) {
+            accG1north_ptr_[ti] += Gip.x;
+            accG2north_ptr_[ti] += Gip.y;
+            accG3north_ptr_[ti] += Gip.z;
+        }
+        if (tj == 3) {
+            accG1south_ptr_[ti] += Gim.x;
+            accG2south_ptr_[ti] += Gim.y;
+            accG3south_ptr_[ti] += Gim.z;
+        }
+
+        //Compute fluxes along the y axis
+        flux_diff = flux_diff + (Gip-Gim) / DY;
+
         __syncthreads();
     }
 
@@ -1097,4 +1142,3 @@ __global__ void cdklm_swe_2D(
 }
 
 }
-
