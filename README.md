@@ -30,13 +30,9 @@ We recommend that you set up your python environment using the package manager C
     conda config --remove channels defaults
     ```
     Or install [miniforge](https://github.com/conda-forge/miniforge) instead, which "holds a minimal installer for Conda specific to conda-forge."
-- Install jupyter notebook (unless you already have it installed on your system) by opening a terminal (or Anaconda prompt if on Windows) and type
+- Start with installing jupyter notebook and the conda extensions that allows jupyter notebooks to select conda environments as kernels (for better convenience, it is necessary to install those in the base environment). To do so, open a terminal (or Anaconda prompt if on Windows) and type
     ```
-    conda install -c conda-forge jupyter
-    ```
-- Install the conda extensions that allows jupyter notebook to select conda environments as kernels:
-    ```
-    conda install -c conda-forge nb_conda_kernels
+    conda install -c conda-forge nb_conda_kernels jupyter
     ```
 - Create a new conda environment according to the environment file in this repository
     ```
@@ -58,6 +54,31 @@ We recommend that you set up your python environment using the package manager C
     ```
     sudo apt-get install texlive-latex-base texlive-latex-extra texlive-fonts-recommended dvipng cm-super
     ```
+
+## Debugging 
+
+When using VSC, the following `launch.json` content maybe helpful:
+```
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {"name":"Python: Current File","type":"python","request":"launch","program":"${file}","console":"integratedTerminal","justMyCode":true},
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${fileDirname}",
+            "python": "which python"
+        }
+    ]
+}
+```
 
 You should now be able to start a jupyter notebook server, open one of our notebooks, select the conda environment 'gpuocean' as kernel, and run the code. 
 

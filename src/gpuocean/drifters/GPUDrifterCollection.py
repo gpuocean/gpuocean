@@ -165,8 +165,8 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
         if (new_t0 != old_t0):
             self.gpu_stream.synchronize()
             self.gpu_ctx.synchronize()
-            setTexture(X0_texref, self.wind.X[t0_index])
-            setTexture(Y0_texref, self.wind.Y[t0_index])
+            setTexture(X0_texref, self.wind.wind_u[t0_index])
+            setTexture(Y0_texref, self.wind.wind_v[t0_index])
             kernel_function.param_set_texref(X0_texref)
             kernel_function.param_set_texref(Y0_texref)
             self.gpu_ctx.synchronize()
@@ -174,8 +174,8 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
         if (new_t1 != old_t1):
             self.gpu_stream.synchronize()
             self.gpu_ctx.synchronize()
-            setTexture(X1_texref, self.wind.X[t1_index])
-            setTexture(Y1_texref, self.wind.Y[t1_index])
+            setTexture(X1_texref, self.wind.wind_u[t1_index])
+            setTexture(Y1_texref, self.wind.wind_v[t1_index])
             kernel_function.param_set_texref(X1_texref)
             kernel_function.param_set_texref(Y1_texref)
             self.gpu_ctx.synchronize()

@@ -524,9 +524,6 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     ic['boundary_conditions_data'] = getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data)
     ic['boundary_conditions'] = Common.BoundaryConditions(north=3, south=3, east=3, west=3, spongeCells=sponge_cells)
     
-    #Wind stress (shear stress acting on the ocean surface)
-    ic['wind_stress'] = getWindSourceterm(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1)
-    
     #wind (wind speed in m/s used for forcing on drifter)
     ic['wind'] = getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1) 
     
@@ -638,8 +635,6 @@ def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
     
     num_files = len(source_url_list)
     
-    source_url = source_url_list[0]
-    
     assert(num_files == len(timesteps)), str(num_files) +' vs '+ str(len(timesteps))
     
     if (timestep_indices is None):
@@ -674,7 +669,9 @@ def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
     u_wind = u_wind.astype(np.float32)
     v_wind = v_wind.astype(np.float32)
     
-    wind_source = WindStress.WindStress(t=np.ravel(timesteps).copy(), X=u_wind, Y=v_wind)
+    source_filename = ' and '.join([url for url in source_url_list])
+
+    wind_source = WindStress.WindStress(t=np.ravel(timesteps).copy(), wind_u=u_wind, wind_v=v_wind, source_filename=source_filename)
     
     return wind_source
 
@@ -866,7 +863,6 @@ def removeMetadata(old_ic):
     ic.pop('sponge_cells', None)
     ic.pop('t0', None)
     ic.pop('timesteps', None)
-    ic.pop('wind', None)
     
     return ic
 

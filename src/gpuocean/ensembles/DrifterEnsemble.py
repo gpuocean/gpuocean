@@ -57,7 +57,7 @@ class DrifterEnsemble(BaseDrifterEnsemble.BaseDrifterEnsemble):
                                    self.base_H, \
                                    self.nx, self.ny, self.dx, self.dy, self.dt, \
                                    self.g, self.f, self.r, \
-                                   wind_stress=self.wind, \
+                                   wind=self.wind, \
                                    boundary_conditions=self.boundaryConditions, \
                                    write_netcdf=False)
 

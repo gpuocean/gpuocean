@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "Please cite it as below."
+authors:
+- family-names: "Brodtkorb"
+  given-names: "André"
+  orcid: "https://orcid.org/0000-0001-5504-4594"
+- family-names: "Sætra"
+  given-names: "Martin Lilleeng"
+  orcid: "https://orcid.org/0000-0002-9932-7200"
+- family-names: "Holm"
+  given-names: "Håvard Heitlo"
+  orcid: "https://orcid.org/0000-0002-2328-9447"
+title: "GPUOcean"
+url: "https://github.com/metno/gpuocean"
