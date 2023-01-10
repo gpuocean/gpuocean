@@ -65,7 +65,7 @@ class CombinedCDKLM16():
                  theta=1.3, rk_order=2, \
                  coriolis_beta=0.0, \
                  max_wind_direction_perturbation = 0, \
-                 wind_stress=WindStress.WindStress(), \
+                 wind=WindStress.WindStress(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  barotropic_boundary_conditions_data=Common.BoundaryConditionsData(), \
                  baroclinic_boundary_conditions_data=Common.BoundaryConditionsData(), \
@@ -161,7 +161,7 @@ class CombinedCDKLM16():
                  theta=theta, rk_order=rk_order, \
                  coriolis_beta=coriolis_beta, \
                  max_wind_direction_perturbation = max_wind_direction_perturbation, \
-                 wind_stress=wind_stress, \
+                 wind=wind, \
                  boundary_conditions=self.boundary_conditions, \
                  boundary_conditions_data=barotropic_boundary_conditions_data, \
                  small_scale_perturbation=small_scale_perturbation, \
@@ -200,7 +200,7 @@ class CombinedCDKLM16():
                  theta=theta, rk_order=rk_order, \
                  coriolis_beta=coriolis_beta, \
                  max_wind_direction_perturbation = max_wind_direction_perturbation, \
-                 wind_stress=wind_stress, \
+                 wind=wind, \
                  boundary_conditions=self.boundary_conditions, \
                  boundary_conditions_data=baroclinic_boundary_conditions_data, \
                  small_scale_perturbation=small_scale_perturbation, \
@@ -308,7 +308,7 @@ class CombinedCDKLM16():
             # Evolve drifters
             if barotropic_local_dt > 0.0:
                 self.drifterStep(barotropic_local_dt)
-                if trajectories is not None and self.t > trajectory_dt:
+                if trajectories is not None and baroclinic_t_now > trajectory_dt:
                     assert (trajectories.register_buoys == False), "Only floating drifters supported for combined sim"
                     trajectories.add_observation_from_sim(self)
                     if baroclinic_trajectories is not None:
