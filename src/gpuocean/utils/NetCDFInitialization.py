@@ -714,7 +714,6 @@ def depth_integration(source_url, interface_depth, x0, x1, y0, y1, var, timestep
 
 
 def getCombinedInitialConditions(source_url_list, x0, x1, y0, y1,
-                         reduced_gravity_interface, \
                          timestep_indices=None, \
                          norkyst_data = True,
                          land_value=5.0, \
@@ -735,8 +734,7 @@ def getCombinedInitialConditions(source_url_list, x0, x1, y0, y1,
                          iterations=iterations, \
                          sponge_cells=sponge_cells, \
                          erode_land=erode_land, 
-                         download_data=download_data,
-                         reduced_gravity_interface=None)
+                         download_data=download_data)
 
     upper_IC = getInitialConditions(source_url_list, x0, x1, y0, y1, \
                          timestep_indices=timestep_indices, \
@@ -746,7 +744,7 @@ def getCombinedInitialConditions(source_url_list, x0, x1, y0, y1,
                          sponge_cells=sponge_cells, \
                          erode_land=erode_land, 
                          download_data=download_data,
-                         reduced_gravity_interface=reduced_gravity_interface)
+                         reduced_gravity_interface=reduced_gravity_interface) # FIXME: OUTDATED!!!
 
     barotropic_IC = copy.deepcopy(full_IC)
     baroclinic_IC = copy.deepcopy(upper_IC)
