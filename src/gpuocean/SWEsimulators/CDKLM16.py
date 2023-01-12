@@ -524,7 +524,7 @@ class CDKLM16(Simulator.Simulator):
     
     
     
-    def step(self, t_end=0.0, apply_stochastic_term=True, write_now=True, update_dt=False):
+    def step(self, t_end=0.0, apply_stochastic_term=True, write_now=True, update_dt=False, reinit_exforcing_tex=False):
         """
         Function which steps n timesteps.
         apply_stochastic_term: Boolean value for whether the stochastic
@@ -538,6 +538,10 @@ class CDKLM16(Simulator.Simulator):
             self.bc_kernel.update_bc_values(self.gpu_stream, self.t)
             self.bc_kernel.boundaryCondition(self.gpu_stream, \
                                              self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0)
+
+        if reinit_exforcing_tex: 
+            self.update_wind_stress(self.kernel, self.cdklm_swe_2D, reinit_wind_tex=True)
+            self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D, reinit_atmospres_tex=True)
         
         t_now = 0.0
         #print("self.p_atm_factor_handle(self.t) = " + str(self.p_atm_factor_handle(self.t)))
