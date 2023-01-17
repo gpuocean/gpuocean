@@ -328,6 +328,13 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
                          erode_land=0, 
                          download_data=True
                          ):
+    """
+    Constructing input arguments for CDKLM16 instances
+    source_url_list    - list with urls or paths to NetCDF-files (single files are allows)
+    timestep_indices   - list with timestep_indices per file (for a single file, e.g., "[[12,13,14,15,16]]") 
+    norkyst_data       - boolean whether source_url corresponds to a *Z-level* file from NorKyst800 model outputs
+    """
+    
     ic = {}
     
     if type(source_url_list) is not list:
@@ -722,6 +729,8 @@ def getCombinedInitialConditions(source_url, x0, x1, y0, y1, mld_dens,
                          erode_land=0, 
                          download_data=True):
     """
+    For details see "getInitiaiConditions"-function
+    
     Returning two set of sim_args 
     - one for barotropic simulation (full-depth integrated variables: eta=eta_full, huv=huv_full)
     - one for baroclinic simulation (using upper-layer-integrated variables: eta=0, huv=h(uv_upper - uv_full))
