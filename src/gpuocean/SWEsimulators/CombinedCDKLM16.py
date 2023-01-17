@@ -50,7 +50,7 @@ class CombinedCDKLM16():
     """
 
     def __init__(self, \
-                 baroclinic_gpu_ctx, barotropic_gpu_ctx, \
+                 barotropic_gpu_ctx, baroclinic_gpu_ctx, \
                  barotropic_eta0, barotropic_hu0, barotropic_hv0, barotropic_H, \
                  baroclinic_eta0, baroclinic_hu0, baroclinic_hv0, baroclinic_H, \
                  nx, ny, \
@@ -65,13 +65,11 @@ class CombinedCDKLM16():
                  theta=1.3, rk_order=2, \
                  coriolis_beta=0.0, \
                  max_wind_direction_perturbation = 0, \
-                 wind=WindStress.WindStress(), \
+                 barotropic_wind=WindStress.WindStress(), \
+                 baroclinic_wind=WindStress.WindStress(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  barotropic_boundary_conditions_data=Common.BoundaryConditionsData(), \
                  baroclinic_boundary_conditions_data=Common.BoundaryConditionsData(), \
-                 small_scale_perturbation=False, \
-                 small_scale_perturbation_amplitude=None, \
-                 small_scale_perturbation_interpolation_factor = 1, \
                  model_time_step=None,
                  reportGeostrophicEquilibrium=False, \
                  use_lcg=False, \
@@ -80,7 +78,6 @@ class CombinedCDKLM16():
                  comm=None, \
                  local_particle_id=0, \
                  super_dir_name=None, \
-                 netcdf_filename=None, \
                  ignore_ghostcells=False, \
                  courant_number=0.8, \
                  offset_x=0, offset_y=0, \
@@ -161,12 +158,9 @@ class CombinedCDKLM16():
                  theta=theta, rk_order=rk_order, \
                  coriolis_beta=coriolis_beta, \
                  max_wind_direction_perturbation = max_wind_direction_perturbation, \
-                 wind=wind, \
+                 wind=barotropic_wind, \
                  boundary_conditions=self.boundary_conditions, \
                  boundary_conditions_data=barotropic_boundary_conditions_data, \
-                 small_scale_perturbation=small_scale_perturbation, \
-                 small_scale_perturbation_amplitude=small_scale_perturbation_amplitude, \
-                 small_scale_perturbation_interpolation_factor = small_scale_perturbation_interpolation_factor, \
                  model_time_step=model_time_step,
                  reportGeostrophicEquilibrium=reportGeostrophicEquilibrium, \
                  use_lcg=use_lcg, \
@@ -200,12 +194,9 @@ class CombinedCDKLM16():
                  theta=theta, rk_order=rk_order, \
                  coriolis_beta=coriolis_beta, \
                  max_wind_direction_perturbation = max_wind_direction_perturbation, \
-                 wind=wind, \
+                 wind=baroclinic_wind, \
                  boundary_conditions=self.boundary_conditions, \
                  boundary_conditions_data=baroclinic_boundary_conditions_data, \
-                 small_scale_perturbation=small_scale_perturbation, \
-                 small_scale_perturbation_amplitude=small_scale_perturbation_amplitude, \
-                 small_scale_perturbation_interpolation_factor = small_scale_perturbation_interpolation_factor, \
                  model_time_step=model_time_step,
                  reportGeostrophicEquilibrium=reportGeostrophicEquilibrium, \
                  use_lcg=use_lcg, \

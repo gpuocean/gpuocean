@@ -713,7 +713,7 @@ def depth_integration(source_url, interface_depth, x0, x1, y0, y1, var, timestep
     return huv
 
 
-def getCombinedInitialConditions(source_url_list, x0, x1, y0, y1,
+def getCombinedInitialConditions(source_url, x0, x1, y0, y1, mld_dens,
                          timestep_indices=None, \
                          norkyst_data = True,
                          land_value=5.0, \
@@ -727,7 +727,7 @@ def getCombinedInitialConditions(source_url_list, x0, x1, y0, y1,
     - one for baroclinic simulation (using upper-layer-integrated variables: eta=0, huv=h(uv_upper - uv_full))
     """
 
-    full_IC = getInitialConditions(source_url_list, x0, x1, y0, y1, \
+    full_IC = getInitialConditions(source_url, x0, x1, y0, y1, \
                          timestep_indices=timestep_indices, \
                          norkyst_data = norkyst_data,
                          land_value=land_value, \
@@ -736,83 +736,119 @@ def getCombinedInitialConditions(source_url_list, x0, x1, y0, y1,
                          erode_land=erode_land, 
                          download_data=download_data)
 
-    upper_IC = getInitialConditions(source_url_list, x0, x1, y0, y1, \
-                         timestep_indices=timestep_indices, \
-                         norkyst_data = norkyst_data,
-                         land_value=land_value, \
-                         iterations=iterations, \
-                         sponge_cells=sponge_cells, \
-                         erode_land=erode_land, 
-                         download_data=download_data,
-                         reduced_gravity_interface=reduced_gravity_interface) # FIXME: OUTDATED!!!
 
     barotropic_IC = copy.deepcopy(full_IC)
-    baroclinic_IC = copy.deepcopy(upper_IC)
+    baroclinic_IC = copy.deepcopy(full_IC)
+
+    if timestep_indices is None:
+        t0_idx = 0
+    else:
+        t0_idx = timestep_indices[0][0]
+    mld = MLD(source_url, mld_dens, min_mld=1.5, max_mld=40, x0=x0, x1=x1, y0=y0, y1=y1, t=t0_idx)
+    ml_integrator = MLD_integrator(source_url, mld, x0=x0, x1=x1, y0=y0, y1=y1)
 
     # Set initial conditions
     # eta
-    upper_eta0 = upper_IC["eta0"]
-    full_eta0  = full_IC["eta0"]
-    baroclinic_IC["eta0"] = upper_eta0 - full_eta0
+    baroclinic_IC["eta0"] = mld 
+
+    # currents
+    nc = Dataset(source_url)
+    u0 = nc.variables['u'][t0_idx, :, y0:y1, x0:x1+1]
+    v0 = nc.variables['v'][t0_idx, :, y0:y1+1, x0:x1]
+    
+    u0 = u0.filled(fill_value = 0.0) 
+    v0 = v0.filled(fill_value = 0.0) 
+    u0 = (u0[:, :,1:] + u0[:, :, :-1]) * 0.5 #Find u,v at cell centers
+    v0 = (v0[:, 1:,:] + v0[:, :-1, :]) * 0.5 #Find u,v at cell centers
+
+    full_Hm  = np.ma.array(nc['h'][y0:y1, x0:x1], mask=full_IC["eta0"].mask.copy())
+
+    baroclinic_IC["hu0"] = (np.sum(ml_integrator * u0, axis=0)/mld - full_IC["hu0"]/full_Hm)*mld
+    baroclinic_IC["hv0"] = (np.sum(ml_integrator * v0, axis=0)/mld - full_IC["hv0"]/full_Hm)*mld
 
     # H
-    if type(source_url_list) is not list:
-        source_url_list = [source_url_list]
-    nc = MFDataset(source_url_list)
-    #print("This download maybe avoided by interpolation (and using the right mask)")
-    full_eta0 = np.ma.array(nc['zeta'][0,y0:y1, x0:x1])
-    full_H  = np.ma.array(nc['h'][y0:y1, x0:x1], mask=full_eta0.mask.copy())
-    upper_H = np.ma.minimum(full_H, 25.0)
+    baroclinic_IC["H"] = np.ma.array(np.zeros_like(full_IC["H"]), mask=full_IC["H"].mask)
 
-    # hu
-    upper_u0 = upper_IC["hu0"]/(upper_H + upper_IC["eta0"])
-    full_u0  = full_IC["hu0"]/(full_H + full_IC["eta0"])
-    baroclinic_IC["hu0"]  = upper_H*(upper_u0 - full_u0)
+    # Reduced gravity
+    s_pot_densities = potentialDensities(source_url, t=t0_idx, x0=x0, x1=x1, y0=y0, y1=y1)
+    ml_pot_density = np.average(np.sum(ml_integrator * s_pot_densities, axis=0)/np.sum(ml_integrator, axis=0)) #NOTE: np.sum(integrator, axis=0)) = mld
 
-    #hv
-    upper_v0 = upper_IC["hv0"]/(upper_H + upper_IC["eta0"])
-    full_v0  = full_IC["hv0"]/(full_H + full_IC["eta0"])
-    baroclinic_IC["hv0"]  = upper_H*(upper_v0 - full_v0)
+    inverse_integrator = np.ma.array(np.ones_like(ml_integrator), mask=ml_integrator.mask.copy()) - ml_integrator
+    deep_pot_density  = np.average(np.sum(inverse_integrator * s_pot_densities, axis=0)/np.sum(inverse_integrator, axis=0))
+
+    eps = (deep_pot_density - ml_pot_density)/deep_pot_density
+
+    baroclinic_IC["g"] = eps * full_IC["g"]
 
     # Prepare boundary conditions
     # NOTE: The following download is repetitive but with the current code design likely not avoidable
     full_eta = np.ma.array(nc['zeta'][:, y0-1:y1+1, x0-1:x1+1])
-    
-    full_H  = np.ma.array(nc['h'][y0-1:y1+1, x0-1:x1+1], mask=full_eta[0].mask.copy())
-    upper_H = np.ma.minimum(full_H, reduced_gravity_interface) #CAREFUL! Ensure to use same calculation as in getInitialConditions()!!!
+    full_Hm  = np.ma.array(nc['h'][y0-1:y1+1, x0-1:x1+1], mask=full_eta[0].mask.copy())
+
+    if timestep_indices is not None:
+        t_range = timestep_indices[0]
+    else:
+        t_range = np.arange(len(nc["ocean_time"][:]))
+
+    mlds = []
+    hus = []
+    hvs = []
+    for t_idx in t_range:
+        mld = MLD(source_url, mld_dens, min_mld=1.5, max_mld=40, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1, t=t_idx)
+        ml_integrator = MLD_integrator(source_url, mld, t=t_idx, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1)
+
+        u = nc.variables['u'][t_idx, :, y0-1:y1+1, x0-1:x1+2].filled(fill_value = 0.0) 
+        v = nc.variables['v'][t_idx, :, y0-1:y1+2, x0-1:x1+1].filled(fill_value = 0.0) 
+        
+        u = (u[:, :,1:] + u[:, :, :-1]) * 0.5 #Find u,v at cell centers
+        v = (v[:, 1:,:] + v[:, :-1, :]) * 0.5 #Find u,v at cell centers
+
+        mlds.append(mld)
+        hus.append(np.sum(ml_integrator * u, axis=0))
+        hvs.append(np.sum(ml_integrator * v, axis=0))
+
+    mlds = np.ma.array(mlds)
+    hus  = np.ma.array(hus)
+    hvs  = np.ma.array(hvs)
 
     for cardinal in ["north", "east", "south", "west"]:
-        upper_eta_bc = getattr(getattr(upper_IC["boundary_conditions_data"], cardinal), "h")
-        full_eta_bc  = getattr(getattr(full_IC["boundary_conditions_data"], cardinal), "h")
-        setattr(getattr(baroclinic_IC["boundary_conditions_data"], cardinal), "h", np.zeros_like(upper_eta_bc, dtype=np.float32))
 
+        full_eta_bc  = getattr(getattr(full_IC["boundary_conditions_data"], cardinal), "h")
+        
         if cardinal == "north":
-            full_H_bc = full_H[-1,1:-1]
-            upper_H_bc = upper_H[-1,1:-1]
+            full_H_bc = full_Hm[-1,1:-1]
+            upper_h_bc = mlds[:,-1,1:-1]
+            upper_hu_bc = hus[:,-1,1:-1]
+            upper_hv_bc = hvs[:,-1,1:-1]
             mask = full_eta[:,-1,1:-1].mask
         elif cardinal == "south":
-            full_H_bc = full_H[0,1:-1]
-            upper_H_bc = upper_H[0,1:-1]
+            full_H_bc = full_Hm[0,1:-1]
+            upper_h_bc = mlds[:,0,1:-1]
+            upper_hu_bc = hus[:,0,1:-1]
+            upper_hv_bc = hvs[:,0,1:-1]
             mask = full_eta[:,0,1:-1].mask
         elif cardinal == "west":
-            full_H_bc = full_H[1:-1,0]
-            upper_H_bc = upper_H[1:-1,0]
+            full_H_bc = full_Hm[1:-1,0]
+            upper_h_bc = mlds[:,1:-1,0]
+            upper_hu_bc = hus[:,1:-1,0]
+            upper_hv_bc = hvs[:,1:-1,0]
             mask = full_eta[:,1:-1,0].mask
         elif cardinal == "east":
-            full_H_bc = full_H[1:-1,-1]
-            upper_H_bc = upper_H[1:-1,-1]
+            full_H_bc = full_Hm[1:-1,-1]
+            upper_h_bc = mlds[:,1:-1,-1]
+            upper_hu_bc = hus[:,1:-1,-1]
+            upper_hv_bc = hvs[:,1:-1,-1]
             mask = full_eta[:,1:-1,-1].mask
         full_h_bc  = full_H_bc  + np.ma.array(full_eta_bc, mask=mask)
         full_u_bc  = getattr(getattr(full_IC["boundary_conditions_data"], cardinal), "hu")/full_h_bc
         full_v_bc  = getattr(getattr(full_IC["boundary_conditions_data"], cardinal), "hv")/full_h_bc
-        upper_h_bc = upper_H_bc + np.ma.array(upper_eta_bc, mask=mask)
-        upper_u_bc = getattr(getattr(upper_IC["boundary_conditions_data"], cardinal), "hu")/upper_h_bc
-        upper_v_bc = getattr(getattr(upper_IC["boundary_conditions_data"], cardinal), "hv")/upper_h_bc
+        upper_u_bc = upper_hu_bc/upper_h_bc
+        upper_v_bc = upper_hv_bc/upper_h_bc
 
         baroclinic_hu_bc = (upper_h_bc*(upper_u_bc - full_u_bc)).filled(0)
         baroclinic_hv_bc = (upper_h_bc*(upper_v_bc - full_v_bc)).filled(0)
 
-
+        setattr(getattr(baroclinic_IC["boundary_conditions_data"], cardinal), "h",  np.float32(upper_h_bc))
         setattr(getattr(baroclinic_IC["boundary_conditions_data"], cardinal), "hu", np.float32(baroclinic_hu_bc))
         setattr(getattr(baroclinic_IC["boundary_conditions_data"], cardinal), "hv", np.float32(baroclinic_hv_bc))
 
@@ -870,7 +906,7 @@ def removeCombinedMetadata(old_barotropic_IC, old_baroclinic_IC):
     baroclinic_IC = removeMetadata(old_baroclinic_IC)
 
     IC = copy.deepcopy(barotropic_IC)
-    for key in ["eta0", "hu0", "hv0", "H", "g", "boundary_conditions_data"]:
+    for key in ["eta0", "hu0", "hv0", "H", "g", "boundary_conditions_data", "wind"]:
         IC["barotropic_"+key] = IC.pop(key)
         IC["baroclinic_"+key] = baroclinic_IC[key]
 
