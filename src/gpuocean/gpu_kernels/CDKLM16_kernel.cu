@@ -300,7 +300,19 @@ float3 computeFFaceFlux(const int i, const int j, const int bx,
     const float3 Qm = make_float3(hm, Rm.x, Rm.y);
 
     // Check if wet-dry face: if so balance potential energy of water level
-    // NOTE: Mathematical documentation of this heuristic needed
+    
+    // NOTE: 0-fluxes over wet-dry faces, lead to non-physical waves
+    // Hence, we want to control the flux-difference in one way or another
+    // (Wall boundary would be desirable, but are inaccessible)
+    // The chosen method simply balances the potential-energy flux contribution that acts wet -> dry, by:
+    //    F (dry -> wet) = 1/2 g h(wet)^2
+    // such that this conserves lakes at rest within numerical precison,
+    // but actually ignores wave speeds and simply assumes a symmetric Riemann-fan. 
+    // [There are actually now physical values defined on dry cells 
+    // and alternative approaches lead to new issues. 
+    // One such alternative would be to set "artificial" values on dry cells, e.g.,
+    //    Qm = make_float3(hp, 0.0f, 0.0f); 
+    // what also conserves lakes at rest but behaves criticial in presence of waves]
     if (eta_bar_m == CDKLM_DRY_FLAG && eta_bar_p != CDKLM_DRY_FLAG) {
         return make_float3(0.0f, 0.5f*GRAV*Qp.x*Qp.x, 0.0f);
     }
@@ -374,7 +386,7 @@ float3 computeGFaceFlux(const int i, const int j, const int by,
     const float3 Qm = make_float3(hm, Rm.y, Rm.x);
 
     // Check if wet-dry face: if so balance potential energy of water level'
-    // NOTE: Mathematical documentation of this heuristic needed
+    // NOTE: See docu in "computeFFaceFlux"
     if (eta_bar_m == CDKLM_DRY_FLAG && eta_bar_p != CDKLM_DRY_FLAG) {
         return make_float3(0.0f, 0.0f, 0.5f*GRAV*Qp.x*Qp.x);
     }
