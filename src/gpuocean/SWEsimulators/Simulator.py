@@ -128,6 +128,9 @@ class Simulator(object):
             
         self.hasDrifters = False
         self.drifters = None
+
+        self.hasCPdrifters = False
+        self.CPdrifters = None
         
         # NetCDF related parameters
         self.write_netcdf = write_netcdf
@@ -358,6 +361,15 @@ class Simulator(object):
         self.hasDrifters = True
         self.drifters.setGPUStream(self.gpu_stream)
         self.drifter_t = 0.0
+
+    def attachCrossProductDrifters(self, drifter_list, sim_list):
+        assert len(drifter_list) == len(sim_list), "Same number of drifter objects and partner simulations needed!"
+        self.hasCPdrifters = True
+        self.CPdrifters = drifter_list
+        for d in self.CPdrifters:
+            d.setGPUStream(self.gpu_stream)
+        self.CPsims = sim_list
+        self.CPdrifter_t = 0.0
     
     def download(self, interior_domain_only=False):
         """
