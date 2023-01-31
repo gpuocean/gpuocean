@@ -60,7 +60,7 @@ class Simulator(object):
                  theta, rk_order, \
                  coriolis_beta, \
                  y_zero_reference_cell, \
-                 wind, \
+                 wind, wind_stress_factor, \
                  atmospheric_pressure, \
                  write_netcdf, \
                  ignore_ghostcells, \
@@ -93,6 +93,7 @@ class Simulator(object):
         self.wind_stress = wind
         if self.wind_stress.stress_u is None or self.wind_stress.stress_v is None:
             self.wind_stress.compute_wind_stress_from_wind()
+        self.wind_stress_factor = np.float32(wind_stress_factor)
         self.atmospheric_pressure = atmospheric_pressure
         self.y_zero_reference_cell = np.float32(y_zero_reference_cell)
         

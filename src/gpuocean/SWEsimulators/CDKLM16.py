@@ -61,6 +61,7 @@ class CDKLM16(Simulator.Simulator):
                  coriolis_beta=0.0, \
                  max_wind_direction_perturbation = 0, \
                  wind=WindStress.WindStress(), \
+                 wind_stress_factor=1.0, \
                  atmospheric_pressure=AtmosphericPressure.AtmosphericPressure(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  boundary_conditions_data=Common.BoundaryConditionsData(), \
@@ -108,6 +109,7 @@ class CDKLM16(Simulator.Simulator):
         coriolis_beta: Coriolis linear factor -> f = f + beta*(y-y_0)
         max_wind_direction_perturbation: Large-scale model error emulation by per-time-step perturbation of wind direction by +/- max_wind_direction_perturbation (degrees)
         wind: Wind stress parameters
+        wind_stress_factor: scaling of wind stress
         atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
         small_scale_perturbation: Boolean value for applying a stochastic model error
@@ -165,6 +167,7 @@ class CDKLM16(Simulator.Simulator):
                                       coriolis_beta, \
                                       y_zero_reference_cell, \
                                       wind, \
+                                      wind_stress_factor, \
                                       atmospheric_pressure, \
                                       write_netcdf, \
                                       ignore_ghostcells, \
@@ -191,7 +194,8 @@ class CDKLM16(Simulator.Simulator):
                          'DY': "{:.12f}f".format(self.dy),
                          'GRAV': "{:.12f}f".format(self.g),
                          'FRIC': "{:.12f}f".format(self.r),
-                         'RHO_O': "{:.12f}f".format(rho_o)
+                         'RHO_O': "{:.12f}f".format(rho_o),
+                         'WIND_STRESS_FACTOR': "{:.12f}f".format(self.wind_stress_factor), 
         }
         
         #Get kernels
@@ -603,6 +607,23 @@ class CDKLM16(Simulator.Simulator):
 
     def drifterStep(self, dt):
         # Evolve drifters
+        if self.hasCPdrifters:
+            for d in range(len(self.CPdrifters)):
+                self.CPdrifters[d].drift(self.CPsims[d].gpu_data.h0, \
+                                    self.CPsims[d].gpu_data.hu0, \
+                                    self.CPsims[d].gpu_data.hv0, \
+                                    self.CPsims[d].bathymetry.Bm, \
+                                    self.nx, self.ny, self.t, self.dx, self.dy, \
+                                    dt, \
+                                    np.int32(2), np.int32(2)) 
+                self.drifters.drift(self.gpu_data.h0, self.gpu_data.hu0, \
+                                    self.gpu_data.hv0, \
+                                    self.bathymetry.Bm, \
+                                    self.nx, self.ny, self.t, self.dx, self.dy, \
+                                    dt, \
+                                    np.int32(2), np.int32(2))
+            self.CPdrifter_t += dt
+        
         if self.hasDrifters:
             self.drifters.drift(self.gpu_data.h0, self.gpu_data.hu0, \
                                 self.gpu_data.hv0, \
