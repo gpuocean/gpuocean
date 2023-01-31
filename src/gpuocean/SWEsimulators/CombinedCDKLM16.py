@@ -59,15 +59,23 @@ class CombinedCDKLM16():
         self.barotropic_gpu_ctx = barotropic_sim.gpu_ctx
         self.baroclinic_gpu_ctx = baroclinic_sim.gpu_ctx
 
+        assert barotropic_sim.nx == baroclinic_sim.nx, "sims do NOT match: nx"
+        assert barotropic_sim.ny == baroclinic_sim.ny, "sims do NOT match: ny"
+        assert barotropic_sim.dx == baroclinic_sim.dx, "sims do NOT match: dx"
+        assert barotropic_sim.dy == baroclinic_sim.dy, "sims do NOT match: dY"
         self.nx = barotropic_sim.nx
         self.ny = barotropic_sim.ny
         self.dx = barotropic_sim.dx
         self.dy = barotropic_sim.dy
+
+        for cardinal in ["north", "south", "east", "west"]:
+            assert getattr(barotropic_sim.boundary_conditions, cardinal) == getattr(baroclinic_sim.boundary_conditions, cardinal), "sims do NOT match: bc"
         self.boundary_conditions = barotropic_sim.boundary_conditions
 
         self.barotropic_sim = barotropic_sim
         self.baroclinic_sim = baroclinic_sim
 
+        # New stream that is shared for both simulators
         self.gpu_stream = cuda.Stream()
         self.barotropic_sim.gpu_stream = self.gpu_stream
         self.baroclinic_sim.gpu_stream = self.gpu_stream
@@ -77,6 +85,7 @@ class CombinedCDKLM16():
         self.barotropic_iters = 0
         self.baroclinic_iters = 0
 
+        assert barotropic_sim.t == baroclinic_sim.t, "sims do NOT match: t"
         self.t = self.barotropic_sim.t # needed for drifters and they follow barotropic timestepping
 
 
