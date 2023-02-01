@@ -180,8 +180,12 @@ __global__ void passiveDrifterKernel(
         float v = (1-y_factor)*v_y0 + y_factor *v_y1;
         
         if (wind_drift_factor_) {
-            u = u + windX(wind_t_, drifter_pos_x, drifter_pos_y, nx_*dx_, ny_*dy_) * wind_drift_factor_;
-            v = v + windY(wind_t_, drifter_pos_x, drifter_pos_y, nx_*dx_, ny_*dy_) * wind_drift_factor_;
+            float* const Hm_row_y = (float*) ((char*) Hm_ptr_ + Hm_pitch_*cell_id_y);
+            float const Hm = Hm_row_y[cell_id_x];
+            if (Hm < 1e20){ //using mask_value from Common.Bathymetry-class 
+                u = u + windX(wind_t_, drifter_pos_x, drifter_pos_y, nx_*dx_, ny_*dy_) * wind_drift_factor_;
+                v = v + windY(wind_t_, drifter_pos_x, drifter_pos_y, nx_*dx_, ny_*dy_) * wind_drift_factor_;
+            }
         }
         
         // Move drifter
