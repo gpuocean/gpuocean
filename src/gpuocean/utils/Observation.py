@@ -179,7 +179,29 @@ class Observation:
                                   self.buoy_observations_key: buoy_observations, self.buoy_positions_key: buoy_positions,
                                   self.buoy_obs_errors_key: buoy_obs_errors, self.drifter_obs_errors_key: drifter_obs_errors}
         
-    
+    def add_observation_from_drifters(self, drifters, t):
+        """
+        Adds the current drifter positions to the observation DataFrame
+
+        This functions can NOT be called for buoys
+        """
+        assert (self.register_buoys == False), "Only floating drifters supported in 'add_observation_from_drifter'"
+
+        rounded_sim_t = round(t)
+        index = self.get_num_observations()
+
+        if not index == 0:
+            assert(self.obs_df[self.obs_df[self.time_key]==rounded_sim_t].time.count() == 0), \
+                "Observation for time " + str(rounded_sim_t) + " already exists in DataFrame"
+        
+        pos = drifters.getDrifterPositions()
+
+        self.obs_df.loc[index] = {self.time_key: rounded_sim_t, self.drifter_positions_key: pos,
+                            self.buoy_observations_key: None, self.buoy_positions_key: None,
+                            self.buoy_obs_errors_key: None, self.drifter_obs_errors_key: None}
+        
+
+
     def add_observations_from_arrays(self, t, x, y):
         """
         Takes time, x and y positions as input and feed them into the data frame
