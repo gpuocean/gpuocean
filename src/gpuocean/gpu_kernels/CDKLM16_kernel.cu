@@ -131,10 +131,14 @@ __device__ float3 CDKLM16_flux(float3 Qm, float3 Qp) {
     }
     
     float3 F;
-
+  
+    // Q = [h, u, v]
+    // F = [hu, h*u*u + 0.5*g*h*h, h*u*v]
     F.x = ((ap*Fm.x - am*Fp.x) + ap*am*(Qp.x-Qm.x))/(ap-am);
     F.y = ((ap*Fm.y - am*Fp.y) + ap*am*(Fp.x-Fm.x))/(ap-am);
-    F.z = (Qm.y + Qp.y > 0) ? Fm.z : Fp.z; //Upwinding to be consistent
+    F.z = ((ap*Fm.z - am*Fp.z) + ap*am*(Qp.x*Qp.z - Qm.x*Qm.z))/(ap-am); // Standard central-upwind scheme
+    //F.z = (Qm.y + Qp.y > 0) ? Fm.z : Fp.z; // This upwinding is used for "consistency" according to CDKLM ref, but it gives artifacts
+
 
     return F;
 }
