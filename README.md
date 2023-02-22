@@ -55,6 +55,31 @@ We recommend that you set up your python environment using the package manager C
     sudo apt-get install texlive-latex-base texlive-latex-extra texlive-fonts-recommended dvipng cm-super
     ```
 
+## Debugging 
+
+When using VSC, the following `launch.json` content maybe helpful:
+```
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {"name":"Python: Current File","type":"python","request":"launch","program":"${file}","console":"integratedTerminal","justMyCode":true},
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${fileDirname}",
+            "python": "which python"
+        }
+    ]
+}
+```
+
 You should now be able to start a jupyter notebook server, open one of our notebooks, select the conda environment 'gpuocean' as kernel, and run the code. 
 
 Have fun!
