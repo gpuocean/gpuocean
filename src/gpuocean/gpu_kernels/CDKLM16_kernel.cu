@@ -136,9 +136,12 @@ __device__ float3 CDKLM16_flux(float3 Qm, float3 Qp) {
     // F = [hu, h*u*u + 0.5*g*h*h, h*u*v]
     F.x = ((ap*Fm.x - am*Fp.x) + ap*am*(Qp.x-Qm.x))/(ap-am);
     F.y = ((ap*Fm.y - am*Fp.y) + ap*am*(Fp.x-Fm.x))/(ap-am);
-    F.z = ((ap*Fm.z - am*Fp.z) + ap*am*(Qp.x*Qp.z - Qm.x*Qm.z))/(ap-am); // Standard central-upwind scheme
-    //F.z = (Qm.y + Qp.y > 0) ? Fm.z : Fp.z; // This upwinding is used for "consistency" according to CDKLM ref, but it gives artifacts
-
+    if (CENTRAL_UPWIND) {
+        F.z = ((ap*Fm.z - am*Fp.z) + ap*am*(Qp.x*Qp.z - Qm.x*Qm.z))/(ap-am); // Standard central-upwind scheme
+    }
+    else{
+        F.z = (Qm.y + Qp.y > 0) ? Fm.z : Fp.z; // This upwinding is used for "consistency" according to CDKLM ref, but it gives artifacts
+    }
 
     return F;
 }
@@ -814,6 +817,7 @@ __global__ void cdklm_swe_2D(
     __syncthreads();
     
     
+    if (! ONE_DIMENSIONAL)
     { // scope
         const float coriolis_f_lower   = coriolisF(  ti, tj-1);
         const float coriolis_f_upper   = coriolisF(  ti, tj+1);
