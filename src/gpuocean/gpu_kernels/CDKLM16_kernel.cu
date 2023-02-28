@@ -76,13 +76,14 @@ inline float2 getNorth(const int i, const int j) {
     return make_float2(sinf(angle), cosf(angle));
 }
 
-
-__device__ float3 CDKLM16_F_func(const float3 Q) {
+// Q =[eta, u, v]
+__device__ float3 CDKLM16_F_func(const float3 Q, const float H) {
     float3 F;
+    const float h = Q.x + H;
 
-    F.x = Q.x*Q.y;                        //h*u
-    F.y = Q.x*Q.y*Q.y + 0.5f*GRAV*Q.x*Q.x;   //h*u*u + 0.5f*g*h*h;
-    F.z = Q.x*Q.y*Q.z;                    //h*u*v;
+    F.x = h*Q.y;                        //h*u
+    F.y = h*Q.y*Q.y + 0.5f*GRAV*h*h;   //h*u*u + 0.5f*g*h*h;
+    F.z = h*Q.y*Q.z;                    //h*u*v;
 
     return F;
 }
@@ -94,21 +95,24 @@ __device__ float3 CDKLM16_F_func(const float3 Q) {
 
 
 /**
-  * Note that the input vectors are (h, u, v), thus not the regular
+  * Note that the input vectors are (eta, u, v), thus not the regular
   * (h, hu, hv). 
   * Note also that u and v are desingularized from the start.
   */
-__device__ float3 CDKLM16_flux(float3 Qm, float3 Qp) {
+__device__ float3 CDKLM16_flux(const float3 Qm, const float3 Qp, const float H_face) {
     
+    const float hp = Qp.x + H_face;
+    const float hm = Qm.x + H_face;
+
     // Contribution from plus cell
     float3 Fp = make_float3(0.0f, 0.0f, 0.0f);
     float up = 0.0f;
     float cp = 0.0f;
     
-    if (Qp.x > KPSIMULATOR_DEPTH_CUTOFF) {
-        Fp = CDKLM16_F_func(Qp);
+    if (hp > KPSIMULATOR_DEPTH_CUTOFF) {
+        Fp = CDKLM16_F_func(Qp, H_face);
         up = Qp.y;         // u
-        cp = sqrtf(GRAV*Qp.x); // sqrt(GRAV*h)
+        cp = sqrtf(GRAV*hp); // sqrt(GRAV*h)
     }
 
     // Contribution from plus cell
@@ -116,10 +120,10 @@ __device__ float3 CDKLM16_flux(float3 Qm, float3 Qp) {
     float um = 0.0f;
     float cm = 0.0f;
 
-    if (Qm.x > KPSIMULATOR_DEPTH_CUTOFF) {
-        Fm = CDKLM16_F_func(Qm);
+    if (hm > KPSIMULATOR_DEPTH_CUTOFF) {
+        Fm = CDKLM16_F_func(Qm, H_face);
         um = Qm.y;         // u
-        cm = sqrtf(GRAV*Qm.x); // sqrt(GRAV*h)
+        cm = sqrtf(GRAV*hm); // sqrt(GRAV*h)
     }
     
     const float am = min(min(um-cm, up-cp), 0.0f); // largest negative wave speed
@@ -132,12 +136,12 @@ __device__ float3 CDKLM16_flux(float3 Qm, float3 Qp) {
     
     float3 F;
   
-    // Q = [h, u, v]
+    // Q = [eta, u, v]
     // F = [hu, h*u*u + 0.5*g*h*h, h*u*v]
     F.x = ((ap*Fm.x - am*Fp.x) + ap*am*(Qp.x-Qm.x))/(ap-am);
     F.y = ((ap*Fm.y - am*Fp.y) + ap*am*(Fp.x-Fm.x))/(ap-am);
     if (CENTRAL_UPWIND) {
-        F.z = ((ap*Fm.z - am*Fp.z) + ap*am*(Qp.x*Qp.z - Qm.x*Qm.z))/(ap-am); // Standard central-upwind scheme
+        F.z = ((ap*Fm.z - am*Fp.z) + ap*am*(hp*Qp.z - hm*Qm.z))/(ap-am); // Standard central-upwind scheme
     }
     else{
         F.z = (Qm.y + Qp.y > 0) ? Fm.z : Fp.z; // This upwinding is used for "consistency" according to CDKLM ref, but it gives artifacts
@@ -299,12 +303,17 @@ float3 computeFFaceFlux(const int i, const int j, const int bx,
     const float vm_north = um*north.x + vm*north.y;
     
     // Reconstruct h
-    const float hp = fmaxf(0.0f, eta_bar_p + H_face - (Kx_p + DX*coriolis_fp*vp_north)/(2.0f*GRAV));
-    const float hm = fmaxf(0.0f, eta_bar_m + H_face + (Kx_m + DX*coriolis_fm*vm_north)/(2.0f*GRAV));
+    //const float hp = fmaxf(0.0f, eta_bar_p + H_face - (Kx_p + DX*coriolis_fp*vp_north)/(2.0f*GRAV));
+    //const float hm = fmaxf(0.0f, eta_bar_m + H_face + (Kx_m + DX*coriolis_fm*vm_north)/(2.0f*GRAV));
+    
+    // Reconstruct eta
+    const float etap = fmaxf(-H_face, eta_bar_p - (Kx_p + DX*coriolis_fp*vp_north)/(2.0f*GRAV));
+    const float etam = fmaxf(-H_face, eta_bar_m + (Kx_m + DX*coriolis_fm*vm_north)/(2.0f*GRAV));
 
-    // Our flux variables Q=(h, u, v)
-    const float3 Qp = make_float3(hp, Rp.x, Rp.y);
-    const float3 Qm = make_float3(hm, Rm.x, Rm.y);
+    
+    // Our flux variables Q=(eta, u, v)
+    const float3 Qp = make_float3(etap, Rp.x, Rp.y);
+    const float3 Qm = make_float3(etam, Rm.x, Rm.y);
 
     // Check if wet-dry face: if so balance potential energy of water level
     
@@ -321,15 +330,15 @@ float3 computeFFaceFlux(const int i, const int j, const int bx,
     //    Qm = make_float3(hp, 0.0f, 0.0f); 
     // what also conserves lakes at rest but behaves criticial in presence of waves]
     if (eta_bar_m == CDKLM_DRY_FLAG && eta_bar_p != CDKLM_DRY_FLAG) {
-        return make_float3(0.0f, 0.5f*GRAV*Qp.x*Qp.x, 0.0f);
+        return make_float3(0.0f, 0.5f*GRAV*(Qp.x+H_face)*(Qp.x+H_face), 0.0f);
     }
 
     if (eta_bar_m != CDKLM_DRY_FLAG && eta_bar_p == CDKLM_DRY_FLAG){
-        return make_float3(0.0f, 0.5f*GRAV*Qm.x*Qm.x, 0.0f);
+        return make_float3(0.0f, 0.5f*GRAV*(Qm.x+H_face)*(Qm.x+H_face), 0.0f);
     }
 
     // Computed flux
-    return CDKLM16_flux(Qm, Qp);
+    return CDKLM16_flux(Qm, Qp, H_face);
 }
 
 
@@ -384,27 +393,31 @@ float3 computeGFaceFlux(const int i, const int j, const int by,
     const float um_east = um*east.x + vm*east.y;
     
     // Reconstruct h
-    const float hp = fmaxf(0.0f, eta_bar_p + H_face - ( Ly_p - DY*coriolis_fp*up_east)/(2.0f*GRAV));
-    const float hm = fmaxf(0.0f, eta_bar_m + H_face + ( Ly_m - DY*coriolis_fm*um_east)/(2.0f*GRAV));
+    // const float hp = fmaxf(0.0f, eta_bar_p + H_face - ( Ly_p - DY*coriolis_fp*up_east)/(2.0f*GRAV));
+    // const float hm = fmaxf(0.0f, eta_bar_m + H_face + ( Ly_m - DY*coriolis_fm*um_east)/(2.0f*GRAV));
+
+    // Reconstruct eta
+    const float etap = fmaxf(-H_face, eta_bar_p - ( Ly_p - DY*coriolis_fp*up_east)/(2.0f*GRAV));
+    const float etam = fmaxf(-H_face, eta_bar_m + ( Ly_m - DY*coriolis_fm*um_east)/(2.0f*GRAV));
 
     // Our flux variables Q=(h, v, u)
     // Note that we swap u and v
-    const float3 Qp = make_float3(hp, Rp.y, Rp.x);
-    const float3 Qm = make_float3(hm, Rm.y, Rm.x);
+    const float3 Qp = make_float3(etap, Rp.y, Rp.x);
+    const float3 Qm = make_float3(etam, Rm.y, Rm.x);
 
     // Check if wet-dry face: if so balance potential energy of water level'
     // NOTE: See docu in "computeFFaceFlux"
     if (eta_bar_m == CDKLM_DRY_FLAG && eta_bar_p != CDKLM_DRY_FLAG) {
-        return make_float3(0.0f, 0.0f, 0.5f*GRAV*Qp.x*Qp.x);
+        return make_float3(0.0f, 0.0f, 0.5f*GRAV*(Qp.x+H_face)*(Qp.x+H_face));
     }
 
     if (eta_bar_m != CDKLM_DRY_FLAG && eta_bar_p == CDKLM_DRY_FLAG){
-        return make_float3(0.0f, 0.0f, 0.5f*GRAV*Qm.x*Qm.x);
+        return make_float3(0.0f, 0.0f, 0.5f*GRAV*(Qm.x+H_face)*(Qm.x+H_face));
     }
     
     // Computed flux
     // Note that we swap back u and v
-    const float3 flux = CDKLM16_flux(Qm, Qp);
+    const float3 flux = CDKLM16_flux(Qm, Qp, H_face);
     return make_float3(flux.x, flux.z, flux.y);
 }
 
@@ -527,6 +540,7 @@ __global__ void cdklm_swe_2D(
     __shared__ float  Hi[block_height+3][block_width+3];
     
     //Read into shared memory
+    // R = [eta, hu, hv]
     for (int j=ty; j<block_height+4; j+=blockDim.y) {
         const int l = clamp(by + j, 0, NY+3); // Out of bounds
 
@@ -588,6 +602,7 @@ __global__ void cdklm_swe_2D(
 
     //Create our "steady state" reconstruction variables (u, v)
     // K and L are never stored, but computed where needed.
+    // R = [eta, hu, hv] --> R = [eta, u, v]
     for (int j=ty; j<block_height+4; j+=blockDim.y) {
         const int l = clamp(by+j, 0, NY+3);
         float* const Hm_row = (float*) ((char*) Hm_ptr_ + Hm_pitch_*l);
@@ -645,7 +660,7 @@ __global__ void cdklm_swe_2D(
 
 
     //Reconstruct slopes along x axis
-    // Write result into shmem Qx = [u_x, v_x, K_x]
+    // Write result into shmem Qx = [u_x, v_x, K_x]*dx
     // Qx is used as if its size was Qx[3][block_height][block_width + 2]
     for (int j=ty; j<block_height; j+=blockDim.y) {
         const int l = j + 2; //Skip ghost cells
