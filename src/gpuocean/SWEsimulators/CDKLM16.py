@@ -405,7 +405,7 @@ class CDKLM16(Simulator.Simulator):
             self.updateDt()
         
         
-    def cleanUp(self):
+    def cleanUp(self, do_gc=True):
         """
         Clean up function
         """
@@ -442,7 +442,8 @@ class CDKLM16(Simulator.Simulator):
         self.max_dt_buffer.release()
  
         self.gpu_ctx = None
-        gc.collect()
+        if do_gc:
+            gc.collect()
            
     @classmethod
     def fromfilename(cls, gpu_ctx, filename, cont_write_netcdf=True, use_lcg=False, xorwow_seed = None, new_netcdf_filename=None, time0=None):

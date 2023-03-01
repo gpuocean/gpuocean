@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
 import time
+import gc
 
 
 from gpuocean.ensembles import OceanModelEnsemble
@@ -133,3 +134,16 @@ class MultiLevelOceanEnsemble:
 
         return MLest
 
+
+    def cleanUp(self):
+        for e in range(self.Nes[0]):
+            self.ML_ensemble[0][e].cleanUp(do_gc=False)
+        
+        for l_idx in range(1,self.numLevels):
+            for e in range(self.Nes[l_idx]):
+                self.ML_ensemble[l_idx][0][e].cleanUp(do_gc=False)
+                self.ML_ensemble[l_idx][1][e].cleanUp(do_gc=False)
+        gc.collect()
+
+    def __del__(self):
+        self.cleanUp()
