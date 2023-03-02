@@ -140,13 +140,22 @@ __device__ float3 CDKLM16_flux(const float3 Qm, const float3 Qp, const float H_f
     // F = [hu, h*u*u + 0.5*g*h*h, h*u*v]
     F.x = ((ap*Fm.x - am*Fp.x) + ap*am*(Qp.x-Qm.x))/(ap-am);
     F.y = ((ap*Fm.y - am*Fp.y) + ap*am*(Fp.x-Fm.x))/(ap-am);
-    if (CENTRAL_UPWIND) {
-        F.z = ((ap*Fm.z - am*Fp.z) + ap*am*(hp*Qp.z - hm*Qm.z))/(ap-am); // Standard central-upwind scheme
-    }
-    else{
-        F.z = (Qm.y + Qp.y > 0) ? Fm.z : Fp.z; // This upwinding is used for "consistency" according to CDKLM ref, but it gives artifacts
-    }
+    //if (CENTRAL_UPWIND) {
+    //    F.z = ((ap*Fm.z - am*Fp.z) + ap*am*(hp*Qp.z - hm*Qm.z))/(ap-am); // Central-upwind scheme
+    //}
+    //else{
+    //    //F.z = 0; //(Fm.z + Fp.z)/2.0f;
+    //    F.z = (Qm.y + Qp.y > 0) ? Fm.z : Fp.z; // This upwinding is used for "consistency" according to CDKLM ref, but it gives artifacts
+    //}
+    
+    //F.z = (Qm.y + Qp.y > 0) ? FLUX_DELIMITER*Fm.z : FLUX_DELIMITER*Fp.z;
+    F.z = (Qm.y > - Qp.y) ? FLUX_DELIMITER*Fm.z : FLUX_DELIMITER*Fp.z;
+    F.z += (1.0f - FLUX_DELIMITER)*(((ap*Fm.z - am*Fp.z) + ap*am*(hp*Qp.z - hm*Qm.z))/(ap-am));
 
+    //F.z = 0.0f;
+    //F.x = (Fm.x + Fp.x)/2.0f;
+    //F.y = (Fm.y + Fp.y)/2.0f;
+    //F.z = (Fm.z + Fp.z)/2.0f;
     return F;
 }
 
@@ -277,6 +286,9 @@ float3 computeFFaceFlux(const int i, const int j, const int bx,
     const float um = R[1][l][k  ];
     float vp = R[2][l][k+1];
     float vm = R[2][l][k  ];
+
+    // R[2][l+1][k  ] == R[2][l][k  ] == R[2][l-1][k  ] --> geostrophic jet
+    // up == 0 && um == 0
 
     // Check if all dry: if so return zero flux
     if (eta_bar_m == CDKLM_DRY_FLAG && eta_bar_p == CDKLM_DRY_FLAG) {
