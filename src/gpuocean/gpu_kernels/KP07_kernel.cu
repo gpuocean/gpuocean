@@ -111,8 +111,17 @@ __device__ float3 CentralUpwindFluxBottom(float3 Qm, float3 Qp, const float RH, 
     if ( fabs(ap - am) < KPSIMULATOR_FLUX_SLOPE_EPS ) {
         return make_float3(0.0f, 0.0f, 0.0f);
     }
+
+    float3 F;
+    F.x = ((ap*Fm.x - am*Fp.x) + ap*am*(Qp.x-Qm.x))/(ap-am);
+    F.y = ((ap*Fm.y - am*Fp.y) + ap*am*(Qp.y-Qm.y))/(ap-am);
+    F.z = (1-FLUX_DELIMITER)*((ap*Fm.z - am*Fp.z) + ap*am*(Qp.z-Qm.z))/(ap-am);
     
-    return ((ap*Fm - am*Fp) + ap*am*(Qp-Qm))/(ap-am);
+    // Q = [eta, hu, hv] as input
+    F.z += (Qm.y > - Qp.y) ? FLUX_DELIMITER*Fm.z : FLUX_DELIMITER*Fp.z;
+    
+    return F;
+    //return ((ap*Fm - am*Fp) + ap*am*(Qp-Qm))/(ap-am);
 }
 
 
@@ -574,6 +583,8 @@ __global__ void swe_2D(
         // Flux along y-direction
         const float3 G_flux_p = computeSingleFluxG(Q, Qx, Hi, g_, tx, ty+1);
         const float3 G_flux_m = computeSingleFluxG(Q, Qx, Hi, g_, tx, ty  );
+        //const float3 G_flux_p = make_float3(0.0f, 0.0f, 0.0f); 
+        //const float3 G_flux_m = make_float3(0.0f, 0.0f, 0.0f); 
 
 
         // Find bottom topography source terms: S3
