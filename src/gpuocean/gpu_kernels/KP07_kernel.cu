@@ -583,9 +583,6 @@ __global__ void swe_2D(
         // Flux along y-direction
         const float3 G_flux_p = computeSingleFluxG(Q, Qx, Hi, g_, tx, ty+1);
         const float3 G_flux_m = computeSingleFluxG(Q, Qx, Hi, g_, tx, ty  );
-        //const float3 G_flux_p = make_float3(0.0f, 0.0f, 0.0f); 
-        //const float3 G_flux_m = make_float3(0.0f, 0.0f, 0.0f); 
-
 
         // Find bottom topography source terms: S3
         const float ST3 = bottomSourceTerm3_kp(Q, Qx, Hi, g_, i, j);
