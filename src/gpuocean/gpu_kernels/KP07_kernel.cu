@@ -1,8 +1,8 @@
 /*
 This software is part of GPU Ocean. 
 
-Copyright (C) 2018, 2019 SINTEF Digital
-Copyright (C) 2018, 2019 Norwegian Meteorological Institute
+Copyright (C) 2018 - 2023 SINTEF Digital
+Copyright (C) 2018 - 2023 Norwegian Meteorological Institute
 
 This CUDA kernel implements the Kurganov-Petrova numerical scheme 
 for the shallow water equations, described in 
@@ -113,15 +113,15 @@ __device__ float3 CentralUpwindFluxBottom(float3 Qm, float3 Qp, const float RH, 
     }
 
     float3 F;
+    // Q = [eta, hu, hv] as input
     F.x = ((ap*Fm.x - am*Fp.x) + ap*am*(Qp.x-Qm.x))/(ap-am);
     F.y = ((ap*Fm.y - am*Fp.y) + ap*am*(Qp.y-Qm.y))/(ap-am);
-    F.z = (1-FLUX_DELIMITER)*((ap*Fm.z - am*Fp.z) + ap*am*(Qp.z-Qm.z))/(ap-am);
     
-    // Q = [eta, hu, hv] as input
-    F.z += (Qm.y > - Qp.y) ? FLUX_DELIMITER*Fm.z : FLUX_DELIMITER*Fp.z;
+    // Balance the contribution between standard upwind and central upwind fluxes
+    F.z = (1.0f-FLUX_BALANCER)*((ap*Fm.z - am*Fp.z) + ap*am*(Qp.z-Qm.z))/(ap-am);
+    F.z += (Qm.y > - Qp.y) ? FLUX_BALANCER*Fm.z : FLUX_BALANCER*Fp.z;
     
     return F;
-    //return ((ap*Fm - am*Fp) + ap*am*(Qp-Qm))/(ap-am);
 }
 
 
