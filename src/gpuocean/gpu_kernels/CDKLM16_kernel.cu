@@ -274,9 +274,6 @@ float3 computeFFaceFlux(const int i, const int j, const int bx,
     float vp = R[2][l][k+1];
     float vm = R[2][l][k  ];
 
-    // R[2][l+1][k  ] == R[2][l][k  ] == R[2][l-1][k  ] --> geostrophic jet
-    // up == 0 && um == 0
-
     // Check if all dry: if so return zero flux
     if (eta_bar_m == CDKLM_DRY_FLAG && eta_bar_p == CDKLM_DRY_FLAG) {
         return make_float3(0.0f, 0.0f, 0.0f);
