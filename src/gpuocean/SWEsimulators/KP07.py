@@ -59,7 +59,7 @@ class KP07(Simulator.Simulator):
                  offset_x=0, offset_y=0, \
                  flux_slope_eps = 1.0e-1, \
                  depth_cutoff = 1.0e-5, \
-                 flux_delimiter = 0.0, \
+                 flux_balancer = 0.0, \
                  block_width=32, block_height=16):
         """
         Initialization routine
@@ -87,7 +87,7 @@ class KP07(Simulator.Simulator):
         comm: MPI communicator
         depth_cutoff: Used for defining dry cells
         flux_slope_eps: Used for desingularization with dry cells
-        flux_delimiter: linear combination of upwind flux (value 1.0) and central-upwind flux (value 0.0)
+        flux_balancer: linear combination of upwind flux (value 1.0) and central-upwind flux (value 0.0)
         """
        
         
@@ -148,7 +148,7 @@ class KP07(Simulator.Simulator):
                    'KPSIMULATOR_FLUX_SLOPE_EPS': str(flux_slope_eps)+'f',
                    'KPSIMULATOR_FLUX_SLOPE_EPS_4': str(flux_slope_eps**4)+'f',
                    'KPSIMULATOR_DEPTH_CUTOFF': str(depth_cutoff)+'f',
-                   'FLUX_DELIMITER': "{:.12f}f".format(flux_delimiter)
+                   'FLUX_BALANCER': "{:.12f}f".format(flux_balancer)
                 }
      
         

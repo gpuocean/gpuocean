@@ -1,14 +1,14 @@
 /*
 This software is part of GPU Ocean. 
 
-Copyright (C) 2018, 2019 SINTEF Digital
-Copyright (C) 2018, 2019 Norwegian Meteorological Institute
+Copyright (C) 2018 - 2023 SINTEF Digital
+Copyright (C) 2018 - 2023 Norwegian Meteorological Institute
 
 This CUDA kernel implements the CDKLM numerical scheme
 for the shallow water equations, described in
 A. Chertock, M. Dudzinski, A. Kurganov & M. Lukacova-Medvidova
 Well-Balanced Schemes for the Shallow Water Equations with Coriolis Forces,
-Numerische Mathematik 2016
+Numerische Mathematik, 138:939–973, 2017
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -30,8 +30,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 texture<float, cudaTextureType2D> angle_tex;
 texture<float, cudaTextureType2D> coriolis_f_tex;
 
-
-// KPSIMULATOR
 
 //WARNING: Must match max_dt.cu and initBm_kernel.cu
 //WARNING: This is error prone - as comparison with floating point numbers is not accurate
@@ -140,22 +138,11 @@ __device__ float3 CDKLM16_flux(const float3 Qm, const float3 Qp, const float H_f
     // F = [hu, h*u*u + 0.5*g*h*h, h*u*v]
     F.x = ((ap*Fm.x - am*Fp.x) + ap*am*(Qp.x-Qm.x))/(ap-am);
     F.y = ((ap*Fm.y - am*Fp.y) + ap*am*(Fp.x-Fm.x))/(ap-am);
-    //if (CENTRAL_UPWIND) {
-    //    F.z = ((ap*Fm.z - am*Fp.z) + ap*am*(hp*Qp.z - hm*Qm.z))/(ap-am); // Central-upwind scheme
-    //}
-    //else{
-    //    //F.z = 0; //(Fm.z + Fp.z)/2.0f;
-    //    F.z = (Qm.y + Qp.y > 0) ? Fm.z : Fp.z; // This upwinding is used for "consistency" according to CDKLM ref, but it gives artifacts
-    //}
-    
-    //F.z = (Qm.y + Qp.y > 0) ? FLUX_DELIMITER*Fm.z : FLUX_DELIMITER*Fp.z;
-    F.z = (Qm.y > - Qp.y) ? FLUX_DELIMITER*Fm.z : FLUX_DELIMITER*Fp.z;
-    F.z += (1.0f - FLUX_DELIMITER)*(((ap*Fm.z - am*Fp.z) + ap*am*(hp*Qp.z - hm*Qm.z))/(ap-am));
 
-    //F.z = 0.0f;
-    //F.x = (Fm.x + Fp.x)/2.0f;
-    //F.y = (Fm.y + Fp.y)/2.0f;
-    //F.z = (Fm.z + Fp.z)/2.0f;
+    // Balance the contribution between standard upwind and central upwind fluxes    
+    F.z = (Qm.y > - Qp.y) ? FLUX_BALANCER*Fm.z : FLUX_BALANCER*Fp.z;
+    F.z += (1.0f - FLUX_BALANCER)*(((ap*Fm.z - am*Fp.z) + ap*am*(hp*Qp.z - hm*Qm.z))/(ap-am));
+
     return F;
 }
 
