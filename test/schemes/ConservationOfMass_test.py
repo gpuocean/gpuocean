@@ -120,8 +120,10 @@ class ConservationOfMassTest(unittest.TestCase):
             "H"    : H
         }
         
+        accuracy = 5
         if sim_name == "FBL":
             self.sim = FBL.FBL(**self.sim_args, **init_args)
+            accuracy = 3
         elif sim_name == "CTCS":
             self.sim = CTCS.CTCS(**self.sim_args, **init_args, **self.ctcs_args)
         elif sim_name == "KP":
@@ -137,8 +139,9 @@ class ConservationOfMassTest(unittest.TestCase):
 
             eta1, u1, v1 = self.sim.download(interior_domain_only=True)
             mass = eta1.sum()
-            self.assertAlmostEqual(self.initMass, mass, places=2,
-                               msg='Unexpected mass difference sim '+sim_name+' iteration '+str(k)+'! Max rel diff: ' + str((mass-self.initMass)/self.initMass) + ', diff: ' + str(mass-self.initMass))
+            relDiff = (mass-self.initMass)/self.initMass
+            self.assertAlmostEqual(relDiff, 0.0, places=accuracy,
+                               msg='Unexpected mass difference sim '+sim_name+' iteration '+str(k)+'! Max rel diff: ' + str(relDiff) + ', diff: ' + str(mass-self.initMass))
     
     
     def eta_cell(self, r_i, r_j, rossby_radius, coriolis):
