@@ -301,10 +301,6 @@ float3 computeFFaceFlux(const int i, const int j, const int bx,
     const float vp_north = up*north.x + vp*north.y;
     const float vm_north = um*north.x + vm*north.y;
     
-    // Reconstruct h
-    //const float hp = fmaxf(0.0f, eta_bar_p + H_face - (Kx_p + DX*coriolis_fp*vp_north)/(2.0f*GRAV));
-    //const float hm = fmaxf(0.0f, eta_bar_m + H_face + (Kx_m + DX*coriolis_fm*vm_north)/(2.0f*GRAV));
-    
     // Reconstruct eta
     const float etap = fmaxf(-H_face, eta_bar_p - (Kx_p + DX*coriolis_fp*vp_north)/(2.0f*GRAV));
     const float etam = fmaxf(-H_face, eta_bar_m + (Kx_m + DX*coriolis_fm*vm_north)/(2.0f*GRAV));
@@ -391,10 +387,6 @@ float3 computeGFaceFlux(const int i, const int j, const int by,
     const float up_east = up*east.x + vp*east.y;
     const float um_east = um*east.x + vm*east.y;
     
-    // Reconstruct h
-    // const float hp = fmaxf(0.0f, eta_bar_p + H_face - ( Ly_p - DY*coriolis_fp*up_east)/(2.0f*GRAV));
-    // const float hm = fmaxf(0.0f, eta_bar_m + H_face + ( Ly_m - DY*coriolis_fm*um_east)/(2.0f*GRAV));
-
     // Reconstruct eta
     const float etap = fmaxf(-H_face, eta_bar_p - ( Ly_p - DY*coriolis_fp*up_east)/(2.0f*GRAV));
     const float etam = fmaxf(-H_face, eta_bar_m + ( Ly_m - DY*coriolis_fm*um_east)/(2.0f*GRAV));
