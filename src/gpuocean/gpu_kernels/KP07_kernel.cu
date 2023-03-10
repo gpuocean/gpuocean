@@ -1,8 +1,8 @@
 /*
 This software is part of GPU Ocean. 
 
-Copyright (C) 2018, 2019 SINTEF Digital
-Copyright (C) 2018, 2019 Norwegian Meteorological Institute
+Copyright (C) 2018 - 2023 SINTEF Digital
+Copyright (C) 2018 - 2023 Norwegian Meteorological Institute
 
 This CUDA kernel implements the Kurganov-Petrova numerical scheme 
 for the shallow water equations, described in 
@@ -111,8 +111,17 @@ __device__ float3 CentralUpwindFluxBottom(float3 Qm, float3 Qp, const float RH, 
     if ( fabs(ap - am) < KPSIMULATOR_FLUX_SLOPE_EPS ) {
         return make_float3(0.0f, 0.0f, 0.0f);
     }
+
+    float3 F;
+    // Q = [eta, hu, hv] as input
+    F.x = ((ap*Fm.x - am*Fp.x) + ap*am*(Qp.x-Qm.x))/(ap-am);
+    F.y = ((ap*Fm.y - am*Fp.y) + ap*am*(Qp.y-Qm.y))/(ap-am);
     
-    return ((ap*Fm - am*Fp) + ap*am*(Qp-Qm))/(ap-am);
+    // Balance the contribution between standard upwind and central upwind fluxes
+    F.z = (1.0f-FLUX_BALANCER)*((ap*Fm.z - am*Fp.z) + ap*am*(Qp.z-Qm.z))/(ap-am);
+    F.z += (Qm.y > - Qp.y) ? FLUX_BALANCER*Fm.z : FLUX_BALANCER*Fp.z;
+    
+    return F;
 }
 
 
@@ -574,7 +583,6 @@ __global__ void swe_2D(
         // Flux along y-direction
         const float3 G_flux_p = computeSingleFluxG(Q, Qx, Hi, g_, tx, ty+1);
         const float3 G_flux_m = computeSingleFluxG(Q, Qx, Hi, g_, tx, ty  );
-
 
         // Find bottom topography source terms: S3
         const float ST3 = bottomSourceTerm3_kp(Q, Qx, Hi, g_, i, j);
