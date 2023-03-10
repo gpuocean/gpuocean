@@ -752,7 +752,7 @@ __global__ void cdklm_swe_2D(
     __syncthreads();
     
     //Reconstruct slopes along y axis
-    // Write result into shmem Qx = [u_y, v_y, L_y]
+    // Write result into shmem Qx = [u_y, v_y, L_y]*dy
     // Qx is now used as if its size was Qx[3][block_height+2][block_width]
 
     for (int j=ty; j<block_height+2; j+=blockDim.y) {
