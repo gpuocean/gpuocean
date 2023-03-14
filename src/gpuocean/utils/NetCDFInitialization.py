@@ -345,6 +345,8 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     for i in range(len(source_url_list)):
         source_url_list[i] = checkCachedNetCDF(source_url_list[i], download_data=download_data)
     
+    if timestep_indices is not None:
+        t0_index = timestep_indices[0][0]
         
     # Read constants and initial values from the first source url
     source_url = source_url_list[0]
