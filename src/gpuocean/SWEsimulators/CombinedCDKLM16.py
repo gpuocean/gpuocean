@@ -326,8 +326,6 @@ class CombinedCDKLM16():
             # Evolve drifters
             if barotropic_local_dt > 0.0:
                 self.drifterStep(barotropic_local_dt)
-                if barotropic_t_now > 2805.5:
-                    print(barotropic_t_now,self.drifters.getDrifterPositions())
                 if (trajectories is not None) and (baroclinic_t_now > trajectory_t) and (barotropic_t_now > trajectory_t):
                     assert (trajectories.register_buoys == False), "Only floating drifters supported for combined sim"
                     trajectories.add_observation_from_sim(self)
