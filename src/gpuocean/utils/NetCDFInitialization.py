@@ -756,6 +756,7 @@ def getCombinedInitialConditions(source_url, x0, x1, y0, y1, mld_dens,
     else:
         t0_idx = timestep_indices[0][0]
     mld = MLD(source_url, mld_dens, min_mld=1.5, max_mld=40, x0=x0, x1=x1, y0=y0, y1=y1, t=t0_idx)
+    mld = fill_coastal_data(mld)
     ml_integrator = MLD_integrator(source_url, mld, x0=x0, x1=x1, y0=y0, y1=y1)
 
     # Set initial conditions
@@ -792,14 +793,14 @@ def getCombinedInitialConditions(source_url, x0, x1, y0, y1, mld_dens,
     baroclinic_IC["g"] = eps * full_IC["g"]
 
     # Prepare boundary conditions
-    # NOTE: The following download is repetitive but with the current code design likely not avoidable
-    full_eta = np.ma.array(nc['zeta'][:, y0-1:y1+1, x0-1:x1+1])
-    full_Hm  = np.ma.array(nc['h'][y0-1:y1+1, x0-1:x1+1], mask=full_eta[0].mask.copy())
-
     if timestep_indices is not None:
         t_range = timestep_indices[0]
     else:
         t_range = np.arange(len(nc["ocean_time"][:]))
+
+    # NOTE: The following download is repetitive but with the current code design likely not avoidable
+    etas = np.ma.array(nc['zeta'][t_range, y0-1:y1+1, x0-1:x1+1])
+    full_Hm  = np.ma.array(nc['h'][y0-1:y1+1, x0-1:x1+1], mask=etas[0].mask.copy())
 
     mlds = []
     hus = []
@@ -831,25 +832,25 @@ def getCombinedInitialConditions(source_url, x0, x1, y0, y1, mld_dens,
             upper_h_bc = mlds[:,-1,1:-1]
             upper_hu_bc = hus[:,-1,1:-1]
             upper_hv_bc = hvs[:,-1,1:-1]
-            mask = full_eta[:,-1,1:-1].mask
+            mask = etas[:,-1,1:-1].mask
         elif cardinal == "south":
             full_H_bc = full_Hm[0,1:-1]
             upper_h_bc = mlds[:,0,1:-1]
             upper_hu_bc = hus[:,0,1:-1]
             upper_hv_bc = hvs[:,0,1:-1]
-            mask = full_eta[:,0,1:-1].mask
+            mask = etas[:,0,1:-1].mask
         elif cardinal == "west":
             full_H_bc = full_Hm[1:-1,0]
             upper_h_bc = mlds[:,1:-1,0]
             upper_hu_bc = hus[:,1:-1,0]
             upper_hv_bc = hvs[:,1:-1,0]
-            mask = full_eta[:,1:-1,0].mask
+            mask = etas[:,1:-1,0].mask
         elif cardinal == "east":
             full_H_bc = full_Hm[1:-1,-1]
             upper_h_bc = mlds[:,1:-1,-1]
             upper_hu_bc = hus[:,1:-1,-1]
             upper_hv_bc = hvs[:,1:-1,-1]
-            mask = full_eta[:,1:-1,-1].mask
+            mask = etas[:,1:-1,-1].mask
         full_h_bc  = full_H_bc  + np.ma.array(full_eta_bc, mask=mask)
         full_u_bc  = getattr(getattr(full_IC["boundary_conditions_data"], cardinal), "hu")/full_h_bc
         full_v_bc  = getattr(getattr(full_IC["boundary_conditions_data"], cardinal), "hv")/full_h_bc
