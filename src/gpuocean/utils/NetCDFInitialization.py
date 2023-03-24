@@ -806,7 +806,7 @@ def getCombinedInitialConditions(source_url, x0, x1, y0, y1, mld_dens,
     hus = []
     hvs = []
     for t_idx in t_range:
-        mld = MLD(source_url, mld_dens, min_mld=1.5, max_mld=40, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1, t=t_idx)
+        mld = fill_coastal_data(MLD(source_url, mld_dens, min_mld=1.5, max_mld=40, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1, t=t_idx))
         ml_integrator = MLD_integrator(source_url, mld, t=t_idx, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1)
 
         u = nc.variables['u'][t_idx, :, y0-1:y1+1, x0-1:x1+2].filled(fill_value = 0.0) 
