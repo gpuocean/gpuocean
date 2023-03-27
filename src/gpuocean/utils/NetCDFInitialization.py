@@ -144,7 +144,9 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
         finally:
             ncfile.close()
 
-    bc_data = Common.BoundaryConditionsData(np.ravel(timesteps).copy(), 
+    all_timesteps = [time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist]
+
+    bc_data = Common.BoundaryConditionsData(all_timesteps.copy(), 
         north=Common.SingleBoundaryConditionData(bc_eta['north'], bc_hu['north'], bc_hv['north']),
         south=Common.SingleBoundaryConditionData(bc_eta['south'], bc_hu['south'], bc_hv['south']),
         east=Common.SingleBoundaryConditionData(bc_eta['east'], bc_hu['east'], bc_hv['east']),
@@ -218,8 +220,10 @@ def getWindSourceterm(source_url_list, timestep_indices, timesteps, x0, x1, y0, 
     wind_stress = C_drag * wind_speed * rho_a / rho_w
     wind_stress_u = wind_stress*u_wind
     wind_stress_v = wind_stress*v_wind
-    
-    wind_source = WindStress.WindStress(t=np.ravel(timesteps).copy(), X=wind_stress_u, Y=wind_stress_v)
+
+    all_timesteps = [time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist]
+
+    wind_source = WindStress.WindStress(t=all_timesteps.copy(), X=wind_stress_u, Y=wind_stress_v)
     
     return wind_source
 
@@ -466,7 +470,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         t0 = min(t0, min(ts))
 
     
-    assert(np.all(np.diff(timesteps)>=0))
+    assert(np.all(np.diff([time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist])>=0))
     for i in range(num_files):
         timesteps[i] = timesteps[i] - t0
     
@@ -541,7 +545,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     
     #Initial reference time and all timesteps
     ic['t0'] = t0
-    ic['timesteps'] = np.ravel(timesteps)
+    ic['timesteps'] = np.array([time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist])
     
     return ic
 
@@ -680,7 +684,9 @@ def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
     
     source_filename = ' and '.join([url for url in source_url_list])
 
-    wind_source = WindStress.WindStress(t=np.ravel(timesteps).copy(), wind_u=u_wind, wind_v=v_wind, source_filename=source_filename)
+    all_timesteps = [time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist]
+
+    wind_source = WindStress.WindStress(t=all_timesteps.copy(), wind_u=u_wind, wind_v=v_wind, source_filename=source_filename)
     
     return wind_source
 
