@@ -65,7 +65,7 @@ class MLEnKFOcean:
         return GC
 
         
-    def assimilate(self, MLOceanEnsemble, obs, Hx, Hy, R, r = 2.5*1e7, relax_factor = 1.0, obs_var=slice(0,3)):
+    def assimilate(self, MLOceanEnsemble, obs, Hx, Hy, R, r = 2.5*1e7, relax_factor = 1.0, obs_var=slice(0,3), min_localisation_level=1):
         """
         Returning the posterior state after assimilating observation into multi-level ensemble
         after appyling MLEnKF
@@ -80,6 +80,7 @@ class MLEnKFOcean:
                             obs_var = slice(0,1) # eta
                             obs_var = slice(1,3) # hu and hv
                             obs_var = slice(0,3) # eta, hu, hv
+        min_localisation_level  - int, this and all higher levels are localised in the update
         """
 
         ## Prior        
@@ -125,7 +126,9 @@ class MLEnKFOcean:
         Y0 = ML_state[0][obs_var,obs_idxs[0][0],obs_idxs[0][1]] + ML_perts[0].T
         Y0mean = np.average(Y0, axis=-1)
 
-        lvl_weight = relax_factor * np.ones(np.prod(X0mean.shape)) # 1-weights for 0-level
+        lvl_weight = relax_factor * np.ones(np.prod(X0mean.shape))
+        if min_localisation_level <= 0:
+            lvl_weight = relax_factor * np.tile(block_reduce(GC, block_size=(2**(numLevels-1),2**(numLevels-1)), func=np.mean).flatten(),3)
 
         ML_XY += (lvl_weight[:,np.newaxis] 
                   * 1/Nes[0] 
@@ -145,7 +148,9 @@ class MLEnKFOcean:
             Y1 = ML_state[l_idx][1][obs_var,obs_idxs[l_idx][1][0],obs_idxs[l_idx][1][1]] + ML_perts[l_idx].T
             Y1mean = np.average(Y1, axis=-1)
 
-            lvl_weight = relax_factor * np.tile(block_reduce(GC, block_size=(2**(numLevels-l_idx-1),2**(numLevels-l_idx-1)), func=np.mean).flatten(),3)
+            lvl_weight = relax_factor * np.ones(np.prod(X0mean.shape))
+            if min_localisation_level <= l_idx:
+                lvl_weight = relax_factor * np.tile(block_reduce(GC, block_size=(2**(numLevels-l_idx-1),2**(numLevels-l_idx-1)), func=np.mean).flatten(),3)
 
             ML_XY += (lvl_weight[:,np.newaxis] 
                       * ( 1/Nes[l_idx]
