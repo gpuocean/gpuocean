@@ -131,6 +131,9 @@ class Simulator(object):
             
         self.hasDrifters = False
         self.drifters = None
+
+        # Model error object
+        self.model_error = None
         
         # NetCDF related parameters
         self.write_netcdf = write_netcdf
@@ -455,6 +458,11 @@ class Simulator(object):
         if (self.boundary_conditions.isSponge()):
             assert(False), 'This function is deprecated - sponge cells should now be considered part of the interior domain'
     
+    # ---------------------------------------------------------------------
+    # FUTURE IMPORT! 
+    # The following functionality is not actively used in the mlda-branch
+
+
     @staticmethod
     def get_texture(sim, tex_name):
         """

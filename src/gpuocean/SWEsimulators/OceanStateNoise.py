@@ -182,7 +182,9 @@ class OceanStateNoise(object):
        
         # Generate kernels
         self.kernels = gpu_ctx.get_kernel("ocean_noise.cu", \
-                                          defines={'block_width': block_width, 'block_height': block_height},
+                                          defines={'block_width': block_width, 'block_height': block_height, 
+                                                   'kl_rand_nx': 1, 'kl_rand_ny': 1 # Not used for this class
+                                                },
                                           compile_args={
                                               'options': ["--use_fast_math",
                                                           "--maxrregcount=32"]

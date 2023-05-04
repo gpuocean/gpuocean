@@ -27,13 +27,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #Import packages we need
 import numpy as np
-import copy
 import gc
 import logging
 from scipy.interpolate import interp2d
 
 from gpuocean.utils import Common, SimWriter, SimReader, WindStress, AtmosphericPressure
-from gpuocean.SWEsimulators import Simulator, OceanStateNoise
+from gpuocean.SWEsimulators import Simulator, OceanStateNoise, ModelErrorKL
 from gpuocean.utils import OceanographicUtilities
 
 
@@ -43,8 +42,7 @@ import pycuda.driver as cuda
 
 class CDKLM16(Simulator.Simulator):
     """
-    Class that solves the SW equations using the Coriolis well balanced reconstruction scheme, 
-    as given by the publication of Chertock, Dudzinski, Kurganov and Lukacova-Medvidova (CDFLM) in 2016.
+    Class that solves the SW equations using the Coriolis well balanced reconstruction scheme, as given by the publication of Chertock, Dudzinski, Kurganov and Lukacova-Medvidova (CDFLM) in 2016.
     """
 
     def __init__(self, \
@@ -66,13 +64,8 @@ class CDKLM16(Simulator.Simulator):
                  atmospheric_pressure=AtmosphericPressure.AtmosphericPressure(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  boundary_conditions_data=Common.BoundaryConditionsData(), \
-                 small_scale_perturbation=False, \
-                 small_scale_perturbation_amplitude=None, \
-                 small_scale_perturbation_interpolation_factor = 1, \
                  model_time_step=None,
                  reportGeostrophicEquilibrium=False, \
-                 use_lcg=False, \
-                 xorwow_seed = None, \
                  write_netcdf=False, \
                  comm=None, \
                  local_particle_id=0, \
@@ -86,8 +79,7 @@ class CDKLM16(Simulator.Simulator):
                  depth_cutoff = 1.0e-5, \
                  one_dimensional = False, \
                  flux_balancer = 0.8, \
-                 block_width=12, block_height=32, num_threads_dt=256,
-                 block_width_model_error=16, block_height_model_error=16):
+                 block_width=12, block_height=32, num_threads_dt=256):
         """
         Initialization routine
         eta0: Initial deviation from mean sea level incl ghost cells, (nx+2)*(ny+2) cells
@@ -114,12 +106,12 @@ class CDKLM16(Simulator.Simulator):
         wind: Wind stress parameters
         atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
-        small_scale_perturbation: Boolean value for applying a stochastic model error
-        small_scale_perturbation_amplitude: Amplitude (q0 coefficient) for model error
-        small_scale_perturbation_interpolation_factor: Width factor for correlation in model error
+        small_scale_perturbation [deprecated]: Boolean value for applying a stochastic model error
+        small_scale_perturbation_amplitude [deprecated]: Amplitude (q0 coefficient) for model error
+        small_scale_perturbation_interpolation_factor [deprecated]: Width factor for correlation in model error
         model_time_step: The size of a data assimilation model step (default same as dt)
         reportGeostrophicEquilibrium: Calculate the Geostrophic Equilibrium variables for each superstep
-        use_lcg: Use LCG as the random number generator. Default is False, which means using curand.
+        use_lcg [deprecated]: Use LCG as the random number generator. Default is False, which means using curand.
         write_netcdf: Write the results after each superstep to a netCDF file
         comm: MPI communicator
         local_particle_id: Local (for each MPI process) particle id
@@ -226,7 +218,7 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPPPPPPPPPPPPPiPifffi")
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifffi")
         self.update_wind_stress(self.kernel, self.cdklm_swe_2D)
         self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D)
         
@@ -255,23 +247,6 @@ class CDKLM16(Simulator.Simulator):
         
         # Create data by uploading to device
         self.gpu_data = Common.SWEDataArakawaA(self.gpu_stream, nx, ny, ghost_cells_x, ghost_cells_y, eta0, hu0, hv0)
-
-        # Buffers for flux accumulation (used for multilevel simulations)
-        # NOTE: Ghost cells included for simplicity!
-        init_to_zeros = np.zeros(ny+ghost_cells_y*2, dtype=np.float32)
-        self.accF1east  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
-        self.accF2east  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
-        self.accF3east  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
-        self.accF1west  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
-        self.accF2west  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
-        self.accF3west  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
-        init_to_zeros = np.zeros(nx+ghost_cells_x*2, dtype=np.float32)
-        self.accG1north  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
-        self.accG2north  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
-        self.accG3north  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
-        self.accG1south  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
-        self.accG2south  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
-        self.accG3south  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
 
         # Allocate memory for calculating maximum timestep
         host_dt = np.zeros((self.global_size[1], self.global_size[0]), dtype=np.float32)
@@ -385,18 +360,8 @@ class CDKLM16(Simulator.Simulator):
         
         
         # Small scale perturbation:
-        self.small_scale_perturbation = small_scale_perturbation
-        self.small_scale_model_error = None
-        self.small_scale_perturbation_interpolation_factor = small_scale_perturbation_interpolation_factor
-        if small_scale_perturbation:
-            self.small_scale_model_error = OceanStateNoise.OceanStateNoise.fromsim(self, 
-                                                                                   soar_q0=small_scale_perturbation_amplitude,
-                                                                                   interpolation_factor=small_scale_perturbation_interpolation_factor,
-                                                                                   use_lcg=use_lcg, xorwow_seed=xorwow_seed,
-                                                                                   block_width=block_width_model_error, 
-                                                                                   block_height=block_height_model_error)
-    
-        
+        self.model_error = None
+
         # Data assimilation model step size
         self.model_time_step = model_time_step
         self.total_time_steps = 0
@@ -413,7 +378,7 @@ class CDKLM16(Simulator.Simulator):
             self.updateDt()
         
         
-    def cleanUp(self, do_gc=True):
+    def cleanUp(self):
         """
         Clean up function
         """
@@ -421,8 +386,8 @@ class CDKLM16(Simulator.Simulator):
         
         self.gpu_data.release()
         
-        if self.small_scale_model_error is not None:
-            self.small_scale_model_error.cleanUp()
+        if self.model_error is not None:
+            self.model_error.cleanUp()
         
         
         if self.geoEq_uxpvy is not None:
@@ -432,29 +397,15 @@ class CDKLM16(Simulator.Simulator):
         if self.geoEq_Ly is not None:
             self.geoEq_Ly.release()
         self.bathymetry.release()
-
-        self.accF1east.release()
-        self.accF2east.release()
-        self.accF3east.release()
-        self.accF1west.release()
-        self.accF2west.release()
-        self.accF3west.release()
-        self.accG1north.release()
-        self.accG2north.release()
-        self.accG3north.release()
-        self.accG1south.release()
-        self.accG2south.release()
-        self.accG3south.release()
         
         self.device_dt.release()
         self.max_dt_buffer.release()
  
         self.gpu_ctx = None
-        if do_gc:
-            gc.collect()
+        gc.collect()
            
     @classmethod
-    def fromfilename(cls, gpu_ctx, filename, cont_write_netcdf=True, use_lcg=False, xorwow_seed = None, new_netcdf_filename=None, time0=None):
+    def fromfilename(cls, gpu_ctx, filename, cont_write_netcdf=True, new_netcdf_filename=None, time0=None):
         """
         Initialize and hotstart simulation from nc-file.
         cont_write_netcdf: Continue to write the results after each superstep to a new netCDF file
@@ -468,6 +419,7 @@ class CDKLM16(Simulator.Simulator):
                "Trying to initialize a " + \
                cls.__name__ + " simulator with netCDF file based on " \
                + sim_name + " results."
+        
         
         # read the most recent state 
         H = sim_reader.getH()
@@ -505,8 +457,8 @@ class CDKLM16(Simulator.Simulator):
             'coriolis_beta': sim_reader.get("coriolis_beta"),
             # 'y_zero_reference_cell': sim_reader.get("y_zero_reference_cell"), # TODO - UPDATE WITH NEW API
             'write_netcdf': cont_write_netcdf,
-            'use_lcg': use_lcg,
-            'xorwow_seed' : xorwow_seed,
+            #'use_lcg': use_lcg,
+            #'xorwow_seed' : xorwow_seed,
             'netcdf_filename': new_netcdf_filename
         }    
         
@@ -517,14 +469,7 @@ class CDKLM16(Simulator.Simulator):
         # Boundary conditions
         sim_params['boundary_conditions'] = sim_reader.getBC()
     
-        # Model errors
-        if sim_reader.has('small_scale_perturbation'):
-            sim_params['small_scale_perturbation'] = sim_reader.get('small_scale_perturbation') == 'True'
-            if sim_params['small_scale_perturbation']:
-                sim_params['small_scale_perturbation_amplitude'] = sim_reader.get('small_scale_perturbation_amplitude')
-                sim_params['small_scale_perturbation_interpolation_factor'] = sim_reader.get('small_scale_perturbation_interpolation_factor')
-            
-            
+
         # Data assimilation parameters:
         if sim_reader.has('model_time_step'):
             sim_params['model_time_step'] = sim_reader.get('model_time_step')
@@ -533,59 +478,24 @@ class CDKLM16(Simulator.Simulator):
     
     
     
-    def step(self, t_end=0.0, apply_stochastic_term=True, write_now=True, update_dt=False, reinit_exforcing_tex=False):
+    def step(self, t_end=0.0, apply_stochastic_term=True, write_now=True, update_dt=False):
         """
         Function which steps n timesteps.
         apply_stochastic_term: Boolean value for whether the stochastic
             perturbation (if any) should be applied after every simulation time step
             by adding SOAR-generated random fields using OceanNoiseState.perturbSim(...)
         """
-        self.gpu_stream.synchronize()   
-        self.gpu_ctx.synchronize()
         
         if self.t == 0:
             self.bc_kernel.update_bc_values(self.gpu_stream, self.t)
             self.bc_kernel.boundaryCondition(self.gpu_stream, \
                                              self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0)
-
-        if reinit_exforcing_tex: 
-            self.update_wind_stress(self.kernel, self.cdklm_swe_2D, reinit_wind_tex=True)
-            self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D, reinit_atmospres_tex=True)
         
         t_now = 0.0
         #print("self.p_atm_factor_handle(self.t) = " + str(self.p_atm_factor_handle(self.t)))
 
         while (t_now < t_end):
         #for i in range(0, n):
-            
-            ############################
-            # Temporary child code 
-            if len(self.children) > 0:
-                # Store BC for children
-                eta, hu, hv = self.download()
-
-                t0 = self.t
-
-                bc_data_north_t0 = []
-                bc_data_south_t0 = []
-                bc_data_west_t0 = []
-                bc_data_east_t0 = []
-                for child in self.children:
-                    bc_data_north_t0.append([x[ child.level_local_area[1][0]+self.ghost_cells_y+1, 
-                                                child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
-                                            for x in [eta, hu, hv]])
-                    bc_data_south_t0.append([x[ child.level_local_area[0][0]+self.ghost_cells_y-1, 
-                                                child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
-                                            for x in [eta, hu, hv]])
-                    bc_data_west_t0.append([x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
-                                                child.level_local_area[0][1]+self.ghost_cells_x-1 ] 
-                                            for x in [eta, hu, hv]])
-                    bc_data_east_t0.append([x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
-                                                child.level_local_area[1][1]+self.ghost_cells_x+1 ] 
-                                            for x in [eta, hu, hv]])
-            # (end temporary child code)
-
-
             # Get new random wind direction (emulationg large-scale model error)
             if(self.max_wind_direction_perturbation > 0.0 and self.wind_stress.type() == 1):
                 # max perturbation +/- max_wind_direction_perturbation deg within original wind direction (at t=0)
@@ -658,8 +568,8 @@ class CDKLM16(Simulator.Simulator):
                 # Applying final boundary conditions after perturbation (if applicable)
             
             # Perturb ocean state with model error
-            if self.small_scale_perturbation and apply_stochastic_term:
-                self.small_scale_model_error.perturbSim(self)
+            if self.model_error is not None and apply_stochastic_term:
+                self.model_error.perturbSim(self)
                 
             # Apply boundary conditions
             self.bc_kernel.boundaryCondition(self.gpu_stream, \
@@ -674,87 +584,78 @@ class CDKLM16(Simulator.Simulator):
             
         if self.write_netcdf and write_now:
             self.sim_writer.writeTimestep(self)
-
-
-        ############################
-        # Temporary child code 
-        self.gpu_stream.synchronize()   
-        self.gpu_ctx.synchronize()
-
-        if len(self.children) > 0:
-            
-            eta, hu, hv = copy.deepcopy(self.download()) 
-            # NOTE: The deepcopy is important that the gpudata does not get "confused" (mask of hu and hv may be effected)
-            
-            t1 = self.t
-            
-            for c, child in enumerate(self.children):
-                # Set BC for child
-                bc_data_north_t1 = [x[ child.level_local_area[1][0]+self.ghost_cells_y+1, 
-                                        child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
-                                    for x in [eta, hu, hv]]
-                bc_data_south_t1 = [x[ child.level_local_area[0][0]+self.ghost_cells_y-1, 
-                                        child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
-                                    for x in [eta, hu, hv]]
-                bc_data_west_t1 = [x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
-                                        child.level_local_area[0][1]+self.ghost_cells_x-1 ] 
-                                    for x in [eta, hu, hv]]
-                bc_data_east_t1 = [x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
-                                        child.level_local_area[1][1]+self.ghost_cells_x+1 ] 
-                                    for x in [eta, hu, hv]]
-
-                t = [t0, t1]
-                north = Common.SingleBoundaryConditionData(h = [bc_data_north_t0[c][0], bc_data_north_t1[0]],\
-                                                            hu = [bc_data_north_t0[c][1], bc_data_north_t1[1]],\
-                                                            hv = [bc_data_north_t0[c][2], bc_data_north_t1[2]])
-                south = Common.SingleBoundaryConditionData(h = [bc_data_south_t0[c][0], bc_data_south_t1[0]],\
-                                                            hu = [bc_data_south_t0[c][1], bc_data_south_t1[1]],\
-                                                            hv = [bc_data_south_t0[c][2], bc_data_south_t1[2]])
-                east = Common.SingleBoundaryConditionData(h = [bc_data_east_t0[c][0], bc_data_east_t1[0]],\
-                                                            hu = [bc_data_east_t0[c][1], bc_data_east_t1[1]],\
-                                                            hv = [bc_data_east_t0[c][2], bc_data_east_t1[2]])
-                west = Common.SingleBoundaryConditionData(h = [bc_data_west_t0[c][0], bc_data_west_t1[0]],\
-                                                            hu = [bc_data_west_t0[c][1], bc_data_west_t1[1]],\
-                                                            hv = [bc_data_west_t0[c][2], bc_data_west_t1[2]])
-
-                bc_data = Common.BoundaryConditionsData(t=t, north=north, south=south, east=east, west=west)
-
-                child.bc_kernel = Common.BoundaryConditionsArakawaA(child.gpu_ctx, child.nx, child.ny, 2, 2, \
-                                                            child.boundary_conditions, bc_data)
-                
-                # Step child 
-                child.step(t_end=t_end, apply_stochastic_term=apply_stochastic_term, write_now=write_now, update_dt=update_dt)
-
-                # Replacing parent values in local area of the child 
-                eta_child, hu_child, hv_child = child.download(interior_domain_only=True)
-
-                loc = child.level_local_area
-                # TODO: If bathymetry changes, this has to be adapted here!
-                eta_loc = OceanographicUtilities.rescaleMidpoints(eta_child, loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
-                hu_loc  = OceanographicUtilities.rescaleMidpoints(hu_child,  loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
-                hv_loc  = OceanographicUtilities.rescaleMidpoints(hv_child,  loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
-
-                eta[loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y, 
-                    loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x]  = eta_loc
-                hu[loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y, 
-                    loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x]  = hu_loc
-                hv[loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y, 
-                    loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x]  = hv_loc
-
-                # Flux correction
-                # 1. Accumulate fluxes in child grids - *DONE* (might have to add some weights/scaling factors, see next step)
-                # 2. Diff w/parent grid (remember to take different grid resolutions and time step sizes into account) - *CONT HERE*
-                # 3. Correct parend grid fluxes ("rerun" time integration to correct state variables)
-                # See old AMR code and paper (https://link.springer.com/article/10.1007/s10915-014-9883-4#Sec5) for details
-
-            
-            self.upload(eta, hu, hv)
-
-            self.gpu_stream.synchronize()   
-            self.gpu_ctx.synchronize()
-        # (end temporary child code)
             
         return self.t
+    
+    def setSOARModelError(self, small_scale_perturbation_amplitude=None, \
+                 small_scale_perturbation_interpolation_factor = 1, \
+                 use_lcg=False, xorwow_seed = None, \
+                 block_width_model_error=16, block_height_model_error=16):
+        self.model_error = OceanStateNoise.OceanStateNoise.fromsim(self, 
+                                                                   soar_q0=small_scale_perturbation_amplitude,
+                                                                   interpolation_factor=small_scale_perturbation_interpolation_factor,
+                                                                   use_lcg=use_lcg, xorwow_seed=xorwow_seed,
+                                                                   block_width=block_width_model_error, 
+                                                                   block_height=block_height_model_error)
+    
+        if self.write_netcdf:
+            self.sim_writer.writeModelError(self)
+
+    def setModelErrorFromFile(self, filename, use_lcg=False, xorwow_seed = None):
+        """
+        Initialize model error according to attributes in a netcdf file .
+        filename: NetCDF file that has been written from a CDKLM simulator
+        """
+        # open nc-file
+        sim_reader = SimReader.SimNetCDFReader(filename, ignore_ghostcells=False)
+        sim_name = str(sim_reader.get('simulator_short'))
+        assert sim_name == self.__class__.__name__, \
+               "Trying to initialize a " + \
+               self.__class__.__name__ + " simulator with netCDF file based on " \
+               + sim_name + " results."
+
+        model_error_args = {}
+
+        if sim_reader.has('small_scale_perturbation'):
+            # For some backward compatibility (old version of SimWriter)
+            if sim_reader.get('small_scale_perturbation') == 'True':
+                model_error_args['small_scale_perturbation_amplitude'] = sim_reader.get('small_scale_perturbation_amplitude')
+                model_error_args['small_scale_perturbation_interpolation_factor'] = sim_reader.get('small_scale_perturbation_interpolation_factor')
+                self.setSOARModelError(**model_error_args, use_lcg=use_lcg, xorwow_seed=xorwow_seed)
+        elif sim_reader.has('has_model_error'): 
+            # New version of SimWriter
+            if sim_reader.get('has_model_error') == "True":
+                if sim_reader.get('model_error_name') == "OceanStateNoise":
+                    model_error_args['small_scale_perturbation_amplitude'] = sim_reader.get('small_scale_perturbation_amplitude')
+                    model_error_args['small_scale_perturbation_interpolation_factor'] = sim_reader.get('small_scale_perturbation_interpolation_factor')
+                    self.setSOARModelError(**model_error_args, use_lcg=use_lcg, xorwow_seed=xorwow_seed)
+                elif sim_reader.get('model_error_name') == "ModelErrorKL":
+                    model_error_args['kl_decay']       = sim_reader.get('kl_decay')
+                    model_error_args['kl_scaling']     = sim_reader.get('kl_scaling')
+                    model_error_args['include_cos']    = sim_reader.get('include_cos')
+                    model_error_args['include_sin']    = sim_reader.get('include_sin')
+                    model_error_args['basis_x_start']  = sim_reader.get('basis_x_start')
+                    model_error_args['basis_y_start']  = sim_reader.get('basis_y_start')
+                    model_error_args['basis_x_end']    = sim_reader.get('basis_x_end')
+                    model_error_args['basis_y_end']    = sim_reader.get('basis_y_end')
+                    self.setKLModelError(**model_error_args, use_lcg=use_lcg, xorwow_seed=xorwow_seed)
+
+    def setKLModelError(self, kl_decay=1.2, kl_scaling=1.0,
+                        include_cos=True, include_sin=True,
+                        basis_x_start = 1, basis_y_start = 1,
+                        basis_x_end = 10, basis_y_end = 10,
+                        use_lcg=False, xorwow_seed = None,
+                        block_width=16, block_height=16):
+        self.model_error = ModelErrorKL.ModelErrorKL.fromsim(self,
+                                                             kl_decay=kl_decay, kl_scaling=kl_scaling,
+                                                             include_cos=include_cos, include_sin=include_sin,
+                                                             basis_x_start=basis_x_start, basis_y_start=basis_y_start,
+                                                             basis_x_end=basis_x_end, basis_y_end=basis_y_end,
+                                                             use_lcg=use_lcg, xorwow_seed=xorwow_seed,
+                                                             block_width=block_width, block_height=block_height)
+ 
+    def setModelErrorFromFile(self, filename, use_lcg=False, xorwow_seed = None):
+        raise("Not implemented")
 
     def drifterStep(self, dt):
         # Evolve drifters
@@ -791,18 +692,6 @@ class CDKLM16(Simulator.Simulator):
                            h_out.data.gpudata, h_out.pitch, \
                            hu_out.data.gpudata, hu_out.pitch, \
                            hv_out.data.gpudata, hv_out.pitch, \
-                           self.accF1east.data.gpudata, \
-                           self.accF2east.data.gpudata, \
-                           self.accF3east.data.gpudata, \
-                           self.accF1west.data.gpudata, \
-                           self.accF2west.data.gpudata, \
-                           self.accF3west.data.gpudata, \
-                           self.accG1north.data.gpudata, \
-                           self.accG2north.data.gpudata, \
-                           self.accG3north.data.gpudata, \
-                           self.accG1south.data.gpudata, \
-                           self.accG2south.data.gpudata, \
-                           self.accG3south.data.gpudata, \
                            self.bathymetry.Bi.data.gpudata, self.bathymetry.Bi.pitch, \
                            self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
                            self.bathymetry.mask_value,
@@ -811,9 +700,17 @@ class CDKLM16(Simulator.Simulator):
                            boundary_conditions)
             
     
-    def perturbState(self, q0_scale=1):
-        if self.small_scale_perturbation:
-            self.small_scale_model_error.perturbSim(self, q0_scale=q0_scale)
+    def perturbState(self, perturbation_scale=1.0, update_random_field=True, q0_scale=1):
+        if not q0_scale == 1:
+            Warning("CDKLM16.perturbState argument 'q0_scale' will be deprecated. Please use 'perturbation_scale' instead")
+            amplitude_scale = q0_scale
+
+        if self.model_error is not None:
+            self.model_error.perturbSim(self, perturbation_scale=perturbation_scale, 
+                                        update_random_field=update_random_field)
+            
+    def perturbSimilarAs(self, otherSim):
+        self.model_error.perturbSimSimilarAs(self, modelError = otherSim.model_error)
     
     def applyBoundaryConditions(self):
         self.bc_kernel.boundaryCondition(self.gpu_stream, \
@@ -952,42 +849,6 @@ class CDKLM16(Simulator.Simulator):
     
     def downloadDt(self):
         return self.device_dt.download(self.gpu_stream)
-    
-    def downloadAccF1east(self):
-        return self.accF1east.download(self.gpu_stream)
-
-    def downloadAccF2east(self):
-        return self.accF2east.download(self.gpu_stream)
-
-    def downloadAccF3east(self):
-        return self.accF3east.download(self.gpu_stream)
-
-    def downloadAccF1west(self):
-        return self.accF1west.download(self.gpu_stream)
-
-    def downloadAccF2west(self):
-        return self.accF2west.download(self.gpu_stream)
-
-    def downloadAccF3west(self):
-        return self.accF3west.download(self.gpu_stream)
-
-    def downloadAccG1north(self):
-        return self.accG1north.download(self.gpu_stream)
-
-    def downloadAccG2north(self):
-        return self.accG2north.download(self.gpu_stream)
-
-    def downloadAccG3north(self):
-        return self.accG3north.download(self.gpu_stream)
-
-    def downloadAccG1south(self):
-        return self.accG1south.download(self.gpu_stream)
-
-    def downloadAccG2south(self):
-        return self.accG2south.download(self.gpu_stream)
-
-    def downloadAccG3south(self):
-        return self.accG3south.download(self.gpu_stream)
 
     def downloadGeoEqNorm(self):
         
