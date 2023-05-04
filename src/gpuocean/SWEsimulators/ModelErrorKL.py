@@ -474,7 +474,8 @@ class ModelErrorKL(object):
                                             land_mask_value
                                             )    
         
-    def perturbSimSimilarAs(self, simToPerturb, simSource=None, modelError=None, stream=None):
+    def perturbSimSimilarAs(self, simToPerturb, simSource=None, modelError=None, stream=None, 
+                            perturbation_scale=1.0):
 
         assert(simSource is not None or modelError is not None), "Please provide either simSource or modelError input arguments"
         assert(simSource is None or modelError is None), "Please provide only one of simSource or modelError, not both."
@@ -482,7 +483,7 @@ class ModelErrorKL(object):
         if simSource is not None:
             modelError = simSource.model_error
 
-        self.perturbSim(simToPerturb, 
+        self.perturbSim(simToPerturb, perturbation_scale=perturbation_scale,
                         random_numbers=modelError.random_numbers, 
                         roll_x_cos=modelError.roll_x_cos, roll_y_cos=modelError.roll_y_cos,
                         roll_x_sin=modelError.roll_x_sin, roll_y_sin=modelError.roll_y_sin,

@@ -569,7 +569,7 @@ class CDKLM16(Simulator.Simulator):
             
             # Perturb ocean state with model error
             if self.model_error is not None and apply_stochastic_term:
-                self.model_error.perturbSim(self)
+                self.perturbState()
                 
             # Apply boundary conditions
             self.bc_kernel.boundaryCondition(self.gpu_stream, \
@@ -653,6 +653,15 @@ class CDKLM16(Simulator.Simulator):
                                                              basis_x_end=basis_x_end, basis_y_end=basis_y_end,
                                                              use_lcg=use_lcg, xorwow_seed=xorwow_seed,
                                                              block_width=block_width, block_height=block_height)
+        
+    def setKLModelErrorSimilarAs(self, otherSim):
+        self.model_error = ModelErrorKL.ModelErrorKL.fromsim(self,
+                                                             kl_decay=otherSim.model_error.kl_decay, kl_scaling=otherSim.model_error.kl_scaling,
+                                                             include_cos=otherSim.model_error.include_cos, include_sin=otherSim.model_error.include_sin,
+                                                             basis_x_start=otherSim.model_error.basis_x_start, basis_y_start=otherSim.model_error.basis_y_start,
+                                                             basis_x_end=otherSim.model_error.basis_x_end, basis_y_end=otherSim.model_error.basis_y_end,
+                                                             use_lcg=otherSim.model_error.use_lcg, 
+                                                             block_width=otherSim.model_error.local_size[0], block_height=otherSim.model_error.local_size[1])
  
     def setModelErrorFromFile(self, filename, use_lcg=False, xorwow_seed = None):
         raise("Not implemented")
@@ -703,20 +712,20 @@ class CDKLM16(Simulator.Simulator):
     def perturbState(self, perturbation_scale=1.0, update_random_field=True, q0_scale=1):
         if not q0_scale == 1:
             Warning("CDKLM16.perturbState argument 'q0_scale' will be deprecated. Please use 'perturbation_scale' instead")
-            amplitude_scale = q0_scale
+            perturbation_scale = q0_scale
 
         if self.model_error is not None:
             self.model_error.perturbSim(self, perturbation_scale=perturbation_scale, 
                                         update_random_field=update_random_field)
             
-    def perturbSimilarAs(self, otherSim):
-        self.model_error.perturbSimSimilarAs(self, modelError = otherSim.model_error)
+    def perturbSimilarAs(self, otherSim, perturbation_scale=1.0):
+        self.model_error.perturbSimSimilarAs(self, modelError = otherSim.model_error, perturbation_scale=perturbation_scale)
     
     def applyBoundaryConditions(self):
         self.bc_kernel.boundaryCondition(self.gpu_stream, \
                         self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0)
     
-    def dataAssimilationStep(self, observation_time, model_error_final_step=True, write_now=True, courant_number=0.8):
+    def dataAssimilationStep(self, observation_time, otherSim=None, model_error_final_step=True, write_now=True, courant_number=0.8):
         """
         The model runs until self.t = observation_time - self.model_time_step with model error.
         If model_error_final_step is true, another stochastic model_time_step is performed, 
@@ -743,6 +752,8 @@ class CDKLM16(Simulator.Simulator):
 
         # Start by updating the timestep size.
         self.updateDt(courant_number=courant_number)
+        if otherSim: 
+            otherSim.updateDt(courant_number=courant_number)
             
         # Loop standard steps:
         for i in range(full_model_time_steps+1):
@@ -752,13 +763,21 @@ class CDKLM16(Simulator.Simulator):
             elif i == 0:
                 # Take the leftover step
                 self.step(leftover_step_size, apply_stochastic_term=False, write_now=False)
-                self.perturbState(q0_scale=np.sqrt(leftover_step_size/self.model_time_step))
+                self.perturbState(perturbation_scale=np.sqrt(leftover_step_size/self.model_time_step))
+                if otherSim:
+                    otherSim.step(leftover_step_size, apply_stochastic_term=False, write_now=False)
+                    otherSim.perturbSimilarAs(self, perturbation_scale=np.sqrt(leftover_step_size/self.model_time_step))
 
             else:
                 # Take standard steps
                 self.step(self.model_time_step, apply_stochastic_term=False, write_now=False)
                 if (i < full_model_time_steps) or model_error_final_step:
                     self.perturbState()
+                if otherSim:
+                    otherSim.step(self.model_time_step, apply_stochastic_term=False, write_now=False)
+                    if (i < full_model_time_steps) or model_error_final_step:
+                        otherSim.perturbSimilarAs(self)
+                    
                     
             self.total_time_steps += 1
             
