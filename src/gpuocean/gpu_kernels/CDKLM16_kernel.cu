@@ -74,94 +74,6 @@ inline float2 getNorth(const int i, const int j) {
     return make_float2(sinf(angle), cosf(angle));
 }
 
-
-/**
-  * Sample the textures in the context
-  * (the initialising Array-object is not stored,
-  * such that a work around is needed)
-  * NB! Inaccuracies along the boundary are inherited! 
-  *
-  * tex_code:
-  * 0 - angle_tex
-  * 1 - coriolis_f_tex
-  * 2 - windstress_X_current (NOTE: not original wind, but stress!)
-  * 3 - windstress_Y_current (NOTE: not original wind, but stress!)
-  */
-extern "C"{
-__global__ void get_texture(float* tex_ptr_, const int tex_code)
-{   
-
-    int row = blockIdx.x * blockDim.x + threadIdx.x;
-    int col = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if(row < NX+4 && col < NY+4)
-    {
-        int index = col * (NX+4) + row;
-        float* const tex_row = (float*) ((char*) tex_ptr_);
-        const float s = (row + 0.5f) / (NX+4.0f); // +0.5 to get values at cell centers
-        const float t = (col + 0.5f) / (NY+4.0f); // +0.5 to get values at cell centers
-        if (tex_code==0){
-            tex_row[index] = tex2D(angle_tex, s, t);
-        }
-        else if (tex_code==1){
-            tex_row[index] = tex2D(coriolis_f_tex, s, t);
-        }
-        else if (tex_code==2){
-            tex_row[index] = tex2D(windstress_X_current, s, t);
-        }
-        else if (tex_code==3){
-            tex_row[index] = tex2D(windstress_Y_current, s, t);
-        }
-    }
-
-}
-}
-
-/**
-  * Sample the textures in the context (see `"get_texture" above)
-  *
-  * x0 - left coordinate in [0,1] horizontal-direction
-  * x1 - right coordinate in [0,1] horizontal-direction
-  * y0 - bottom coordinate in [0,1] vertical-direction
-  * y1 - top coordinate in [0,1] vertical-direction
-  *
-  * x0, x1, y0, y1 are interpreted as cell centers
-  */
-
-extern "C"{
-    __global__ void sample_texture(float* tex_ptr_, const int tex_code, 
-                                    const float x0, const float x1, const float y0, const float y1,
-                                    const int Nx, const int Ny)
-    {   
-        int row = blockIdx.x * blockDim.x + threadIdx.x;
-        int col = blockIdx.y * blockDim.y + threadIdx.y;
-    
-        if(row < Nx && col < Ny)
-        {
-            int index = col * Nx + row;
-            float* const tex_row = (float*) ((char*) tex_ptr_);
-            const float s = x0 + row * (x1-x0)/(Nx-1); // since x0 and x1 are cell centers, follows correction (Nx-1)
-            const float t = y0 + col * (y1-y0)/(Ny-1);
-            if (tex_code==0){
-                tex_row[index] = tex2D(angle_tex, s, t);
-            }
-            else if (tex_code==1){
-                tex_row[index] = tex2D(coriolis_f_tex, s, t);
-            }
-            else if (tex_code==2){
-                tex_row[index] = tex2D(windstress_X_current, s, t);
-            }
-            else if (tex_code==3){
-                tex_row[index] = tex2D(windstress_Y_current, s, t);
-            }
-        }
-    
-    }
-}
-
-
-
-
 // Q =[eta, u, v]
 __device__ float3 CDKLM16_F_func(const float3 Q, const float H) {
     float3 F;
@@ -201,7 +113,7 @@ __device__ float3 CDKLM16_flux(const float3 Qm, const float3 Qp, const float H_f
         cp = sqrtf(GRAV*hp); // sqrt(GRAV*h)
     }
 
-    // Contribution from minus cell
+    // Contribution from plus cell
     float3 Fm = make_float3(0.0f, 0.0f, 0.0f);
     float um = 0.0f;
     float cm = 0.0f;
@@ -569,20 +481,6 @@ __global__ void cdklm_swe_2D(
         float* hu1_ptr_, const int hu1_pitch_,
         float* hv1_ptr_, const int hv1_pitch_,
 
-        //Accumulated net flux accross global interfaces
-        float* accF1east_ptr_,
-        float* accF2east_ptr_,
-        float* accF3east_ptr_,
-        float* accF1west_ptr_,
-        float* accF2west_ptr_,
-        float* accF3west_ptr_,
-        float* accG1north_ptr_,
-        float* accG2north_ptr_,
-        float* accG3north_ptr_,
-        float* accG1south_ptr_,
-        float* accG2south_ptr_,
-        float* accG3south_ptr_,
-
         //Bathymery
         float* Hi_ptr_, const int Hi_pitch_,
         float* Hm_ptr_, const int Hm_pitch_,
@@ -829,36 +727,21 @@ __global__ void cdklm_swe_2D(
         const float coriolis_f_left    = coriolisF(ti-1,   tj);
         const float coriolis_f_right   = coriolisF(ti+1,   tj);
 
-        // net flux plus/east interface
-        const float3 Fip = computeFFaceFlux(
-                            tx+1, ty, bx, 
-                            R, Qx, Hi,
-                            coriolis_f_central, coriolis_f_right, 
-                            bc_east, bc_west,
-                            north);
-
-        // net flux minus/west interface
-        const float3 Fim = computeFFaceFlux(
-                            tx , ty, bx,  
-                            R, Qx, Hi,
-                            coriolis_f_left, coriolis_f_central, 
-                            bc_east, bc_west, 
-                            north);
-
-        // accumulate fluxes - to be used in flux correction step for multilevel simulations
-        if (ti == NX) {
-            accF1east_ptr_[tj] += Fip.x;
-            accF2east_ptr_[tj] += Fip.y;
-            accF3east_ptr_[tj] += Fip.z;
-        }
-        if (ti == 3) {
-            accF1west_ptr_[tj] += Fim.x;
-            accF2west_ptr_[tj] += Fim.y;
-            accF3west_ptr_[tj] += Fim.z;
-        }
-
         // Compute flux along x axis
-        flux_diff = (Fip-Fim) / DX;
+        flux_diff = (  
+                computeFFaceFlux(
+                    tx+1, ty, bx, 
+                    R, Qx, Hi,
+                    coriolis_f_central, coriolis_f_right, 
+                    bc_east, bc_west,
+                    north)
+                - 
+                computeFFaceFlux(
+                    tx , ty, bx,  
+                    R, Qx, Hi,
+                    coriolis_f_left, coriolis_f_central, 
+                    bc_east, bc_west, 
+                    north)) / DX;
     }
     __syncthreads();
     
@@ -941,38 +824,22 @@ __global__ void cdklm_swe_2D(
     { // scope
         const float coriolis_f_lower   = coriolisF(  ti, tj-1);
         const float coriolis_f_upper   = coriolisF(  ti, tj+1);
-
-        // net flux plus/north interface
-        const float3 Gip = computeGFaceFlux(
+    
+        //Compute fluxes along the y axis
+        flux_diff = flux_diff + 
+            (computeGFaceFlux(
                 tx, ty+1, by, 
                 R, Qx, Hi, 
                 coriolis_f_central, coriolis_f_upper, 
                 bc_north, bc_south, 
-                east);
-
-        // net flux minus/south interface
-        const float3 Gim = computeGFaceFlux(
+                east)
+            - 
+            computeGFaceFlux(
                 tx, ty, by,  
                 R, Qx, Hi, 
                 coriolis_f_lower, coriolis_f_central, 
                 bc_north, bc_south, 
-                east);
-
-        // accumulate fluxes - to be used in flux correction step for multilevel simulations
-        if (tj == NY) {
-            accG1north_ptr_[ti] += Gip.x;
-            accG2north_ptr_[ti] += Gip.y;
-            accG3north_ptr_[ti] += Gip.z;
-        }
-        if (tj == 3) {
-            accG1south_ptr_[ti] += Gim.x;
-            accG2south_ptr_[ti] += Gim.y;
-            accG3south_ptr_[ti] += Gim.z;
-        }
-
-        //Compute fluxes along the y axis
-        flux_diff = flux_diff + (Gip-Gim) / DY;
-
+                east)) / DY;
         __syncthreads();
     }
 
