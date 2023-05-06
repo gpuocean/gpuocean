@@ -80,6 +80,21 @@ class MultiLevelOceanEnsemble:
                 self.ML_ensemble[l_idx][0][e].step(t, **kwargs)
                 self.ML_ensemble[l_idx][1][e].step(t, **kwargs)
 
+    def stepToObservation(self, obs_time):
+        """
+        Evolves the ensemble forward to the given obs_time
+        (see also CDKLM16.dataAssimilationStep)
+
+        obs_time - float, end time for simulations
+        """
+
+        for e in range(self.Nes[0]):
+            self.ML_ensemble[0][e].dataAssimilationStep(obs_time)
+
+        for l_idx in range(1, self.numLevels):
+            for e in range(self.Nes[l_idx]):
+                self.ML_ensemble[l_idx][0][e].dataAssimilationStep(obs_time, otherSim=self.ML_ensemble[l_idx][1][e])
+
     
     def download(self, interior_domain_only=True):
         """"State of the ML ensemble as list of np-arrays per level
@@ -192,6 +207,8 @@ class MultiLevelOceanEnsemble:
         
         return ML_Fys
 
+    def MSE(self, truth, obs_locations=None, R=None):
+        raise NotImplementedError("This function has still to be implemented!")
 
     def cleanUp(self):
         for e in range(self.Nes[0]):
