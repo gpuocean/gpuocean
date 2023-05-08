@@ -207,8 +207,63 @@ class MultiLevelOceanEnsemble:
         
         return ML_Fys
 
+
     def MSE(self, truth, obs_locations=None, R=None):
-        raise NotImplementedError("This function has still to be implemented!")
+        """
+        Returning MSE of ensemble vs true observation at set of locations. 
+        The MSE is herein defined as E[(X-y)^2] and the ML-estimator used for the approiximation.
+
+        truth - simulator on the finest level
+        obs_locations - list of indices for observation, e.g. [[100, 100]] or [[100, 100], [200,200]]
+        """
+
+        assert truth.nx == self.nxs[-1], "Truth doesnt match finest level"
+        assert truth.ny == self.nys[-1], "Truth doesnt match finest level"
+        assert truth.dx == self.dxs[-1], "Truth doesnt match finest level"
+        assert truth.dy == self.dys[-1], "Truth doesnt match finest level"
+
+        ML_state = self.download()
+        true_eta, true_hu, true_hv = truth.download(interior_domain_only=True)
+
+        MSEs = []
+        for [Hx, Hy] in obs_locations:
+
+            # Extracting true values
+            true_values = np.array([true_eta[Hy, Hx], true_hu[Hy, Hx], true_hv[Hy, Hx]]) 
+            if R is not None:
+                true_values += np.random.normal(0,R)
+
+            # observation indices on right level
+            Xs = np.linspace(0, self.nxs[-1] * self.dxs[-1], self.nxs[-1])
+            Ys = np.linspace(0, self.nys[-1] * self.dys[-1], self.nys[-1])
+            X, Y = np.meshgrid(Xs, Ys)
+
+            lvl_Xs = np.linspace(0, self.nxs[0] * self.dxs[0], self.nxs[0])
+            lvl_Ys = np.linspace(0, self.nys[0] * self.dys[0], self.nys[0])
+            lvl_X, lvl_Y = np.meshgrid(lvl_Xs, lvl_Ys)
+
+            obs_idxs = np.unravel_index(np.argmin((lvl_X - X[0,Hx])**2 + (lvl_Y - Y[Hy,0])**2), ML_state[0][0].shape[:-1])
+
+            MSE = np.average((ML_state[0][:,obs_idxs[0],obs_idxs[1],:] -true_values[:,np.newaxis])**2, axis=-1)
+
+            for l_idx in range(1,len(self.Nes)):
+                lvl_Xs0 = np.linspace(0, self.nxs[l_idx] * self.dxs[l_idx], self.nxs[l_idx])
+                lvl_Ys0 = np.linspace(0, self.nys[l_idx] * self.dys[l_idx], self.nys[l_idx])
+                lvl_X0, lvl_Y0 = np.meshgrid(lvl_Xs0, lvl_Ys0)
+                obs_idxs0 = np.unravel_index(np.argmin((lvl_X0 - X[0,Hx])**2 + (lvl_Y0 - Y[Hy,0])**2), ML_state[l_idx][0][0].shape[:-1])
+
+                lvl_Xs1 = np.linspace(0, self.nxs[l_idx-1] * self.dxs[l_idx-1], self.nxs[l_idx-1])
+                lvl_Ys1 = np.linspace(0, self.nys[l_idx-1] * self.dys[l_idx-1], self.nys[l_idx-1])
+                lvl_X1, lvl_Y1 = np.meshgrid(lvl_Xs1, lvl_Ys1)
+                obs_idxs1 = np.unravel_index(np.argmin((lvl_X1 - X[0,Hx])**2 + (lvl_Y1 - Y[Hy,0])**2), ML_state[l_idx][1][0].shape[:-1])
+
+                MSE += np.average((ML_state[l_idx][0][:,obs_idxs0[0],obs_idxs0[1],:] - true_values[:,np.newaxis])**2, axis=-1) \
+                        - np.average((ML_state[l_idx][1][:,obs_idxs1[0],obs_idxs1[1],:] - true_values[:,np.newaxis])**2, axis=-1)
+                
+            MSEs.append(MSE)
+        
+        return MSEs
+    
 
     def cleanUp(self):
         for e in range(self.Nes[0]):
