@@ -69,6 +69,8 @@ class MultiLevelOceanEnsemble:
                 self.dxs[l_idx] = ML_ensemble[l_idx][0][0].dx
                 self.dys[l_idx] = ML_ensemble[l_idx][0][0].dy
 
+        self.t = self.ML_ensemble[0][0].t
+
 
     def step(self, t, **kwargs):
         """ evolving the entire ML ensemble by time t """
@@ -79,6 +81,8 @@ class MultiLevelOceanEnsemble:
             for e in range(self.Nes[l_idx]):
                 self.ML_ensemble[l_idx][0][e].step(t, **kwargs)
                 self.ML_ensemble[l_idx][1][e].step(t, **kwargs)
+
+        self.t = self.ML_ensemble[0][0].t
 
     def stepToObservation(self, obs_time):
         """
@@ -94,6 +98,8 @@ class MultiLevelOceanEnsemble:
         for l_idx in range(1, self.numLevels):
             for e in range(self.Nes[l_idx]):
                 self.ML_ensemble[l_idx][0][e].dataAssimilationStep(obs_time, otherSim=self.ML_ensemble[l_idx][1][e])
+        
+        self.t = self.ML_ensemble[0][0].t
 
     
     def download(self, interior_domain_only=True):
