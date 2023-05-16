@@ -39,6 +39,7 @@ class MLEnKFOcean:
         Ys = np.linspace(0, MLOceanEnsemble.nys[-1] * MLOceanEnsemble.dys[-1], MLOceanEnsemble.nys[-1])
         self.X, self.Y = np.meshgrid(Xs, Ys)
 
+        # Keep field information per level
         self.lvl_X, self.lvl_Y = [], []
         for l_idx in range(len(MLOceanEnsemble.Nes)):
             lvl_Xs = np.linspace(0, MLOceanEnsemble.nxs[l_idx] * MLOceanEnsemble.dxs[l_idx], MLOceanEnsemble.nxs[l_idx])
@@ -49,7 +50,14 @@ class MLEnKFOcean:
 
 
     def GCweights(self, x, y, r):
-        """"Gasparin Cohn weights around indices Hx, Hy with radius r"""
+        """"
+        Gasparin Cohn weights 
+        
+        NOTE: He not the indices but physical locations are function arguments
+        x - x-location (m) of the kernel center
+        y - y-location (m) of the kernel center
+        r - radius (m)
+        """
 
         dists = np.sqrt((self.X - x)**2 + (self.Y - y)**2)
 
@@ -65,7 +73,9 @@ class MLEnKFOcean:
         return GC
 
         
-    def assimilate(self, MLOceanEnsemble, obs, Hx, Hy, R, r = 2.5*1e7, relax_factor = 1.0, obs_var=slice(0,3), min_localisation_level=1):
+    def assimilate(self, MLOceanEnsemble, obs, Hx, Hy, R, 
+                   r = 2.5*1e7, relax_factor = 1.0, obs_var=slice(0,3), min_localisation_level=1,
+                   precomp_GC = None):
         """
         Returning the posterior state after assimilating observation into multi-level ensemble
         after appyling MLEnKF
@@ -92,6 +102,7 @@ class MLEnKFOcean:
         numLevels = MLOceanEnsemble.numLevels
 
         # Observation indices per level: 
+        # NOTE: For factor-2 scalings, this can be simplified
         obs_idxs = [list(np.unravel_index(np.argmin((self.lvl_X[0] - self.X[0,Hx])**2 + (self.lvl_Y[0] - self.Y[Hy,0])**2), ML_state[0][0].shape[:-1]))]
         for l_idx in range(1, len(Nes)):
             obs_idxs0 = np.unravel_index(np.argmin((self.lvl_X[l_idx]   - self.X[0,Hx])**2 + (self.lvl_Y[l_idx]   - self.Y[Hy,0])**2), ML_state[l_idx][0][0].shape[:-1])
@@ -105,19 +116,25 @@ class MLEnKFOcean:
             obs_varN = (obs_var.stop - obs_var.start)/obs_var.step
 
         ## Localisation kernel
-        obs_x = self.X[0,Hx]
-        obs_y = self.Y[Hy,0]
+        if precomp_GC is None:
+            obs_x = self.X[0,Hx]
+            obs_y = self.Y[Hy,0]
 
-        GC = self.GCweights(obs_x, obs_y, r)
+            GC = self.GCweights(obs_x, obs_y, r)
+        else:
+            GC = precomp_GC
 
 
-        ## Perturbations
+        ## Perturbations for observation
+        # On higher levels, the partner simulations share the same perturbation
         ML_perts = []
         for l_idx in range(numLevels):
             ML_perts.append(np.random.multivariate_normal(np.zeros(3)[obs_var], np.diag(R[obs_var]), size=Nes[l_idx]))
 
 
         ## Analysis
+        # Constructing \Sigma_XY: 
+        # First, 0-level and then loop over higher levels
         ML_XY = np.zeros((np.prod(ML_state[-1][0].shape[:-1]),obs_varN))
 
         X0 = ML_state[0]
@@ -162,6 +179,7 @@ class MLEnKFOcean:
                         )
                     ).reshape(X0mean.shape + (obs_varN,)).repeat(2**(numLevels-l_idx-1),1).repeat(2**(numLevels-l_idx-1),2).reshape(-1,ML_XY.shape[-1])
 
+        # Calculating Kalman gain from \Sigma_XY
         ML_HXY = ML_XY.reshape(ML_state[-1][0].shape[:-1] + (obs_varN,))[obs_var,obs_idxs[-1][0][0],obs_idxs[-1][0][1],:]
         ML_YY  = ML_HXY + np.diag(R[obs_var])
 
@@ -169,6 +187,8 @@ class MLEnKFOcean:
 
 
         ## Update
+        # Projecting Kalman gain and use update formula
+        # First, 0-level then loop over higher levels
         ML_state[0] = ML_state[0] + (
                             block_reduce( ML_K.reshape(ML_state[-1][0].shape[:-1]+ (obs_varN,)),  block_size=(1,2**(numLevels-1), 2**(numLevels-1), 1), func=np.mean).reshape((np.prod(ML_state[0].shape[:-1]),obs_varN)) 
                             @ (obs[obs_var,np.newaxis] - ML_state[0][obs_var,obs_idxs[0][0],obs_idxs[0][1]] - ML_perts[0].T)
@@ -184,6 +204,7 @@ class MLEnKFOcean:
                                     @ (obs[obs_var,np.newaxis] - ML_state[l_idx][1][obs_var,obs_idxs[l_idx][1][0],obs_idxs[l_idx][1][1]] - ML_perts[l_idx].T)
                                 ).reshape(ML_state[l_idx][1].shape)
 
+        # Uploading update state to simulators
         MLOceanEnsemble.upload(ML_state)
 
         return ML_K
