@@ -753,7 +753,7 @@ class CDKLM16(Simulator.Simulator):
 
         # Start by updating the timestep size.
         self.updateDt(courant_number=courant_number)
-        if otherSim: 
+        if otherSim is not None: 
             otherSim.updateDt(courant_number=courant_number)
             
         # Loop standard steps:
@@ -765,7 +765,7 @@ class CDKLM16(Simulator.Simulator):
                 # Take the leftover step
                 self.step(leftover_step_size, apply_stochastic_term=False, write_now=False)
                 self.perturbState(perturbation_scale=np.sqrt(leftover_step_size/self.model_time_step))
-                if otherSim:
+                if otherSim is not None:
                     otherSim.step(leftover_step_size, apply_stochastic_term=False, write_now=False)
                     otherSim.perturbSimilarAs(self, perturbation_scale=np.sqrt(leftover_step_size/self.model_time_step))
 
@@ -774,7 +774,7 @@ class CDKLM16(Simulator.Simulator):
                 self.step(self.model_time_step, apply_stochastic_term=False, write_now=False)
                 if (i < full_model_time_steps) or model_error_final_step:
                     self.perturbState()
-                if otherSim:
+                if otherSim is not None:
                     otherSim.step(self.model_time_step, apply_stochastic_term=False, write_now=False)
                     if (i < full_model_time_steps) or model_error_final_step:
                         otherSim.perturbSimilarAs(self)
