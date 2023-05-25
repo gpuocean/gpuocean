@@ -91,6 +91,7 @@ class MLEnKFOcean:
                             obs_var = slice(1,3) # hu and hv
                             obs_var = slice(0,3) # eta, hu, hv
         min_localisation_level  - int, this and all higher levels are localised in the update
+        precomp_GC      - ndarray of size (ny, nx) with weights. OBS! Should match Hx, Hy! 
         """
 
         ## Prior        
