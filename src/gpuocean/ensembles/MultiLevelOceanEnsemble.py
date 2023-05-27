@@ -180,7 +180,7 @@ class MultiLevelOceanEnsemble:
             # Extracting true values
             true_values = np.array([true_eta[Hy, Hx], true_hu[Hy, Hx], true_hv[Hy, Hx]]) 
             if R is not None:
-                true_values += np.random.normal(0,R)
+                true_values += np.random.multivariate_normal(np.zeros(3), np.diag(R))
 
             # observation indices on right level
             Xs = np.linspace(0, self.nxs[-1] * self.dxs[-1], self.nxs[-1])
@@ -193,7 +193,11 @@ class MultiLevelOceanEnsemble:
 
             obs_idxs = np.unravel_index(np.argmin((lvl_X - X[0,Hx])**2 + (lvl_Y - Y[Hy,0])**2), ML_state[0][0].shape[:-1])
 
-            ML_Fy = 1/self.Nes[0] * np.sum(ML_state[0][:,obs_idxs[0],obs_idxs[1],:] < true_values[:,np.newaxis], axis=1)
+            ensemble_values = ML_state[0][:,obs_idxs[0],obs_idxs[1],:]
+            if R is not None: 
+                ensemble_values += np.random.multivariate_normal(np.zeros(3), np.diag(R), size=self.Nes[0]).T
+
+            ML_Fy = 1/self.Nes[0] * np.sum(ensemble_values < true_values[:,np.newaxis], axis=1)
 
             for l_idx in range(1,len(self.Nes)):
                 lvl_Xs0 = np.linspace(0, self.nxs[l_idx] * self.dxs[l_idx], self.nxs[l_idx])
@@ -206,15 +210,22 @@ class MultiLevelOceanEnsemble:
                 lvl_X1, lvl_Y1 = np.meshgrid(lvl_Xs1, lvl_Ys1)
                 obs_idxs1 = np.unravel_index(np.argmin((lvl_X1 - X[0,Hx])**2 + (lvl_Y1 - Y[Hy,0])**2), ML_state[l_idx][1][0].shape[:-1])
 
-                ML_Fy += 1/self.Nes[l_idx] * np.sum(1 * (ML_state[l_idx][0][:,obs_idxs0[0],obs_idxs0[1],:] < true_values[:,np.newaxis]) 
-                                            - 1 * (ML_state[l_idx][1][:,obs_idxs1[0],obs_idxs1[1],:] < true_values[:,np.newaxis]), axis=1)
+                ensemble_values0 = ML_state[l_idx][0][:,obs_idxs0[0],obs_idxs0[1],:]
+                ensemble_values1 = ML_state[l_idx][1][:,obs_idxs1[0],obs_idxs1[1],:]
+                if R is not None:
+                    lvl_perts = np.random.multivariate_normal(np.zeros(3), np.diag(R), size=self.Nes[l_idx]).T
+                    ensemble_values0 += lvl_perts
+                    ensemble_values1 += lvl_perts
+
+                ML_Fy += 1/self.Nes[l_idx] * np.sum(1 * (ensemble_values0 < true_values[:,np.newaxis]) 
+                                            - 1 * (ensemble_values1 < true_values[:,np.newaxis]), axis=1)
                 
             ML_Fys.append(ML_Fy)
         
         return ML_Fys
 
 
-    def MSE(self, truth, obs_locations=None, R=None):
+    def MSE(self, truth, obs_locations=None):
         """
         Returning MSE of ensemble vs true observation at set of locations. 
         The MSE is herein defined as E[(X-y)^2] and the ML-estimator used for the approiximation.
@@ -236,8 +247,6 @@ class MultiLevelOceanEnsemble:
 
             # Extracting true values
             true_values = np.array([true_eta[Hy, Hx], true_hu[Hy, Hx], true_hv[Hy, Hx]]) 
-            if R is not None:
-                true_values += np.random.normal(0,R)
 
             # observation indices on right level
             Xs = np.linspace(0, self.nxs[-1] * self.dxs[-1], self.nxs[-1])
