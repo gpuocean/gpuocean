@@ -124,7 +124,8 @@ class MLEnKFOcean:
         if precomp_GC is None:
             GC = self.GCweights(obs_x, obs_y, r)
         else:
-            assert GC[obs_idxs[-1][0][0], obs_idxs[-1][0][1]] > 0.95, "The precomputed weights do not watch the observation location!"
+            assert precomp_GC.shape == (MLOceanEnsemble.nys[-1], MLOceanEnsemble.nxs[-1]), "The precomputed weights do not match the dimensions!"
+            assert precomp_GC[obs_idxs[-1][0][0], obs_idxs[-1][0][1]] > 0.95, "The precomputed weights do not match the observation location!"
             GC = precomp_GC
 
 

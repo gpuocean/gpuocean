@@ -158,6 +158,17 @@ class MultiLevelOceanEnsemble:
             MLest += (func(ML_state[l_idx][0], axis=-1, **kwargs) - func(ML_state[l_idx][1], axis=-1, **kwargs).repeat(2,1).repeat(2,2)).repeat(2**(self.numLevels-l_idx-1),1).repeat(2**(self.numLevels-l_idx-1),2)
 
         return MLest
+    
+
+    def obsLoc2obsIdx(self, obs_x, obs_y):
+        """"""
+        Xs = np.linspace(self.dxs[-1]/2, (self.nxs[-1] - 1/2) * self.dxs[-1], self.nxs[-1])
+        Ys = np.linspace(self.dys[-1]/2, (self.nys[-1] - 1/2) * self.dys[-1], self.nys[-1])
+
+        Hx = ((Xs - obs_x)**2).argmin()
+        Hy = ((Ys - obs_y)**2).argmin()
+
+        return Hx, Hy
 
     def rank(self, truth, obs_locations, R=None):
         """
