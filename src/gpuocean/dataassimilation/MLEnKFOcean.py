@@ -34,32 +34,31 @@ class MLEnKFOcean:
 
     def __init__(self, MLOceanEnsemble):
 
-        # Keep field information
-        Xs = np.linspace(0, MLOceanEnsemble.nxs[-1] * MLOceanEnsemble.dxs[-1], MLOceanEnsemble.nxs[-1])
-        Ys = np.linspace(0, MLOceanEnsemble.nys[-1] * MLOceanEnsemble.dys[-1], MLOceanEnsemble.nys[-1])
+        # Keep field information (cell centers)
+        Xs = np.linspace(0.5*MLOceanEnsemble.dxs[-1], (MLOceanEnsemble.nxs[-1] - 0.5) * MLOceanEnsemble.dxs[-1], MLOceanEnsemble.nxs[-1])
+        Ys = np.linspace(0.5*MLOceanEnsemble.dys[-1], (MLOceanEnsemble.nys[-1] - 0.5) * MLOceanEnsemble.dys[-1], MLOceanEnsemble.nys[-1])
         self.X, self.Y = np.meshgrid(Xs, Ys)
 
         # Keep field information per level
         self.lvl_X, self.lvl_Y = [], []
         for l_idx in range(len(MLOceanEnsemble.Nes)):
-            lvl_Xs = np.linspace(0, MLOceanEnsemble.nxs[l_idx] * MLOceanEnsemble.dxs[l_idx], MLOceanEnsemble.nxs[l_idx])
-            lvl_Ys = np.linspace(0, MLOceanEnsemble.nys[l_idx] * MLOceanEnsemble.dys[l_idx], MLOceanEnsemble.nys[l_idx])
+            lvl_Xs = np.linspace(0.5*MLOceanEnsemble.dxs[l_idx], (MLOceanEnsemble.nxs[l_idx] - 0.5) * MLOceanEnsemble.dxs[l_idx], MLOceanEnsemble.nxs[l_idx])
+            lvl_Ys = np.linspace(0.5*MLOceanEnsemble.dys[l_idx], (MLOceanEnsemble.nys[l_idx] - 0.5) * MLOceanEnsemble.dys[l_idx], MLOceanEnsemble.nys[l_idx])
             lvl_X, lvl_Y = np.meshgrid(lvl_Xs, lvl_Ys)
             self.lvl_X.append(lvl_X)
             self.lvl_Y.append(lvl_Y)
 
 
-    def GCweights(self, x, y, r):
+    def GCweights(self, obs_x, obs_y, r):
         """"
         Gasparin Cohn weights 
         
-        NOTE: He not the indices but physical locations are function arguments
-        x - x-location (m) of the kernel center
-        y - y-location (m) of the kernel center
-        r - radius (m)
+        obs_x   - x-location (m) of the kernel center
+        obs_y   - y-location (m) of the kernel center
+        r       - radius (m)
         """
 
-        dists = np.sqrt((self.X - x)**2 + (self.Y - y)**2)
+        dists = np.sqrt((self.X - obs_x)**2 + (self.Y - obs_y)**2)
 
         GC = np.zeros_like(dists)
         for i in range(dists.shape[0]):
@@ -73,7 +72,7 @@ class MLEnKFOcean:
         return GC
 
         
-    def assimilate(self, MLOceanEnsemble, obs, Hx, Hy, R, 
+    def assimilate(self, MLOceanEnsemble, obs, obs_x, obs_y, R, 
                    r = 2.5*1e7, relax_factor = 1.0, obs_var=slice(0,3), min_localisation_level=1,
                    precomp_GC = None):
         """
@@ -82,7 +81,7 @@ class MLEnKFOcean:
 
         MLOceanEnsemble - MultiLevelOceanEnsemble in prior state
         obs             - ndarray of size (3,) with true values (eta, hu, hv) 
-        Hx, Hy          - int's with observation indices (on finest level)
+        obs_x, obs_y    - float with observation location (m) (on finest level measured from lower left corner)
         R               - ndarray of size (3,) with observation noises per coordinate
         r               - float > 0, localisation radius
         relax_factor    - float in range [0, 1.0], relaxation factor for the weighting in the localisation
@@ -91,8 +90,13 @@ class MLEnKFOcean:
                             obs_var = slice(1,3) # hu and hv
                             obs_var = slice(0,3) # eta, hu, hv
         min_localisation_level  - int, this and all higher levels are localised in the update
-        precomp_GC      - ndarray of size (ny, nx) with weights. OBS! Should match Hx, Hy! 
+        precomp_GC      - ndarray of size (ny, nx) with weights. OBS! Should match obs_x, obs_y! 
         """
+
+        # Check that obs_x and obs_y are NOT integer types 
+        # (as this is indicator that those are indices as in earlier implementation)
+        assert not isinstance(obs_x, (np.integer, int)), "This should be physical distance, not index"
+        assert not isinstance(obs_y, (np.integer, int)), "This should be physical distance, not index"
 
         ## Prior        
         ML_state = MLOceanEnsemble.download()
@@ -104,10 +108,10 @@ class MLEnKFOcean:
 
         # Observation indices per level: 
         # NOTE: For factor-2 scalings, this can be simplified
-        obs_idxs = [list(np.unravel_index(np.argmin((self.lvl_X[0] - self.X[0,Hx])**2 + (self.lvl_Y[0] - self.Y[Hy,0])**2), ML_state[0][0].shape[:-1]))]
+        obs_idxs = [list(np.unravel_index(np.argmin((self.lvl_X[0] - obs_x)**2 + (self.lvl_Y[0] - obs_y)**2), ML_state[0][0].shape[:-1]))]
         for l_idx in range(1, len(Nes)):
-            obs_idxs0 = np.unravel_index(np.argmin((self.lvl_X[l_idx]   - self.X[0,Hx])**2 + (self.lvl_Y[l_idx]   - self.Y[Hy,0])**2), ML_state[l_idx][0][0].shape[:-1])
-            obs_idxs1 = np.unravel_index(np.argmin((self.lvl_X[l_idx-1] - self.X[0,Hx])**2 + (self.lvl_Y[l_idx-1] - self.Y[Hy,0])**2), ML_state[l_idx][1][0].shape[:-1])
+            obs_idxs0 = np.unravel_index(np.argmin((self.lvl_X[l_idx]   - obs_x)**2 + (self.lvl_Y[l_idx]   - obs_y)**2), ML_state[l_idx][0][0].shape[:-1])
+            obs_idxs1 = np.unravel_index(np.argmin((self.lvl_X[l_idx-1] - obs_x)**2 + (self.lvl_Y[l_idx-1] - obs_y)**2), ML_state[l_idx][1][0].shape[:-1])
             obs_idxs.append([list(obs_idxs0), list(obs_idxs1)])
 
         # Number of observed variables
@@ -118,11 +122,9 @@ class MLEnKFOcean:
 
         ## Localisation kernel
         if precomp_GC is None:
-            obs_x = self.X[0,Hx]
-            obs_y = self.Y[Hy,0]
-
             GC = self.GCweights(obs_x, obs_y, r)
         else:
+            assert GC[obs_idxs[-1][0][0], obs_idxs[-1][0][1]] > 0.95, "The precomputed weights do not watch the observation location!"
             GC = precomp_GC
 
 
