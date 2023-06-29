@@ -26,6 +26,7 @@ import numpy as np
 import scipy
 
 from skimage.measure import block_reduce
+from scipy.spatial.distance import cdist
 
 class MLEnKFOcean:
     """
@@ -48,17 +49,30 @@ class MLEnKFOcean:
             self.lvl_X.append(lvl_X)
             self.lvl_Y.append(lvl_Y)
 
+        self.xdim = MLOceanEnsemble.dxs[-1] * MLOceanEnsemble.nxs[-1]
+        self.ydim = MLOceanEnsemble.dys[-1] * MLOceanEnsemble.nys[-1]
+
 
     def GCweights(self, obs_x, obs_y, r):
         """"
-        Gasparin Cohn weights 
+        Gasparin Cohn weights (periodic BC)
         
         obs_x   - x-location (m) of the kernel center
         obs_y   - y-location (m) of the kernel center
         r       - radius (m)
         """
 
-        dists = np.sqrt((self.X - obs_x)**2 + (self.Y - obs_y)**2)
+        def _calculate_distance(coord1, coord2, xdim, ydim):
+            distx = np.abs(coord1[0] - coord2[0])
+            disty = np.abs(coord1[1] - coord2[1])
+            distx = np.minimum(distx, xdim - distx)
+            disty = np.minimum(disty, ydim - disty)
+            return np.sqrt(distx**2 + disty**2)
+        
+        grid_coordinates = np.vstack((self.X.flatten(), self.Y.flatten())).T
+        dists = cdist(grid_coordinates, np.atleast_2d([obs_x, obs_y]),
+                        lambda u, v: _calculate_distance(u, v, self.xdim, self.ydim))
+        dists = dists.reshape(self.X.shape)
 
         GC = np.zeros_like(dists)
         for i in range(dists.shape[0]):
