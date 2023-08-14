@@ -290,7 +290,7 @@ class OceanStateNoise(object):
     def __del__(self):
         self.cleanUp()
      
-    def cleanUp(self):
+    def cleanUp(self, do_gc=True):
         if self.rng is not None:
             self.rng = None
         if self.seed is not None:
@@ -302,7 +302,8 @@ class OceanStateNoise(object):
         if self.reduction_buffer is not None:
             self.reduction_buffer.release()
         self.gpu_ctx = None
-        gc.collect()
+        if do_gc:
+            gc.collect()
         
     @classmethod
     def fromsim(cls, sim, soar_q0=None, soar_L=None, interpolation_factor=1, use_lcg=False, xorwow_seed=None,

@@ -235,7 +235,7 @@ class ModelErrorKL(object):
     def __del__(self):
         self.cleanUp()
      
-    def cleanUp(self):
+    def cleanUp(self, do_gc=True):
         if self.rng is not None:
             self.rng = None
         if self.seed is not None:
@@ -244,7 +244,8 @@ class ModelErrorKL(object):
             self.random_numbers.release()
         self.gpu_ctx = None
         self.boundary_conditions = None
-        gc.collect()
+        if do_gc:
+            gc.collect()
         
     @classmethod
     def fromsim(cls, sim, 
