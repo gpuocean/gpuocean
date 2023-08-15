@@ -38,7 +38,7 @@ from gpuocean.utils import OceanographicUtilities
 ##################################################3
 # BACKGROUND CANVASES
 
-def background_from_netcdf(source_url, figsize=None, t_idx=0, domain=[0, None, 0, None], 
+def background_from_netcdf(source_url, figsize=None, t_idx=0, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
                           cmap=plt.cm.Oranges, vmax=1, cbar=True, lonlat_diff=None, **kwargs):
     """
     Creating a background canvas from netCDF files
@@ -46,10 +46,13 @@ def background_from_netcdf(source_url, figsize=None, t_idx=0, domain=[0, None, 0
     source_url  - link or path to netCDF file
     t_idx       - time index (int) in netCDF file
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the netCDF file
+    drifter_doamin - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
     cbar        - boolean for adding colorbar or not
     lonlat_diff - float with distance between longitudes and latitudes that are plotted on top of the domain
+
+    Note: `domain` sets the x/y axis extent and is therefore different from `drifter_domain`
     """
     fig, ax = plt.subplots(1,1, figsize=figsize)    
 
@@ -124,20 +127,25 @@ def background_from_netcdf(source_url, figsize=None, t_idx=0, domain=[0, None, 0
 
         except Exception as e:
             raise e
+        
+    set_drifter_zoom(ax, extent, drifter_domain, dx, dy)
 
     return ax
 
 
-def background_from_sim(sim, figsize=None, domain=[0, None, 0, None], 
+def background_from_sim(sim, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
                           cmap=plt.cm.Oranges, vmax=1, cbar=True, **kwargs):
     """
     Creating a background canvas from sim
     
     sim - CDKLM simulator
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
+    drifter_doamin - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
     cbar        - boolean for adding colorbar or not
+
+    Note: `domain` sets the x/y axis extent and is therefore different from `drifter_domain`
     """
 
     fig, ax = plt.subplots(1,1, figsize=figsize)    
@@ -174,20 +182,25 @@ def background_from_sim(sim, figsize=None, domain=[0, None, 0, None],
 
         cb = plt.colorbar(im, cax=cbax)
         cb.set_label(label="velocity [$m/s^2$]")
-        
+
+    set_drifter_zoom(ax, extent, drifter_domain, dx, dy)
+
     return ax
 
 
 
-def background_from_ensemble(ensemble, figsize=None, domain=[0, None, 0, None], 
+def background_from_ensemble(ensemble, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
                           cmap=plt.cm.Oranges, vmax=1, **kwargs):
     """
     Creating a background canvas from sim
     
     ensemble    - OceanModelEnsemble
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
+    drifter_doamin - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
+
+    Note: `domain` sets the x/y axis extent and is therefore different from `drifter_domain`
     """
 
     fig, ax = plt.subplots(1,1, figsize=figsize)    
@@ -210,7 +223,9 @@ def background_from_ensemble(ensemble, figsize=None, domain=[0, None, 0, None],
     cmap.set_bad("grey", alpha=0.5)
 
     im = ax.imshow(np.ma.array(np.zeros_like(eta), mask=copy.copy(ensemble.particles[0].getLandMask())), origin="lower", cmap=cmap, vmin=0.0, vmax=vmax, extent=extent, **kwargs)
-        
+    
+    set_drifter_zoom(ax, extent, drifter_domain, dx, dy)
+
     return ax
 
 
@@ -234,7 +249,7 @@ def add_drifter_on_background(ax, obs, drifter_id=0, color="blue", label=None,
             ax.plot(path[:,0], path[:,1], c=color, **kwargs)
 
 
-def add_ensemnble_drifter_on_background(ax, ensemble_obs, drifter_id=0, 
+def add_ensemble_drifter_on_background(ax, ensemble_obs, drifter_id=0, 
                                         color="blue", start_t=None, end_t=None, 
                                         **kwargs):
 
@@ -249,3 +264,54 @@ def add_ensemnble_drifter_on_background(ax, ensemble_obs, drifter_id=0,
         for path in paths:
             ax.plot(path[:,0], path[:,1], c=color,**kwargs)
 
+
+##################################################3
+# UTILS TO GET DRIFTER DOMAIN
+
+def domain_around_drifter(obs, drifter_id, frame_in_km, domain=[0,None,0,None],
+                          start_t=None, end_t=None):
+
+    if start_t is None:
+        start_t = obs.obs_df["time"].iloc[0]
+    if end_t is None:
+        end_t = obs.obs_df["time"].iloc[-1]
+
+    dx = obs.domain_size_x/obs.nx
+    dy = obs.domain_size_y/obs.ny
+
+    paths = obs.get_drifter_path(drifter_id, start_t, end_t, in_km=True)
+
+    x0 = np.min(np.array([np.min(path[:,0]) for path in paths]))
+    x1 = np.max(np.array([np.max(path[:,0]) for path in paths]))
+
+    y0 = np.min(np.array([np.min(path[:,1]) for path in paths]))
+    y1 = np.max(np.array([np.max(path[:,1]) for path in paths]))
+
+
+    x0, x1 = np.maximum(0, x0-frame_in_km), np.minimum(x1+frame_in_km, obs.domain_size_x/1000)
+    y0, y1 = np.maximum(0, y0-frame_in_km), np.minimum(y1+frame_in_km, obs.domain_size_y/1000)
+
+    x0 = domain[0]*dx + x0
+    if domain[1] is not None:
+        x1 = domain[1]*dx + x1
+    y0 = domain[2]*dy + y0
+    if domain[3] is not None:
+        y1 = domain[3]*dy + y1 
+
+    drifter_domain = [np.floor(x0/(dx/1000)).astype(int), np.ceil(x1/(dx/1000)).astype(int), 
+                      np.floor(y0/(dy/1000)).astype(int), np.ceil(y1/(dy/1000)).astype(int)]
+
+    return drifter_domain
+
+
+def set_drifter_zoom(ax, extent, drifter_domain, dx, dy):
+    x0 = drifter_domain[0]*dx/1000
+    x1 = extent[1]
+    if drifter_domain[1] is not None:
+        x1 = drifter_domain[1]*dx/1000
+    y0 = drifter_domain[2]*dy/1000
+    y1 = extent[3]
+    if drifter_domain[3] is not None:
+        y1 = drifter_domain[3]*dy/1000
+    ax.set_xlim([x0, x1])
+    ax.set_ylim([y0, y1])
