@@ -71,6 +71,7 @@ class MultiLevelOceanEnsemble:
 
         self.t = self.ML_ensemble[0][0].t
 
+        
 
     def step(self, t, **kwargs):
         """ evolving the entire ML ensemble by time t """
@@ -131,6 +132,44 @@ class MultiLevelOceanEnsemble:
 
         return ML_state
 
+    def downloadVelocities(self, interior_domain_only=True):
+        """"State of the ML ensemble as list of np-arrays per level
+        
+        Return: list (length=number of levels), 
+        per level the size is  (2, ny, nx, Ne)
+        where the leftmost index is for u and v
+        """
+        ML_state = []
+
+        lvl_state = []
+
+        _, Hm_lvl0 = self.ML_ensemble[0][0].downloadBathymetry(interior_domain_only=interior_domain_only)
+        for e in range(self.Nes[0]):
+            eta, hu, hv = self.ML_ensemble[0][e].download(interior_domain_only=interior_domain_only)
+            u = hu/(eta + Hm_lvl0)
+            v = hv/(eta + Hm_lvl0)
+            lvl_state.append(np.array([u, v]))
+        ML_state.append(np.array(lvl_state))
+        ML_state[0] = np.moveaxis(ML_state[0], 0, -1)
+
+        for l_idx in range(1, self.numLevels):
+            lvl_state0 = []
+            lvl_state1 = []
+            _, Hm_lvl_state0 = self.ML_ensemble[l_idx][0][0].downloadBathymetry(interior_domain_only=interior_domain_only)
+            _, Hm_lvl_state1 = self.ML_ensemble[l_idx][1][0].downloadBathymetry(interior_domain_only=interior_domain_only)
+            for e in range(self.Nes[l_idx]):
+                eta0, hu0, hv0 = self.ML_ensemble[l_idx][0][e].download(interior_domain_only=interior_domain_only)
+                eta1, hu1, hv1 = self.ML_ensemble[l_idx][1][e].download(interior_domain_only=interior_domain_only)
+                lvl_state0.append(np.array([hu0/(eta0 + Hm_lvl_state0),
+                                            hv0/(eta0 + Hm_lvl_state0)]))
+                lvl_state1.append(np.array([hu1/(eta1 + Hm_lvl_state1),
+                                            hv1/(eta1 + Hm_lvl_state1)]))
+            ML_state.append([np.array(lvl_state0), np.array(lvl_state1)])
+            ML_state[l_idx][0] = np.moveaxis(ML_state[l_idx][0], 0, -1)
+            ML_state[l_idx][1] = np.moveaxis(ML_state[l_idx][1], 0, -1) 
+
+        return ML_state
+
 
     def upload(self, ML_state):
         """
@@ -147,17 +186,35 @@ class MultiLevelOceanEnsemble:
 
     def estimate(self, func, **kwargs):
         """
-        General ML-estimator for some statistic given as func
+        General ML-estimator for some statistic given as func, performed on the standard state [eta, hu, hv]
         func - function that calculates a single-level statistics, e.g. np.mean or np.var
         """
         ML_state = self.download()
+        return self._estimate_pure(ML_state, func, **kwargs)
 
+    def estimateVelocity(self, func,  **kwargs):
+        """
+        General ML-estimator for some statistic given as func, performed on the computed velocities [u, v]
+        func - function that calculates a single-level statistics, e.g. np.mean or np.var
+        The estimate is computed *with* ghost cells (as this will be used mainly for drifters)
+        """
+        ML_state = self.downloadVelocities()
+        return self._estimate_pure(ML_state, func, **kwargs)
+
+ 
+    def _estimate_pure(self, ML_state, func, **kwargs):
+        """
+        General ML-estimator for some statistics with any arbitrary state variables
+        """
+        
         MLest = np.zeros(ML_state[-1][0].shape[:-1])
         MLest += func(ML_state[0], axis=-1, **kwargs).repeat(2**(self.numLevels-1),1).repeat(2**(self.numLevels-1),2)
         for l_idx in range(1, self.numLevels):
             MLest += (func(ML_state[l_idx][0], axis=-1, **kwargs) - func(ML_state[l_idx][1], axis=-1, **kwargs).repeat(2,1).repeat(2,2)).repeat(2**(self.numLevels-l_idx-1),1).repeat(2**(self.numLevels-l_idx-1),2)
 
         return MLest
+    
+ 
     
 
     def obsLoc2obsIdx(self, obs_x, obs_y):
