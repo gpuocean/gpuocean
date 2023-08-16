@@ -21,11 +21,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-
-from matplotlib import pyplot as plt
-import matplotlib.gridspec as gridspec
 import numpy as np
-import time
 
 from gpuocean.utils import Common
 from gpuocean.drifters import BaseDrifterCollection
@@ -93,8 +89,98 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
         # Signature of copyto: np.copyto(dst, src)
     
     def setObservationPosition(self, newObservationPosition):
-        np.copyto(self.positions[-1,:], newObservationPosition)
+        np.copyto(self.positions[-1,:], newObservationPosition)        
+
+
+    ### Drift functions
+
+    def _interpolate(self, field, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor):
+            x0y0 = field[cell_id_y0, cell_id_x0]
+            x1y0 = field[cell_id_y0, cell_id_x1]
+            x0y1 = field[cell_id_y1, cell_id_x0]
+            x1y1 = field[cell_id_y1, cell_id_x1]
+
+            y0 = (1-x_factor)*x0y0 + x_factor * x1y0
+            y1 = (1-x_factor)*x0y1 + x_factor * x1y1
+
+            return (1-y_factor)*y0 + y_factor *y1
+
+    def driftFromVelocities(self, u_field, v_field, dx, dy, dt, 
+                   x_zero_ref=0, y_zero_ref=0, 
+                   u_stddev=None, v_stddev=None, sensitivity=1.0):
+        """
+        Step drifters using values for u and v directly.
+        Evolve all drifters with a simple Euler step.
+        Velocities are interpolated from the fields
         
+        {x,y}_zero_ref points to which cell has face values {x,y} = 0. 
+        {u,v}_stddev can be None, scalars or fields and provide a random walk
+        """
+
+        for i in range(self.getNumDrifters() + 1):
+            x, y = self.positions[i,0], self.positions[i,1]
+
+            cell_id_x = int(np.ceil(x/dx + x_zero_ref))
+            cell_id_y = int(np.ceil(y/dy + y_zero_ref))
+
+            frac_x = x/dx - np.floor(x/dx)
+            frac_y = y/dy - np.floor(y/dy)
+
+            cell_id_x0 = cell_id_x - 1 if frac_x < 0.5 else cell_id_x
+            x_factor = frac_x + 0.5 if frac_x < 0.5 else frac_x - 0.5; 
+            cell_id_x1 = cell_id_x0 + 1
+            cell_id_y0 = cell_id_y - 1 if frac_y < 0.5 else cell_id_y
+            y_factor = frac_y + 0.5 if frac_y < 0.5 else frac_y - 0.5; 
+            cell_id_y1 = cell_id_y0 + 1
+
+            u = self._interpolate(u_field, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor)
+            v = self._interpolate(v_field, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor)
+            
+            if u_stddev is None and v_stddev is None:
+                x = x + sensitivity*u*dt
+                y = y + sensitivity*v*dt
+            else:
+                u_stddev_val = 0.0
+                v_stddev_val = 0.0
+                if np.isscalar(u_stddev):
+                    u_stddev_val = u_stddev
+                else:
+                    u_stddev_val = self._interpolate(u_stddev, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor)
+
+                if np.isscalar(v_stddev):
+                    v_stddev_val = v_stddev
+                else:
+                    v_stddev_val = self._interpolate(v_stddev, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor)
+
+                x = x + sensitivity*(u*dt + u_stddev_val*np.random.normal(loc=0, scale=np.sqrt(dt)))
+                y = y + sensitivity*(v*dt + v_stddev_val*np.random.normal(loc=0, scale=np.sqrt(dt)))
+            
+            x, y = self._enforceBoundaryConditionsOnPosition(x,y)
+
+            self.positions[i,0] = x
+            self.positions[i,1] = y
+
+
+
+    def drift(self, eta, hu, hv, Hm, dx, dy, dt, 
+              x_zero_ref=0, y_zero_ref=0, 
+              u_stddev=None, v_stddev=None, sensitivity=1.0):
+        """
+        Evolve all drifters with a simple Euler step.
+        Velocities are interpolated from the fields
+        
+        {x,y}_zero_ref points to which cell has face values {x,y} = 0. 
+        {u,v}_stddev can be None, scalars or fields and provide a random walk
+        """
+
+        # Velocities from momentums
+        u_field = hu/(eta + Hm)
+        v_field = hv/(eta + Hm)
+
+        self.driftFromVelocities(u_field, v_field, dx, dy, dt, 
+                   x_zero_ref=x_zero_ref, y_zero_ref=y_zero_ref, 
+                   u_stddev=u_stddev, v_stddev=v_stddev, sensitivity=sensitivity)
+
     ### Implementation of other abstract functions
     
     def _enforceBoundaryConditionsOnPosition(self, x, y):
