@@ -22,12 +22,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import numpy as np
-import time
+import os
 import gc
 
 
-from gpuocean.ensembles import OceanModelEnsemble
-from gpuocean.utils import Common, WindStress, NetCDFInitialization
+from gpuocean.drifters import MLDrifterCollection
+from gpuocean.utils import Observation
 
 class MultiLevelOceanEnsemble:
     """
@@ -71,10 +71,19 @@ class MultiLevelOceanEnsemble:
 
         self.t = self.ML_ensemble[0][0].t
 
-        
+        # Variables related to drifters
+        self.drifters = None
+        self.drifterEnsembeSize = None
+        self.drift_dt = None
+        self.driftTrajectory = None
+        self.drift_sensitivity = None
+
 
     def step(self, t, **kwargs):
         """ evolving the entire ML ensemble by time t """
+        
+        
+        
         for e in range(self.Nes[0]):
             self.ML_ensemble[0][e].step(t, **kwargs)
 
@@ -93,13 +102,28 @@ class MultiLevelOceanEnsemble:
         obs_time - float, end time for simulations
         """
 
-        for e in range(self.Nes[0]):
-            self.ML_ensemble[0][e].dataAssimilationStep(obs_time)
+        t = self.ML_ensemble[0][0].t
 
-        for l_idx in range(1, self.numLevels):
-            for e in range(self.Nes[l_idx]):
-                self.ML_ensemble[l_idx][0][e].dataAssimilationStep(obs_time, otherSim=self.ML_ensemble[l_idx][1][e])
-        
+        while t < obs_time:
+            sim_end_time = obs_time
+            if self.drifters is not None:
+                dt = min(obs_time - t, self.drift_dt)
+                sim_end_time = t + dt
+
+            # evolve the ensemble
+            for e in range(self.Nes[0]):
+                self.ML_ensemble[0][e].dataAssimilationStep(sim_end_time)
+
+            for l_idx in range(1, self.numLevels):
+                for e in range(self.Nes[l_idx]):
+                    self.ML_ensemble[l_idx][0][e].dataAssimilationStep(sim_end_time, otherSim=self.ML_ensemble[l_idx][1][e])
+
+            # evolve drifters
+            if self.drifters is not None:
+                self.drift(dt)
+
+            t = sim_end_time
+
         self.t = self.ML_ensemble[0][0].t
 
     
@@ -347,6 +371,61 @@ class MultiLevelOceanEnsemble:
         
         return MSEs
     
+    ## Drifters
+
+    def attachDrifters(self, drifterEnsembleSize, numDrifters=None, 
+                       drifterPositions=None, drift_dt=60, drift_sensitivity=1.0):
+
+        assert(numDrifters is not None or drifterPositions is not None), "Please provide either numDrifters or drifterPositions"
+        assert(numDrifters is None or drifterPositions is None), "Both numDrifters and drifterPositions are given, please provide only one of them"
+
+        if numDrifters is None:
+            numDrifters = drifterPositions.shape[0]
+
+        self.drifters = MLDrifterCollection.MLDrifterCollection(numDrifters, drifterEnsembleSize, 
+                                                                boundaryConditions=self.ML_ensemble[0][0].boundary_conditions,
+                                                                domain_size_x=self.nxs[0]*self.dxs[0],
+                                                                domain_size_y=self.nys[0]*self.dys[0])
+        if drifterPositions is not None:
+            self.drifters.setDrifterPositions(drifterPositions)
+
+        assert(drift_dt >= self.ML_ensemble[0][0].model_time_step), " We require that the drift_dt ("+str(drift_dt)+") is larger than the mself.ML_ensemble[0][0].model_time_stepodel time step ("+str(self.ML_ensemble[0][0].model_time_step)+")"
+        self.drift_dt = drift_dt
+        self.drift_sensitivity = drift_sensitivity
+        self.drifterEnsembeSize = drifterEnsembleSize
+
+        self.driftTrajectory = [None]*drifterEnsembleSize
+        for e in range(drifterEnsembleSize):
+            self.driftTrajectory[e] = Observation.Observation()
+
+        self.registerDrifterPositions()
+
+    def drift(self, dt):
+        assert(self.drifters is not None), "No drifters found. Can't call drift() before attachDrifters(...)"
+
+        mean_velocity = self.estimateVelocity(np.mean)
+        var_velocity  = self.estimateVelocity(np.var)
+
+        self.drifters.drift(mean_velocity[0], mean_velocity[1], 
+                            self.dxs[-1], self.dys[-1], 
+                            dt=dt, sensitivity=self.drift_sensitivity,
+                            u_var=var_velocity[0], v_var=var_velocity[1])
+
+
+    def registerDrifterPositions(self):
+        assert(self.drifters is not None), "There are no drifters in this ensemble"
+        assert(self.driftTrajectory is not None), "Something went wrong. The ensemble has drifters but no observation objects..."
+
+        for e in range(self.drifterEnsembeSize):
+            self.driftTrajectory[e].add_observation_from_mldrifters(self.t, self.drifters, e)
+
+    def saveDriftTrajectoriesToFile(self, path, filename_prefix):
+        for e in range(self.drifterEnsembeSize):
+            filename = os.path.join(path, filename_prefix + str(e).zfill(4) + ".bz2")
+            self.driftTrajectory[e].to_pickle(filename)
+
+
+    ## Destructors
 
     def cleanUp(self):
         for e in range(self.Nes[0]):

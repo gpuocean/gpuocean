@@ -107,7 +107,7 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
 
     def driftFromVelocities(self, u_field, v_field, dx, dy, dt, 
                    x_zero_ref=0, y_zero_ref=0, 
-                   u_stddev=None, v_stddev=None, sensitivity=1.0):
+                   u_var=None, v_var=None, sensitivity=1.0):
         """
         Step drifters using values for u and v directly.
         Evolve all drifters with a simple Euler step.
@@ -120,14 +120,14 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
         for i in range(self.getNumDrifters() + 1):
             x, y = self.positions[i,0], self.positions[i,1]
 
-            cell_id_x = int(np.ceil(x/dx + x_zero_ref))
+            cell_id_x = int(np.ceil(x/dx + x_zero_ref)) # 0.9 --> 2
             cell_id_y = int(np.ceil(y/dy + y_zero_ref))
 
-            frac_x = x/dx - np.floor(x/dx)
+            frac_x = x/dx - np.floor(x/dx)  # 0.9
             frac_y = y/dy - np.floor(y/dy)
 
-            cell_id_x0 = cell_id_x - 1 if frac_x < 0.5 else cell_id_x
-            x_factor = frac_x + 0.5 if frac_x < 0.5 else frac_x - 0.5; 
+            cell_id_x0 = cell_id_x - 1 if frac_x < 0.5 else cell_id_x # 2
+            x_factor = frac_x + 0.5 if frac_x < 0.5 else frac_x - 0.5;  # 0.4
             cell_id_x1 = cell_id_x0 + 1
             cell_id_y0 = cell_id_y - 1 if frac_y < 0.5 else cell_id_y
             y_factor = frac_y + 0.5 if frac_y < 0.5 else frac_y - 0.5; 
@@ -136,27 +136,30 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
             u = self._interpolate(u_field, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor)
             v = self._interpolate(v_field, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor)
             
-            if u_stddev is None and v_stddev is None:
+            if u_var is None and v_var is None:
                 x = x + sensitivity*u*dt
                 y = y + sensitivity*v*dt
             else:
-                u_stddev_val = 0.0
-                v_stddev_val = 0.0
-                if np.isscalar(u_stddev):
-                    u_stddev_val = u_stddev
+                u_var_val = 0.0
+                v_var_val = 0.0
+                if np.isscalar(u_var):
+                    u_var_val = u_var
                 else:
-                    u_stddev_val = self._interpolate(u_stddev, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor)
+                    u_var_val = max(0.0, self._interpolate(u_var, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor))
 
-                if np.isscalar(v_stddev):
-                    v_stddev_val = v_stddev
+                if np.isscalar(v_var):
+                    v_var_val = v_var
                 else:
-                    v_stddev_val = self._interpolate(v_stddev, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor)
+                    v_var_val = max(0.0, self._interpolate(v_var, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor))
 
-                x = x + sensitivity*(u*dt + u_stddev_val*np.random.normal(loc=0, scale=np.sqrt(dt)))
-                y = y + sensitivity*(v*dt + v_stddev_val*np.random.normal(loc=0, scale=np.sqrt(dt)))
-            
+                x = x + sensitivity*(u*dt + np.random.normal(loc=0, scale=np.sqrt(u_var_val*dt)))
+                y = y + sensitivity*(v*dt + np.random.normal(loc=0, scale=np.sqrt(v_var_val*dt)))
+
             x, y = self._enforceBoundaryConditionsOnPosition(x,y)
 
+            assert(not np.isnan(x)), "new x is NaN after enforcing boundary conditions"
+            assert(not np.isnan(y)), "new y is NaN after enforcing boundary conditions"
+                
             self.positions[i,0] = x
             self.positions[i,1] = y
 
@@ -164,7 +167,7 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
 
     def drift(self, eta, hu, hv, Hm, dx, dy, dt, 
               x_zero_ref=0, y_zero_ref=0, 
-              u_stddev=None, v_stddev=None, sensitivity=1.0):
+              u_var=None, v_var=None, sensitivity=1.0):
         """
         Evolve all drifters with a simple Euler step.
         Velocities are interpolated from the fields
@@ -179,7 +182,7 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
 
         self.driftFromVelocities(u_field, v_field, dx, dy, dt, 
                    x_zero_ref=x_zero_ref, y_zero_ref=y_zero_ref, 
-                   u_stddev=u_stddev, v_stddev=v_stddev, sensitivity=sensitivity)
+                   u_var=u_var, v_var=v_var, sensitivity=sensitivity)
 
     ### Implementation of other abstract functions
     

@@ -113,40 +113,57 @@ class MLDrifterCollection(CPUDrifterCollection.CPUDrifterCollection):
         
     def drift(self, u_field, v_field, dx, dy, dt, 
               x_zero_ref=0, y_zero_ref=0, 
-              u_stddev=None, v_stddev=None, sensitivity=1.0):
+              u_var=None, v_var=None, sensitivity=1.0):
         """
         Evolve all drifters with a simple Euler step.
         Velocities are interpolated from the fields
         
         {x,y}_zero_ref points to which cell has face values {x,y} = 0. 
-        {u,v}_stddev are fields and provide a random walk
+        {u,v}_var are variance fields and provide a random walk on top of the drift
         """
 
-        assert(u_stddev is not None and v_stddev is not None), "u_stddev and v_stddev must be provided for the MLDrifterCollection class to make sense"
+        assert(u_var is not None and v_var is not None), "u_var and v_var must be provided for the MLDrifterCollection class to make sense"
 
         if self.boundaryConditions.isPeriodic() and x_zero_ref == 0 and y_zero_ref == 0:
             # Ensure that we have a periodic halo so that we can interpolate through
             # periodic boundary
-            u_field  = self._expandPeriodicField(u_field)
-            v_field  = self._expandPeriodicField(v_field)
-            u_stddev = self._expandPeriodicField(u_stddev)
-            v_stddev = self._expandPeriodicField(v_stddev)
-            x_zero_ref = 1
-            y_zero_ref = 1
+            u_field  = self._expandPeriodicField2(u_field)
+            v_field  = self._expandPeriodicField2(v_field)
+            u_var    = self._expandPeriodicField2(u_var)
+            v_var    = self._expandPeriodicField2(v_var)
+            x_zero_ref = 2
+            y_zero_ref = 2
 
         self.driftFromVelocities(u_field, v_field, dx, dy, dt, 
                    x_zero_ref=x_zero_ref, y_zero_ref=y_zero_ref, 
-                   u_stddev=u_stddev, v_stddev=v_stddev, sensitivity=sensitivity)
+                   u_var=u_var, v_var=v_var, sensitivity=sensitivity)
         
     def _expandPeriodicField(self, field):
         """
         Put a halo of periodic values of one grid cell around the given field
         """
         ny, nx = field.shape
-        exp_field = np.zeros((ny+2, nx+2))
+       exp_field = np.zeros((ny+2, nx+2))
         exp_field[1:-1, 1:-1] = field
         exp_field[ 0,  :] = exp_field[-2,  :]
         exp_field[-1,  :] = exp_field[ 1,  :]
         exp_field[ :,  0] = exp_field[ :, -2]
         exp_field[ :, -1] = exp_field[ :,  1]
+        return exp_field
+
+    def _expandPeriodicField2(self, field):
+        """
+        Put a halo of periodic values of one grid cell around the given field
+        """
+        ny, nx = field.shape
+        exp_field = np.zeros((ny+4, nx+4))
+        exp_field[2:-2, 2:-2] = field
+        exp_field[ 0,  :] = exp_field[-4,  :]
+        exp_field[ 1,  :] = exp_field[-3,  :]
+        exp_field[-1,  :] = exp_field[ 3,  :]
+        exp_field[-2,  :] = exp_field[ 2,  :]
+        exp_field[ :,  0] = exp_field[ :, -4]
+        exp_field[ :,  1] = exp_field[ :, -3]
+        exp_field[ :, -1] = exp_field[ :,  3]
+        exp_field[ :, -2] = exp_field[ :,  2]
         return exp_field
