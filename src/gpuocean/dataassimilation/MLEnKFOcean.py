@@ -197,10 +197,27 @@ class MLEnKFOcean:
                         )
                     ).reshape(X0mean.shape + (obs_varN,)).repeat(2**(numLevels-l_idx-1),1).repeat(2**(numLevels-l_idx-1),2).reshape(-1,ML_XY.shape[-1])
 
-        # Calculating Kalman gain from \Sigma_XY
-        ML_HXY = ML_XY.reshape(ML_state[-1][0].shape[:-1] + (obs_varN,))[obs_var,obs_idxs[-1][0][0],obs_idxs[-1][0][1],:]
-        ML_YY  = ML_HXY + np.diag(R[obs_var])
+        # Calculating \Sigma_YY
+        Y0 = ML_state[0][obs_var,obs_idxs[0][0],obs_idxs[0][1]] + ML_perts[0].T
+        Y0mean = np.average(Y0, axis=-1)
 
+        ML_YY = 1/Nes[0] *( (Y0 - Y0mean[:,np.newaxis]) @ (Y0 - Y0mean[:,np.newaxis]).T)
+
+        for l_idx in range(1,numLevels):
+
+            Y0 = ML_state[l_idx][0][obs_var,obs_idxs[l_idx][0][0],obs_idxs[l_idx][0][1]] + ML_perts[l_idx].T
+            Y0mean = np.average(Y0, axis=-1)
+            Y1 = ML_state[l_idx][1][obs_var,obs_idxs[l_idx][1][0],obs_idxs[l_idx][1][1]] + ML_perts[l_idx].T
+            Y1mean = np.average(Y1, axis=-1)
+
+            ML_YY +=  1/Nes[l_idx] *( (Y0 - Y0mean[:,np.newaxis]) @ (Y0 - Y0mean[:,np.newaxis]).T  
+                                        -  (Y1 - Y1mean[:,np.newaxis]) @ (Y1 - Y1mean[:,np.newaxis]).T) 
+        
+        for d_idx in range(obs_varN):
+            if ML_YY[d_idx,d_idx] < 0.0:
+                ML_YY[d_idx,d_idx] = 0.0
+        
+        # Kalman Gain        
         ML_K = ML_XY @ np.linalg.inv(ML_YY)
 
 
