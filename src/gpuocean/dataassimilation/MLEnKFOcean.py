@@ -213,9 +213,10 @@ class MLEnKFOcean:
             ML_YY +=  1/Nes[l_idx] *( (Y0 - Y0mean[:,np.newaxis]) @ (Y0 - Y0mean[:,np.newaxis]).T  
                                         -  (Y1 - Y1mean[:,np.newaxis]) @ (Y1 - Y1mean[:,np.newaxis]).T) 
         
-        for d_idx in range(obs_varN):
-            if ML_YY[d_idx,d_idx] < 0.0:
-                ML_YY[d_idx,d_idx] = 0.0
+        # Avoiding potential explosions caused by infeasible approximations 
+        if np.linalg.norm(np.linalg.inv(ML_YY)) > np.linalg.norm(R[obs_var]): 
+            ML_YY = np.diag(R[obs_var])
+            print("The ML_YY appromxation got replaced by R!")
         
         # Kalman Gain        
         ML_K = ML_XY @ np.linalg.inv(ML_YY)
