@@ -46,7 +46,7 @@ def background_from_netcdf(source_url, figsize=None, t_idx=0, domain=[0, None, 0
     source_url  - link or path to netCDF file
     t_idx       - time index (int) in netCDF file
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the netCDF file
-    drifter_doamin - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
+    drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
     cbar        - boolean for adding colorbar or not
@@ -140,7 +140,7 @@ def background_from_sim(sim, figsize=None, domain=[0, None, 0, None], drifter_do
     
     sim - CDKLM simulator
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
-    drifter_doamin - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
+    drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
     cbar        - boolean for adding colorbar or not
@@ -196,7 +196,7 @@ def background_from_ensemble(ensemble, figsize=None, domain=[0, None, 0, None], 
     
     ensemble    - OceanModelEnsemble
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
-    drifter_doamin - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
+    drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
 
