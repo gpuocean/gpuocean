@@ -120,17 +120,17 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
         for i in range(self.getNumDrifters() + 1):
             x, y = self.positions[i,0], self.positions[i,1]
 
-            cell_id_x = int(np.ceil(x/dx + x_zero_ref)) # 0.9 --> 2
-            cell_id_y = int(np.ceil(y/dy + y_zero_ref))
+            cell_id_x = int(np.floor(x/dx + x_zero_ref)) 
+            cell_id_y = int(np.floor(y/dy + y_zero_ref))
 
             frac_x = x/dx - np.floor(x/dx)  # 0.9
             frac_y = y/dy - np.floor(y/dy)
 
-            cell_id_x0 = cell_id_x - 1 if frac_x < 0.5 else cell_id_x # 2
-            x_factor = frac_x + 0.5 if frac_x < 0.5 else frac_x - 0.5;  # 0.4
+            cell_id_x0 = cell_id_x - 1 if frac_x < 0.5 else cell_id_x 
+            x_factor = frac_x + 0.5 if frac_x < 0.5 else frac_x - 0.5
             cell_id_x1 = cell_id_x0 + 1
             cell_id_y0 = cell_id_y - 1 if frac_y < 0.5 else cell_id_y
-            y_factor = frac_y + 0.5 if frac_y < 0.5 else frac_y - 0.5; 
+            y_factor = frac_y + 0.5 if frac_y < 0.5 else frac_y - 0.5
             cell_id_y1 = cell_id_y0 + 1
 
             u = self._interpolate(u_field, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor)

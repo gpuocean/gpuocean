@@ -127,12 +127,12 @@ class MLDrifterCollection(CPUDrifterCollection.CPUDrifterCollection):
         if self.boundaryConditions.isPeriodic() and x_zero_ref == 0 and y_zero_ref == 0:
             # Ensure that we have a periodic halo so that we can interpolate through
             # periodic boundary
-            u_field  = self._expandPeriodicField2(u_field)
-            v_field  = self._expandPeriodicField2(v_field)
-            u_var    = self._expandPeriodicField2(u_var)
-            v_var    = self._expandPeriodicField2(v_var)
-            x_zero_ref = 2
-            y_zero_ref = 2
+            u_field  = self._expandPeriodicField(u_field)
+            v_field  = self._expandPeriodicField(v_field)
+            u_var    = self._expandPeriodicField(u_var)
+            v_var    = self._expandPeriodicField(v_var)
+            x_zero_ref = 1
+            y_zero_ref = 1
 
         self.driftFromVelocities(u_field, v_field, dx, dy, dt, 
                    x_zero_ref=x_zero_ref, y_zero_ref=y_zero_ref, 
@@ -143,27 +143,10 @@ class MLDrifterCollection(CPUDrifterCollection.CPUDrifterCollection):
         Put a halo of periodic values of one grid cell around the given field
         """
         ny, nx = field.shape
-       exp_field = np.zeros((ny+2, nx+2))
+        exp_field = np.zeros((ny+2, nx+2))
         exp_field[1:-1, 1:-1] = field
         exp_field[ 0,  :] = exp_field[-2,  :]
         exp_field[-1,  :] = exp_field[ 1,  :]
         exp_field[ :,  0] = exp_field[ :, -2]
         exp_field[ :, -1] = exp_field[ :,  1]
-        return exp_field
-
-    def _expandPeriodicField2(self, field):
-        """
-        Put a halo of periodic values of one grid cell around the given field
-        """
-        ny, nx = field.shape
-        exp_field = np.zeros((ny+4, nx+4))
-        exp_field[2:-2, 2:-2] = field
-        exp_field[ 0,  :] = exp_field[-4,  :]
-        exp_field[ 1,  :] = exp_field[-3,  :]
-        exp_field[-1,  :] = exp_field[ 3,  :]
-        exp_field[-2,  :] = exp_field[ 2,  :]
-        exp_field[ :,  0] = exp_field[ :, -4]
-        exp_field[ :,  1] = exp_field[ :, -3]
-        exp_field[ :, -1] = exp_field[ :,  3]
-        exp_field[ :, -2] = exp_field[ :,  2]
         return exp_field
