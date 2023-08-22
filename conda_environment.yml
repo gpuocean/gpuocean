@@ -28,6 +28,7 @@ dependencies:
 - seawater
 - gitpython
 - scikit-image
+- scipy
 # Activate environment and install the following packages using pip:
 # $ conda activate gpuocean
 # $ pip3 install --trusted-host files.pythonhosted.org --no-deps -U pycuda
