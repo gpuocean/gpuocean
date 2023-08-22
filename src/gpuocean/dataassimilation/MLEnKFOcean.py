@@ -214,7 +214,7 @@ class MLEnKFOcean:
                                         -  (Y1 - Y1mean[:,np.newaxis]) @ (Y1 - Y1mean[:,np.newaxis]).T) 
         
         # Avoiding potential explosions caused by infeasible approximations 
-        if np.linalg.norm(np.linalg.inv(ML_YY)) > np.linalg.norm(R[obs_var]): 
+        if np.linalg.norm(np.linalg.inv(ML_YY)) > np.linalg.norm(np.linalg.inv(R[obs_var])): 
             ML_YY = np.diag(R[obs_var])
             print("The ML_YY appromxation got replaced by R!")
         
