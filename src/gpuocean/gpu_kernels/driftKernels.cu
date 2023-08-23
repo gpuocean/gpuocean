@@ -146,8 +146,8 @@ __global__ void passiveDrifterKernel(
         float drifter_pos_y = drifter[1];
         
         // Find cell ID for the cell in which our particle is
-        int const cell_id_x = (int)(ceil(drifter_pos_x/dx_) + x_zero_reference_cell_);
-        int const cell_id_y = (int)(ceil(drifter_pos_y/dy_) + y_zero_reference_cell_);
+        int const cell_id_x = (int)(floor(drifter_pos_x/dx_) + x_zero_reference_cell_);
+        int const cell_id_y = (int)(floor(drifter_pos_y/dy_) + y_zero_reference_cell_);
         
         float const frac_x = drifter_pos_x / dx_ - floor(drifter_pos_x / dx_);
         float const frac_y = drifter_pos_y / dy_ - floor(drifter_pos_y / dy_);
