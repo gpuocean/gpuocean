@@ -79,6 +79,13 @@ class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
                     
             if self.initialization_variance_factor_ocean_field != 0.0:
                 self.particles[i].perturbState(q0_scale=self.initialization_variance_factor_ocean_field)
+
+        # Set bookkeeping variables 
+        self.nx, self.ny = self.particles[0].nx, self.particles[0].ny
+        self.dx, self.dy = self.particles[0].dx, self.particles[0].dy
+        self.t  = self.particles[0].t
+
+        self.particlesActive = [True]*(numParticles)
             
     
     def attachDrifters(self, drifter_positions):
@@ -104,8 +111,24 @@ class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
     
     
     
+    def stepToObservation(self, observation_time, write_now=False):
+        """
+        Advance the ensemble to the given observation time, and mimics CDKLM16.dataAssimilationStep function
+        
+        Arguments:
+            observation_time: The end time for the simulation
+            write_now: Write result to NetCDF if an writer is active.
+        """
+        for p in range(self.numParticles):
+        
+            # Only active particles are evolved
+            if self.particlesActive[p]:
+                self.particles[p].dataAssimilationStep(observation_time, write_now=write_now)
+
+        self.t = observation_time
+
     
-    def modelStep(self, sub_t, rank, update_dt=True):
+    def modelStep(self, sub_t, rank="", update_dt=True):
         """
         Function which makes all particles step until time t.
         """
