@@ -50,7 +50,7 @@ class ModelErrorKL(object):
                  include_cos=True, include_sin=True,
                  basis_x_start = 1, basis_y_start = 1,
                  basis_x_end = 10, basis_y_end = 10,
-                 use_lcg=False, xorwow_seed = None,
+                 use_lcg=False, xorwow_seed = None, np_seed = None,
                  angle=np.array([[0]], dtype=np.float32),
                  coriolis_f=np.array([[0]], dtype=np.float32),
                  block_width=16, block_height=16):
@@ -104,6 +104,7 @@ class ModelErrorKL(object):
         self.basis_x_end    = np.int32(basis_x_end)
         self.basis_y_end    = np.int32(basis_y_end)
 
+        self.np_rng = np.random.default_rng(seed=np_seed)
         self.roll_x_sin = 0.0
         self.roll_y_sin = 0.0
         self.roll_x_cos = 0.0
@@ -306,13 +307,13 @@ class ModelErrorKL(object):
         Set roller parameters with some checking that the values are appropriate
         """
         if roll_x_sin is None:
-            roll_x_sin = np.random.rand()
+            roll_x_sin = self.np_rng.uniform()
         if roll_y_sin is None:
-            roll_y_sin = np.random.rand()
+            roll_y_sin = self.np_rng.uniform()
         if roll_x_cos is None:
-            roll_x_cos = np.random.rand()
+            roll_x_cos = self.np_rng.uniform()
         if roll_y_cos is None:
-            roll_y_cos = np.random.rand()
+            roll_y_cos = self.np_rng.uniform()
         def _check_roller(roller, name):
             assert(isinstance(roller, (float, int, np.float32)) and roller >= 0 and roller <= 1), "illegal type/value of " + name +": " + str(roller)
         _check_roller(roll_x_sin, "roll_x_sin")
@@ -456,7 +457,7 @@ class ModelErrorKL(object):
         
         self._setRollers(roll_x_sin, roll_y_sin, roll_x_cos, roll_y_cos)
 
-        self.klSamplingKernel.prepared_async_call(self.global_size_KL, self.local_size, stream,
+        self.klSamplingKernel.prepared_call(self.global_size_KL, self.local_size, 
                                             self.nx, self.ny, dx, dy,
                                             g, f, beta, 
                                             self.basis_x_start, self.basis_x_end,
