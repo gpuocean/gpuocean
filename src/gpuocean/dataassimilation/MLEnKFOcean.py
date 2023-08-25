@@ -33,7 +33,7 @@ class MLEnKFOcean:
     This class implements the multi-level ensemble Kalman filter
     """
 
-    def __init__(self, MLOceanEnsemble):
+    def __init__(self, MLOceanEnsemble, seed=None):
 
         # Keep field information (cell centers)
         Xs = np.linspace(0.5*MLOceanEnsemble.dxs[-1], (MLOceanEnsemble.nxs[-1] - 0.5) * MLOceanEnsemble.dxs[-1], MLOceanEnsemble.nxs[-1])
@@ -52,6 +52,10 @@ class MLEnKFOcean:
         self.xdim = MLOceanEnsemble.dxs[-1] * MLOceanEnsemble.nxs[-1]
         self.ydim = MLOceanEnsemble.dys[-1] * MLOceanEnsemble.nys[-1]
 
+        self.boundary_conditions = MLOceanEnsemble.boundary_conditions
+
+        self.np_rng = np.random.default_rng(seed=seed)
+
 
     def GCweights(self, obs_x, obs_y, r):
         """"
@@ -62,32 +66,73 @@ class MLEnKFOcean:
         r       - radius (m)
         """
 
-        def _calculate_distance(coord1, coord2, xdim, ydim):
-            distx = np.abs(coord1[0] - coord2[0])
-            disty = np.abs(coord1[1] - coord2[1])
-            distx = np.minimum(distx, xdim - distx)
-            disty = np.minimum(disty, ydim - disty)
-            return np.sqrt(distx**2 + disty**2)
-        
-        grid_coordinates = np.vstack((self.X.flatten(), self.Y.flatten())).T
-        dists = cdist(grid_coordinates, np.atleast_2d([obs_x, obs_y]),
-                        lambda u, v: _calculate_distance(u, v, self.xdim, self.ydim))
-        dists = dists.reshape(self.X.shape)
+        if (self.boundary_conditions.north == 2) \
+            or (self.boundary_conditions.south == 2) \
+            or (self.boundary_conditions.west == 2) \
+            or (self.boundary_conditions.east == 2):
+
+            from scipy.spatial.distance import cdist
+
+            if (self.boundary_conditions.north == 2) \
+                and (self.boundary_conditions.south == 2) \
+                and (self.boundary_conditions.west == 2) \
+                and (self.boundary_conditions.east == 2):
+
+                assert r < self.xdim/2 and r < self.ydim/2, "Localisation radius too large"
+
+                def _calculate_distance(coord1, coord2, xdim, ydim):
+                    distx = np.abs(coord1[0] - coord2[0])
+                    disty = np.abs(coord1[1] - coord2[1])
+                    distx = np.minimum(distx, xdim - distx)
+                    disty = np.minimum(disty, ydim - disty)
+                    return np.sqrt(distx**2 + disty**2)
+                
+            elif (self.boundary_conditions.north == 2) \
+                and (self.boundary_conditions.south == 2) \
+                and (self.boundary_conditions.west != 2) \
+                and (self.boundary_conditions.east != 2):
+
+                assert r < self.ydim/2, "Localisation radius too large"
+
+                def _calculate_distance(coord1, coord2, xdim, ydim):
+                    distx = np.abs(coord1[0] - coord2[0])
+                    disty = np.abs(coord1[1] - coord2[1])
+                    disty = np.minimum(disty, ydim - disty)
+                    return np.sqrt(distx**2 + disty**2)
+                
+            elif (self.boundary_conditions.north != 2) \
+                and (self.boundary_conditions.south != 2) \
+                and (self.boundary_conditions.west == 2) \
+                and (self.boundary_conditions.east == 2):
+
+                assert r < self.xdim/2, "Localisation radius too large"
+
+                def _calculate_distance(coord1, coord2, xdim, ydim):
+                    distx = np.abs(coord1[0] - coord2[0])
+                    disty = np.abs(coord1[1] - coord2[1])
+                    distx = np.minimum(distx, xdim - distx)
+                    return np.sqrt(distx**2 + disty**2)
+            
+            else:
+                assert False, "Invalid boundary conditions" 
+
+            grid_coordinates = np.vstack((self.X.flatten(), self.Y.flatten())).T
+            dists = cdist(grid_coordinates, np.atleast_2d([obs_x, obs_y]),
+                            lambda u, v: _calculate_distance(u, v, self.xdim, self.ydim))
+            dists = dists.reshape(self.X.shape)
+
+        else:
+            dists = np.sqrt((self.X - obs_x)**2 + (self.Y - obs_y)**2)
 
         GC = np.zeros_like(dists)
-        for i in range(dists.shape[0]):
-            for j in range(dists.shape[1]):
-                dist = dists[i,j]
-                if dist/r < 1: 
-                    GC[i,j] = 1 - 5/3*(dist/r)**2 + 5/8*(dist/r)**3 + 1/2*(dist/r)**4 - 1/4*(dist/r)**5
-                elif dist/r >= 1 and dist/r < 2:
-                    GC[i,j] = 4 - 5*(dist/r) + 5/3*(dist/r)**2 + 5/8*(dist/r)**3 -1/2*(dist/r)**4 + 1/12*(dist/r)**5 - 2/(3*(dist/r))
+        GC = np.where(dists/r < 1, 1 - 5/3*(dists/r)**2 + 5/8*(dists/r)**3 + 1/2*(dists/r)**4 - 1/4*(dists/r)**5, GC)
+        GC = np.where(np.logical_and((dists/r >= 1), (dists/r < 2)), 4 - 5*(dists/r) + 5/3*(dists/r)**2 + 5/8*(dists/r)**3 -1/2*(dists/r)**4 + 1/12*(dists/r)**5 - 2/np.maximum(1e-6,(3*(dists/r))), GC)
 
         return GC
 
         
     def assimilate(self, MLOceanEnsemble, obs, obs_x, obs_y, R, 
-                   r = 2.5*1e7, relax_factor = 1.0, obs_var=slice(0,3), min_localisation_level=1,
+                   r=None, relax_factor = 1.0, obs_var=slice(0,3), min_localisation_level=1,
                    precomp_GC = None):
         """
         Returning the posterior state after assimilating observation into multi-level ensemble
@@ -136,40 +181,39 @@ class MLEnKFOcean:
 
         ## Localisation kernel
         if precomp_GC is None:
-            GC = self.GCweights(obs_x, obs_y, r)
+            if r is None:
+                min_localisation_level = len(Nes)+1
+            else:
+                GC = self.GCweights(obs_x, obs_y, r)
         else:
             assert precomp_GC.shape == (MLOceanEnsemble.nys[-1], MLOceanEnsemble.nxs[-1]), "The precomputed weights do not match the dimensions!"
             assert precomp_GC[obs_idxs[-1][0][0], obs_idxs[-1][0][1]] > 0.95, "The precomputed weights do not match the observation location!"
             GC = precomp_GC
 
-
-        ## Perturbations for observation
-        # On higher levels, the partner simulations share the same perturbation
-        ML_perts = []
-        for l_idx in range(numLevels):
-            ML_perts.append(np.random.multivariate_normal(np.zeros(3)[obs_var], np.diag(R[obs_var]), size=Nes[l_idx]))
-
-
+        #############################
         ## Analysis
-        # Constructing \Sigma_XY: 
+
+        # Constructing \Sigma_XY and \Sigma_YY: 
         # First, 0-level and then loop over higher levels
         ML_XY = np.zeros((np.prod(ML_state[-1][0].shape[:-1]),obs_varN))
 
         X0 = ML_state[0]
         X0mean = np.average(X0, axis=-1)
 
-        Y0 = ML_state[0][obs_var,obs_idxs[0][0],obs_idxs[0][1]] + ML_perts[0].T
-        Y0mean = np.average(Y0, axis=-1)
+        Y0 = ML_state[0][obs_var,obs_idxs[0][0],obs_idxs[0][1]] 
+        Y0mean = np.average(Y0, axis=-1)[:,np.newaxis]
 
         lvl_weight = relax_factor * np.ones(np.prod(X0mean.shape))
         if min_localisation_level <= 0:
             lvl_weight = relax_factor * np.tile(block_reduce(GC, block_size=(2**(numLevels-1),2**(numLevels-1)), func=np.mean).flatten(),3)
 
         ML_XY += (lvl_weight[:,np.newaxis] 
-                  * 1/Nes[0] 
-                  *( (X0-X0mean[:,:,:,np.newaxis]).reshape(-1,X0.shape[-1]) 
-                    @ (Y0 - Y0mean[:,np.newaxis]).T)
-                ).reshape(X0mean.shape + (obs_varN,)).repeat(2**(numLevels-1),1).repeat(2**(numLevels-1),2).reshape(-1,ML_XY.shape[-1])
+                  * 1/(Nes[0]-1) 
+                  *( (X0-X0mean[:,:,:,np.newaxis]).reshape(-1,Nes[0]) 
+                    @ (Y0 - Y0mean).T)
+                ).reshape(X0mean.shape + (obs_varN,)).repeat(2**(numLevels-1),1).repeat(2**(numLevels-1),2).reshape(-1,obs_varN)
+
+        ML_YY = 1/(Nes[0]-1) *( (Y0 - Y0mean) @ (Y0 - Y0mean).T)
 
         for l_idx in range(1,numLevels):
 
@@ -178,51 +222,49 @@ class MLEnKFOcean:
             X1 = ML_state[l_idx][1].repeat(2,1).repeat(2,2)
             X1mean = np.average(X1, axis=-1)
 
-            Y0 = ML_state[l_idx][0][obs_var,obs_idxs[l_idx][0][0],obs_idxs[l_idx][0][1]] + ML_perts[l_idx].T
-            Y0mean = np.average(Y0, axis=-1)
-            Y1 = ML_state[l_idx][1][obs_var,obs_idxs[l_idx][1][0],obs_idxs[l_idx][1][1]] + ML_perts[l_idx].T
-            Y1mean = np.average(Y1, axis=-1)
+            Y0 = ML_state[l_idx][0][obs_var,obs_idxs[l_idx][0][0],obs_idxs[l_idx][0][1]] 
+            Y0mean = np.average(Y0, axis=-1)[:,np.newaxis]
+            Y1 = ML_state[l_idx][1][obs_var,obs_idxs[l_idx][1][0],obs_idxs[l_idx][1][1]] 
+            Y1mean = np.average(Y1, axis=-1)[:,np.newaxis]
 
             lvl_weight = relax_factor * np.ones(np.prod(X0mean.shape))
             if min_localisation_level <= l_idx:
                 lvl_weight = relax_factor * np.tile(block_reduce(GC, block_size=(2**(numLevels-l_idx-1),2**(numLevels-l_idx-1)), func=np.mean).flatten(),3)
 
             ML_XY += (lvl_weight[:,np.newaxis] 
-                      * ( 1/Nes[l_idx]
-                            *( (X0-X0mean[:,:,:,np.newaxis]).reshape(-1,X0.shape[-1]) 
-                              @ (Y0 - Y0mean[:,np.newaxis]).T) 
-                         - 1/Nes[l_idx]
-                            *( (X1-X1mean[:,:,:,np.newaxis]).reshape(-1,X1.shape[-1]) 
-                              @ (Y1 - Y1mean[:,np.newaxis]).T) 
+                      * ( 1/(Nes[l_idx]-1)
+                            *( (X0-X0mean[:,:,:,np.newaxis]).reshape(-1,Nes[l_idx]) 
+                              @ (Y0 - Y0mean).T) 
+                         - 1/(Nes[l_idx]-1)
+                            *( (X1-X1mean[:,:,:,np.newaxis]).reshape(-1,Nes[l_idx]) 
+                              @ (Y1 - Y1mean).T) 
                         )
-                    ).reshape(X0mean.shape + (obs_varN,)).repeat(2**(numLevels-l_idx-1),1).repeat(2**(numLevels-l_idx-1),2).reshape(-1,ML_XY.shape[-1])
+                    ).reshape(X0mean.shape + (obs_varN,)).repeat(2**(numLevels-l_idx-1),1).repeat(2**(numLevels-l_idx-1),2).reshape(-1,obs_varN)
 
-        # Calculating \Sigma_YY
-        Y0 = ML_state[0][obs_var,obs_idxs[0][0],obs_idxs[0][1]] + ML_perts[0].T
-        Y0mean = np.average(Y0, axis=-1)
-
-        ML_YY = 1/Nes[0] *( (Y0 - Y0mean[:,np.newaxis]) @ (Y0 - Y0mean[:,np.newaxis]).T)
-
-        for l_idx in range(1,numLevels):
-
-            Y0 = ML_state[l_idx][0][obs_var,obs_idxs[l_idx][0][0],obs_idxs[l_idx][0][1]] + ML_perts[l_idx].T
-            Y0mean = np.average(Y0, axis=-1)
-            Y1 = ML_state[l_idx][1][obs_var,obs_idxs[l_idx][1][0],obs_idxs[l_idx][1][1]] + ML_perts[l_idx].T
-            Y1mean = np.average(Y1, axis=-1)
-
-            ML_YY +=  1/Nes[l_idx] *( (Y0 - Y0mean[:,np.newaxis]) @ (Y0 - Y0mean[:,np.newaxis]).T  
-                                        -  (Y1 - Y1mean[:,np.newaxis]) @ (Y1 - Y1mean[:,np.newaxis]).T) 
+            ML_YY +=  1/(Nes[l_idx]-1) *( (Y0 - Y0mean) @ (Y0 - Y0mean).T ) \
+                        - 1/(Nes[l_idx]-1) *( (Y1 - Y1mean) @ (Y1 - Y1mean).T) 
         
         # Avoiding potential explosions caused by infeasible approximations 
-        if np.linalg.norm(np.linalg.inv(ML_YY)) > np.linalg.norm(np.linalg.inv(R[obs_var])): 
-            ML_YY = np.diag(R[obs_var])
-            print("The ML_YY appromxation got replaced by R!")
+        for d_idx in range(obs_varN):
+            if ML_YY[d_idx,d_idx] < 0.0:
+                ML_YY[d_idx,d_idx] = 0.0
+
+        if np.linalg.norm(np.linalg.inv(ML_YY + np.diag(R[obs_var]))) > np.linalg.norm(np.linalg.inv(np.diag(R[obs_var]))): 
+            ML_YY = np.zeros((obs_varN,obs_varN))
         
         # Kalman Gain        
-        ML_K = ML_XY @ np.linalg.inv(ML_YY)
+        ML_K = ML_XY @ np.linalg.inv(ML_YY + np.diag(R[obs_var]))
 
 
+        ###############################
         ## Update
+        
+        ## Perturbations for observation
+        # On higher levels, the partner simulations share the same perturbation
+        ML_perts = []
+        for l_idx in range(numLevels):
+            ML_perts.append(self.np_rng.multivariate_normal(np.zeros(3)[obs_var], np.diag(R[obs_var]), size=Nes[l_idx]))
+
         # Projecting Kalman gain and use update formula
         # First, 0-level then loop over higher levels
         ML_state[0] = ML_state[0] + (
