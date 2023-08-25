@@ -69,6 +69,9 @@ class MultiLevelOceanEnsemble:
                 self.dxs[l_idx] = ML_ensemble[l_idx][0][0].dx
                 self.dys[l_idx] = ML_ensemble[l_idx][0][0].dy
 
+        self.boundary_conditions = ML_ensemble[0][0].boundary_conditions
+
+        # Set the time
         self.t = self.ML_ensemble[0][0].t
 
 
