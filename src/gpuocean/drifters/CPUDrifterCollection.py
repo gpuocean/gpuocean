@@ -123,7 +123,7 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
             cell_id_x = int(np.floor(x/dx + x_zero_ref)) 
             cell_id_y = int(np.floor(y/dy + y_zero_ref))
 
-            frac_x = x/dx - np.floor(x/dx)  # 0.9
+            frac_x = x/dx - np.floor(x/dx)  
             frac_y = y/dy - np.floor(y/dy)
 
             cell_id_x0 = cell_id_x - 1 if frac_x < 0.5 else cell_id_x 
@@ -152,8 +152,8 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
                 else:
                     v_var_val = max(0.0, self._interpolate(v_var, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor))
 
-                x = x + sensitivity*(u*dt + np.random.normal(loc=0, scale=np.sqrt(u_var_val*dt)))
-                y = y + sensitivity*(v*dt + np.random.normal(loc=0, scale=np.sqrt(v_var_val*dt)))
+                x = x + sensitivity*(u*dt + np.random.normal(loc=0, scale=np.sqrt(u_var_val)*dt))
+                y = y + sensitivity*(v*dt + np.random.normal(loc=0, scale=np.sqrt(v_var_val)*dt))
 
             x, y = self._enforceBoundaryConditionsOnPosition(x,y)
 

@@ -119,6 +119,7 @@ class MLDrifterCollection(CPUDrifterCollection.CPUDrifterCollection):
         Velocities are interpolated from the fields
         
         {x,y}_zero_ref points to which cell has face values {x,y} = 0. 
+        {u, v}_field are mean fields for u and v
         {u,v}_var are variance fields and provide a random walk on top of the drift
         """
 
