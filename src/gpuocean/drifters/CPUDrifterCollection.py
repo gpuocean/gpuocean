@@ -152,8 +152,7 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
                 else:
                     v_var_val = max(0.0, self._interpolate(v_var, cell_id_x0, cell_id_x1, cell_id_y0, cell_id_y1, x_factor, y_factor))
 
-                x = x + sensitivity*(u*dt + np.random.normal(loc=0, scale=np.sqrt(u_var_val)*dt))
-                y = y + sensitivity*(v*dt + np.random.normal(loc=0, scale=np.sqrt(v_var_val)*dt))
+                x, y = self._randomWalk(x, y, u, v, u_var_val, v_var_val, dt, i, sensitivity)
 
             x, y = self._enforceBoundaryConditionsOnPosition(x,y)
 
@@ -163,7 +162,10 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
             self.positions[i,0] = x
             self.positions[i,1] = y
 
-
+    def _randomWalk(self, x, y, u, v, u_var_val, v_var_val, dt, i, sensitivity):
+        x = x + sensitivity*(u*dt + np.random.normal(loc=0, scale=np.sqrt(u_var_val)*dt))
+        y = y + sensitivity*(v*dt + np.random.normal(loc=0, scale=np.sqrt(v_var_val)*dt))
+        return x, y
 
     def drift(self, eta, hu, hv, Hm, dx, dy, dt, 
               x_zero_ref=0, y_zero_ref=0, 
