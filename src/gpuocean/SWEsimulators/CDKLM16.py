@@ -387,7 +387,7 @@ class CDKLM16(Simulator.Simulator):
         self.gpu_data.release()
         
         if self.model_error is not None:
-            self.model_error.cleanUp()
+            self.model_error.cleanUp(do_gc=do_gc)
         
         
         if self.geoEq_uxpvy is not None:

@@ -42,33 +42,46 @@ class MultiLevelOceanEnsemble:
         # The 0-level directly contains a list of the CDKLM16 ensemble members, 
         # While the subsequent level contain TWO equally long lists which the sim-partners 
         # Where the first list is the + and the second list is the - partner with a coarser resolution 
+        
+        assert len(ML_ensemble) > 1, "Single level ensembles are not valid"
+        for l_idx in range(1, len(ML_ensemble)):
+            assert len(ML_ensemble[l_idx]) == 2, "All higher levels need an ensemble of fine and coarse simulations each"
+        
         self.ML_ensemble = ML_ensemble 
 
-        # Keep ML ensemble sizes
-        self.Nes = np.zeros(len(ML_ensemble), dtype=np.int32)
-        self.Nes[0] = len(ML_ensemble[0])
-        for l_idx in range(1,len(ML_ensemble)):
-            self.Nes[l_idx] = len(ML_ensemble[l_idx][0])
+        self._set_ensemble_information()
+    
+
+    def _set_ensemble_information(self):
+
+        # Set ML ensemble sizes
+        self.Nes = np.zeros(len(self.ML_ensemble), dtype=np.int32)
+        self.Nes[0] = len(self.ML_ensemble[0])
+        for l_idx in range(1,len(self.ML_ensemble)):
+            self.Nes[l_idx] = len(self.ML_ensemble[l_idx][0])
 
         self.numLevels = len(self.Nes)
 
-        # Keep grid information
+        # Set grid information
         self.nxs = np.zeros(len(self.Nes), dtype=np.int32)
         self.nys = np.zeros(len(self.Nes), dtype=np.int32)
         self.dxs = np.zeros(len(self.Nes))
         self.dys = np.zeros(len(self.Nes))
         for l_idx in range(len(self.Nes)):
             if l_idx == 0:
-                self.nxs[l_idx] = ML_ensemble[l_idx][0].nx
-                self.nys[l_idx] = ML_ensemble[l_idx][0].ny
-                self.dxs[l_idx] = ML_ensemble[l_idx][0].dx
-                self.dys[l_idx] = ML_ensemble[l_idx][0].dy
+                self.nxs[l_idx] = self.ML_ensemble[l_idx][0].nx
+                self.nys[l_idx] = self.ML_ensemble[l_idx][0].ny
+                self.dxs[l_idx] = self.ML_ensemble[l_idx][0].dx
+                self.dys[l_idx] = self.ML_ensemble[l_idx][0].dy
             else:
-                self.nxs[l_idx] = ML_ensemble[l_idx][0][0].nx
-                self.nys[l_idx] = ML_ensemble[l_idx][0][0].ny
-                self.dxs[l_idx] = ML_ensemble[l_idx][0][0].dx
-                self.dys[l_idx] = ML_ensemble[l_idx][0][0].dy
+                self.nxs[l_idx] = self.ML_ensemble[l_idx][0][0].nx
+                self.nys[l_idx] = self.ML_ensemble[l_idx][0][0].ny
+                self.dxs[l_idx] = self.ML_ensemble[l_idx][0][0].dx
+                self.dys[l_idx] = self.ML_ensemble[l_idx][0][0].dy
 
+        self.boundary_conditions = self.ML_ensemble[0][0].boundary_conditions
+
+        # Set the time
         self.t = self.ML_ensemble[0][0].t
 
         # Variables related to drifters
@@ -439,3 +452,82 @@ class MultiLevelOceanEnsemble:
 
     def __del__(self):
         self.cleanUp()
+
+
+
+
+
+from gpuocean.SWEsimulators import ModelErrorKL
+
+class MultiLevelOceanEnsembleCase(MultiLevelOceanEnsemble):
+    """
+    Class for holding a multi-level ensemble of ocean models
+    which is constructed in class
+    """
+
+    def __init__(self, ML_Nes, args_list, make_data_args, sample_args, make_sim,
+                   init_model_error_basis_args=None, sim_model_error_basis_args=None, sim_model_error_timestep=None,
+                   print_status=False, init_xorwow_seed=None, init_np_seed=None, sim_xorwow_seed=None, sim_np_seed=None):
+
+
+        assert len(ML_Nes) == len(args_list), "Number of levels in args and level sizes do not match"
+
+        data_args_list = []
+        if isinstance(make_data_args, list):
+            assert len(ML_Nes) == len(make_data_args), "Number of levels in data_args and level sizes do not match"
+            data_args_list = make_data_args
+        else: 
+            for l_idx in range(len(ML_Nes)):
+                data_args_list.append( make_data_args(args_list[l_idx]) )
+
+        # Model errors
+        if init_model_error_basis_args is not None: 
+            init_mekls = []
+            for l_idx in range(len(args_list)): 
+                init_mekls.append( ModelErrorKL.ModelErrorKL(**args_list[l_idx], **init_model_error_basis_args, xorwow_seed=init_xorwow_seed, np_seed=init_np_seed) )
+
+        if sim_model_error_basis_args is not None: 
+            sim_mekls = []
+            for l_idx in range(len(args_list)): 
+                sim_mekls.append( ModelErrorKL.ModelErrorKL(**args_list[l_idx], **sim_model_error_basis_args, xorwow_seed=sim_xorwow_seed, np_seed=sim_np_seed) )
+
+
+        ## MultiLevel ensemble
+        self.ML_ensemble = []
+
+        # 0-level
+        self.ML_ensemble.append([])
+        for i in range(ML_Nes[0]):
+            if print_status and i % 100 == 0: print(i) 
+            sim = make_sim(args_list[0], sample_args, init_fields=data_args_list[0])
+            if init_model_error_basis_args is not None:
+                init_mekls[0].perturbSim(sim)
+            if sim_model_error_basis_args is not None:
+                sim.model_error = sim_mekls[0]
+            sim.model_time_step = sim_model_error_timestep
+            self.ML_ensemble[0].append( sim )
+
+        # diff-levels
+        for l_idx in range(1,len(ML_Nes)):
+            if print_status: print(l_idx)
+            self.ML_ensemble.append([[],[]])
+            
+            for e in range(ML_Nes[l_idx]):
+                sim0 = make_sim(args_list[l_idx], sample_args, init_fields=data_args_list[l_idx])
+                sim1 = make_sim(args_list[l_idx-1], sample_args, init_fields=data_args_list[l_idx-1])
+                
+                if init_model_error_basis_args is not None:
+                    init_mekls[l_idx].perturbSim(sim0)
+                    init_mekls[l_idx-1].perturbSimSimilarAs(sim1, modelError=init_mekls[l_idx])
+
+                if sim_model_error_basis_args is not None:
+                    sim0.model_error = sim_mekls[l_idx]
+                    sim1.model_error = sim_mekls[l_idx-1]
+
+                sim0.model_time_step = sim_model_error_timestep
+                sim1.model_time_step = sim_model_error_timestep
+
+                self.ML_ensemble[l_idx][0].append(sim0)
+                self.ML_ensemble[l_idx][1].append(sim1)
+
+        super()._set_ensemble_information()

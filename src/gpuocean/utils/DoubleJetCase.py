@@ -100,7 +100,8 @@ class DoubleJetCase:
     
     def __init__(self, gpu_ctx, 
                  perturbation_type=DoubleJetPerturbationType.SteadyState,
-                 model_error = True, commonSpinUpTime = 200000):
+                 model_error = True, commonSpinUpTime = 200000,
+                 ny=300, nx=500):
         """
         Class that generates initial conditions for a double jet case (both perturbed and unperturbed).
         The use of initial perturbations/spin up periods are given by the perturbation_type argument,
@@ -136,10 +137,10 @@ class DoubleJetCase:
         y_north = degrees_1*distance_between_latitudes
         degrees_mid = self.phi_05*180/np.pi
     
-        self.ny = 300
+        self.ny = ny
         self.dy = (y_north - y_south)/self.ny
         self.dx = self.dy
-        self.nx = 500
+        self.nx = nx
         
         self.ghosts = np.array([2,2,2,2]) # north, east, south, west
         self.dataShape = (self.ny+self.ghosts[0]+self.ghosts[2], self.nx+self.ghosts[1]+self.ghosts[3])
@@ -190,10 +191,7 @@ class DoubleJetCase:
             "H": self.base_cpu_Hi, 
             "t": 0.0,
             "rk_order": 2,
-            "boundary_conditions": Common.BoundaryConditions(2,2,2,2),
-            "small_scale_perturbation": model_error,
-            "small_scale_perturbation_amplitude": 0.0003,
-            "small_scale_perturbation_interpolation_factor": 5,
+            "boundary_conditions": Common.BoundaryConditions(2,2,2,2)
         }
         
         self.base_init = {
@@ -205,6 +203,12 @@ class DoubleJetCase:
         if self.perturbation_type == DoubleJetPerturbationType.SpinUp or \
            self.perturbation_type == DoubleJetPerturbationType.LowFrequencySpinUp or \
            self.perturbation_type == DoubleJetPerturbationType.LowFrequencyStandardSpinUp:
+            
+            self.sim_args.update( {
+                "small_scale_perturbation": model_error,
+                "small_scale_perturbation_amplitude": 0.0003,
+                "small_scale_perturbation_interpolation_factor": 5 })
+
             if self.perturbation_type == DoubleJetPerturbationType.LowFrequencySpinUp:
                 self.commonSpinUpTime = self.commonSpinUpTime
                 self.individualSpinUpTime = self.individualSpinUpTime*1.5
@@ -227,6 +231,11 @@ class DoubleJetCase:
             
         # The IEWPFPaperCase - isolated to give a better overview
         if self.perturbation_type == DoubleJetPerturbationType.IEWPFPaperCase:
+            self.sim_args.update( {
+                "small_scale_perturbation": model_error,
+                "small_scale_perturbation_amplitude": 0.0003,
+                "small_scale_perturbation_interpolation_factor": 5 })
+
             self.sim_args["small_scale_perturbation_amplitude"] = 0.00025
             self.sim_args["model_time_step"] = 60 # sec
             
