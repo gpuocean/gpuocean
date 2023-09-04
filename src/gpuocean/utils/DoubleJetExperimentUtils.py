@@ -97,7 +97,7 @@ def generateTruth(gpu_ctx, destination_dir,
         doubleJetCase = DoubleJetCase.DoubleJetCase(gpu_ctx,
                                                     DoubleJetCase.DoubleJetPerturbationType.IEWPFPaperCase)
 
-        doubleJetCase_args, doubleJetCase_init = doubleJetCase.getInitConditions()
+        doubleJetCase_args, doubleJetCase_init, model_error_args = doubleJetCase.getInitConditions()
 
         if (np.any(np.isnan(doubleJetCase_init["eta0"]))):
             print(" `-> ERROR: Not a number in spinup, aborting!")
@@ -120,6 +120,7 @@ def generateTruth(gpu_ctx, destination_dir,
 
         tic = time.time()
         sim = CDKLM16.CDKLM16(**doubleJetCase_args, **doubleJetCase_init, **netcdf_args)
+        sim.setSOARModelError(**model_error_args)
 
         toc = time.time()
         if log_to_screen: print("\n{:02.4f} s: ".format(toc-tic) + "Truth simulator initiated")
