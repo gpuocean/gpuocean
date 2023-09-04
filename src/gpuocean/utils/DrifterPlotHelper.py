@@ -49,7 +49,7 @@ def background_from_netcdf(source_url, figsize=None, t_idx=0, domain=[0, None, 0
     t_idx       - time index (int) in netCDF file
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the netCDF file
     drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
-    background_type -  any of the following strings: [eta, velocity*, velocity_variance, landmask] (* default)
+    background_type -  any of the following strings: [eta, velocity*, velocity_variance, velocity_stddev, landmask] (* default)
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
     cbar        - boolean for adding colorbar or not
@@ -132,7 +132,7 @@ def background_from_sim(sim, figsize=None, domain=[0, None, 0, None], drifter_do
     sim - CDKLM simulator
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
     drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
-    background_type -  any of the following strings: [eta, velocity*, velocity_variance, landmask] (* default)
+    background_type -  any of the following strings: [eta, velocity*, velocity_variance, velocity_stddev, landmask] (* default)
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
     cbar        - boolean for adding colorbar or not
@@ -174,7 +174,7 @@ def background_from_ensemble(ensemble, figsize=None, domain=[0, None, 0, None], 
     
     ensemble    - OceanModelEnsemble
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
-    background_type -  any of the following strings: [eta, velocity, velocity_variance, landmask*] (* default)
+    background_type -  any of the following strings: [eta, velocity, velocity_variance, velocity_stddev, landmask*] (* default)
     drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
@@ -220,7 +220,7 @@ def background_from_mlensemble(mlensemble, figsize=None, domain=[0, None, 0, Non
     
     ensemble    - MultiLevelOceanEnsemble
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
-    background_type -  any of the following strings: [eta, velocity, velocity_variance*, landmask] (* default)
+    background_type -  any of the following strings: [eta, velocity, velocity_variance*, velocity_stddev, landmask] (* default)
     drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
@@ -269,7 +269,7 @@ def make_generic_background(dx, dy,
     
     dx, dy      - grid cell sizes
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
-    background_type -  any of the following strings: [eta, velocity, velocity_variance*, landmask] (* default)
+    background_type -  any of the following strings: [eta, velocity, velocity_variance*, velocity_stddev, landmask] (* default)
     drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
@@ -282,7 +282,7 @@ def make_generic_background(dx, dy,
     if cmap is None:
         if background_type == "eta":
             cmap = plt.cm.BrBG
-        elif background_type == "velocity_variance":
+        elif background_type in ["velocity_variance", "velocity_stddev"]:
             cmap = plt.cm.Reds
         else: # "landmask" or "velocity"
             cmap = plt.cm.Oranges
@@ -326,16 +326,22 @@ def make_generic_background(dx, dy,
 
         im = ax.imshow(velo, origin="lower", cmap=cmap, vmin=0.0, vmax=vmax, extent=extent, **kwargs)
 
-    elif background_type == 'velocity_variance':
-        assert(u_var is not None), "require u_var to make 'velocity_variance' background"
-        assert(v_var is not None), "require v_var to make 'velocity_variance' background"
-        velo_var = np.sqrt(u_var**2 + v_var**2)
-        if vmax is None:
-            vmax = np.max(velo_var)
-        im = ax.imshow(velo_var, origin="lower", cmap=cmap, vmin=0.0, vmax=vmax, extent=extent, **kwargs)        
+    elif background_type in ['velocity_variance', "velocity_stddev"]:
+        assert(u_var is not None), "require u_var to make 'velocity_variance' or 'velocity_stddev' background"
+        assert(v_var is not None), "require v_var to make 'velocity_variance' or 'velocity_stddev' background"
+        velo_var = np.sqrt(u_var**2 + v_var**2)    
+        if background_type == 'velocity_variance':
+            if vmax is None:
+                vmax = np.max(velo_var)
+            im = ax.imshow(velo_var, origin="lower", cmap=cmap, vmin=0.0, vmax=vmax, extent=extent, **kwargs)        
+        else:
+            velo_stddev = np.sqrt(velo_var)
+            if vmax is None:
+                vmax = np.max(velo_stddev)
+            im = ax.imshow(velo_stddev, origin="lower", cmap=cmap, vmin=0.0, vmax=vmax, extent=extent, **kwargs)        
     else:
         raise KeyError("Got value "+str(background_type)+
-                       " as input for 'background_type'. Acceptable values are 'landmask', 'eta', 'velocity', and 'velocity_variance'.")
+                       " as input for 'background_type'. Acceptable values are 'landmask', 'eta', 'velocity', 'velocity_stddev', and 'velocity_variance'.")
     
     
     # Colorbar
@@ -351,13 +357,15 @@ def make_generic_background(dx, dy,
             cb.set_label(label="water level [$m$]")
         elif background_type == 'velocity_variance':
             cb.set_label(label="velocity variance [$(m/s^2)^2$]")
+        elif background_type == 'velocity_stddev':
+            cb.set_label(label="velocity std.dev. [$m/s^2$]")
 
     if return_extent:
         return ax, extent
     return ax
 
 def _check_background_type(background_type):
-    valid_background_types = ["eta", "velocity", "velocity_variance", "landmask"]
+    valid_background_types = ["eta", "velocity", "velocity_variance", "velocity_stddev", "landmask"]
     assert(background_type in valid_background_types), "'"+str(background_type)+"' is an invalid background_type. Valid background_type values are "+str(valid_background_types)
         
 ##################################################3
