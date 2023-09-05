@@ -28,6 +28,8 @@ import scipy
 from skimage.measure import block_reduce
 from scipy.spatial.distance import cdist
 
+from gpuocean.ensembles import MultiLevelOceanEnsemble
+
 class MLEnKFOcean:
     """
     This class implements the multi-level ensemble Kalman filter
@@ -157,13 +159,30 @@ class MLEnKFOcean:
         assert not isinstance(obs_x, (np.integer, int)), "This should be physical distance, not index"
         assert not isinstance(obs_y, (np.integer, int)), "This should be physical distance, not index"
 
-        ## Prior        
-        ML_state = MLOceanEnsemble.download()
 
+        ## Prior
+        # Avoiding download when possible
+        if isinstance(MLOceanEnsemble, MultiLevelOceanEnsemble.MultiLevelOceanEnsemble):
+            ML_state = MLOceanEnsemble.download()   
+        
+            # Easy access to frequently used information
+            Nes = MLOceanEnsemble.Nes
+            numLevels = MLOceanEnsemble.numLevels
+        
+        elif isinstance(MLOceanEnsemble, list):
+            ML_state = MLOceanEnsemble
 
-        ## Easy access to frequently used information
-        Nes = MLOceanEnsemble.Nes
-        numLevels = MLOceanEnsemble.numLevels
+            # Easy access to frequently used information
+            Nes = np.zeros(len(ML_state), dtype=np.int32)
+            Nes[0] = ML_state[0].shape[-1]
+            for l_idx in range(1,len(ML_state)):
+                Nes[l_idx] = ML_state[l_idx][0].shape[-1]
+
+            numLevels = len(Nes)
+        
+        else:
+            assert False, "MLOceanEnsemble is invalid type"
+        
 
         # Observation indices per level: 
         # NOTE: For factor-2 scalings, this can be simplified
@@ -186,7 +205,7 @@ class MLEnKFOcean:
             else:
                 GC = self.GCweights(obs_x, obs_y, r)
         else:
-            assert precomp_GC.shape == (MLOceanEnsemble.nys[-1], MLOceanEnsemble.nxs[-1]), "The precomputed weights do not match the dimensions!"
+            assert precomp_GC.shape == self.X.shape, "The precomputed weights do not match the dimensions!"
             assert precomp_GC[obs_idxs[-1][0][0], obs_idxs[-1][0][1]] > 0.95, "The precomputed weights do not match the observation location!"
             GC = precomp_GC
 
@@ -282,7 +301,17 @@ class MLEnKFOcean:
                                     @ (obs[obs_var,np.newaxis] - ML_state[l_idx][1][obs_var,obs_idxs[l_idx][1][0],obs_idxs[l_idx][1][1]] - ML_perts[l_idx].T)
                                 ).reshape(ML_state[l_idx][1].shape)
 
-        # Uploading update state to simulators
-        MLOceanEnsemble.upload(ML_state)
 
-        return ML_K
+    
+        if isinstance(MLOceanEnsemble, MultiLevelOceanEnsemble.MultiLevelOceanEnsemble):
+            # Uploading update state to simulators
+            MLOceanEnsemble.upload(ML_state)  
+
+            return ML_K
+        
+        elif isinstance(MLOceanEnsemble, list):
+            
+            return ML_state
+        
+
+        
