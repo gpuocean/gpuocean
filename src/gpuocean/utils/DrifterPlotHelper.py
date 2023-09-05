@@ -453,3 +453,90 @@ def set_drifter_zoom(ax, extent, drifter_domain, dx, dy):
         y1 = drifter_domain[3]*dy/1000
     ax.set_xlim([x0, x1])
     ax.set_ylim([y0, y1])
+
+
+##################################################3
+# Kernel Density Estimation
+
+def add_kde_on_background(ax, ensemble_obs, drifter_id=0, cmap="Greens", label=None,
+                              drifter_t=None, **kwargs):
+    
+    if drifter_t is None:
+        drifter_t = ensemble_obs[0].obs_df["time"].iloc[-1]
+
+    ## Get last postions
+    numTrajectories = len(ensemble_obs)
+
+    last_positions = np.zeros((numTrajectories,2))
+    for d in range(numTrajectories):
+        last_positions[d] = ensemble_obs[d].get_drifter_path(drifter_id, 0, drifter_t)[-1][-1]
+    last_positions = last_positions[~np.isnan(last_positions)].reshape(-1,2)
+
+    # Axes
+    xmin, xmax = ax.get_xlim()
+    ymin, ymax = ax.get_ylim()
+    
+    kde_nx = int(ensemble_obs[0].domain_size_x/ensemble_obs[0].nx)
+    kde_ny = int(ensemble_obs[0].domain_size_y/ensemble_obs[0].ny)
+
+    x = np.linspace(xmin, xmax, kde_nx)
+    y = np.linspace(ymin, ymax, kde_ny)
+    xx, yy = np.meshgrid(x,y)
+    ccs = np.vstack([xx.ravel(), yy.ravel()])
+    
+    ## Kernel density estimation 
+    clp = (last_positions-np.average(last_positions,axis=0)).T
+    clp[0][clp[0] > (x[-1]/2)] = clp[0][clp[0] > (x[-1]/2)] - x[-1]
+    clp[0][clp[0] < (-x[-1]/2)] = clp[0][clp[0] < (-x[-1]/2)] + x[-1]
+    clp[1][clp[1] > (y[-1]/2)] = clp[1][clp[1] > (y[-1]/2)] - y[-1]
+    clp[1][clp[1] < (-y[-1]/2)] = clp[1][clp[1] < (-y[-1]/2)] + y[-1]
+
+    raw_cov = np.cov(clp)
+
+    bw = numTrajectories**(-1./(2+4))
+
+    cov = raw_cov * bw
+    covinv = np.linalg.inv(cov)
+        
+    f = np.zeros((kde_ny,kde_nx))
+    for e in range(numTrajectories):
+        d = (ccs.T-last_positions[e]).T
+        d[0][d[0] > (x[-1]/2)] = d[0][d[0] > (x[-1]/2)] - x[-1]
+        d[0][d[0] < (-x[-1]/2)] = d[0][d[0] < (-x[-1]/2)] + x[-1]
+        d[1][d[1] > (y[-1]/2)] = d[1][d[1] > (y[-1]/2)] - y[-1]
+        d[1][d[1] < (-y[-1]/2)] = d[1][d[1] < (-y[-1]/2)] + y[-1]
+        f += np.exp(-1/2*np.sum((d*np.dot(covinv,d)), axis=0)).reshape(kde_ny,kde_nx)
+        
+    ## Levels for plotting
+    fmass = np.sum(f)
+
+    fmax = np.max(f)
+
+    levels = np.linspace(0,fmax,100)
+    level_probs = np.zeros(100)
+    for l in range(len(levels)):
+        level_probs[l] = np.sum(f[f>levels[l]])/fmass
+    level_probs[-1] = 0.0
+
+    desired_probs = [0.9,0.75,0.5,0.25,0.0] #descending! (ending with 0.0)
+    desired_levels = np.zeros_like(desired_probs)
+    for p in range(len(desired_probs)):
+        desired_levels[p] = levels[np.abs(level_probs-desired_probs[p]).argmin()]
+    desired_levels = np.unique(desired_levels)
+
+    # plotting levels and areas
+    cfset = ax.contourf(xx, yy, f, levels=desired_levels, cmap=cmap, alpha=0.5)
+    cset = ax.contour(xx, yy, f, levels=desired_levels, colors='k', alpha=0.25, linewidths=1)
+    
+    # Legend
+    proxy = [plt.Rectangle((0,0),1,1,fc = pc.get_facecolor()[0]) for pc in cfset.collections]
+    labels = []
+    for p in desired_probs:
+        labels.append(str(int(p*100))+"%")
+    ax.legend(proxy, labels, 
+              #prop={'size': 18}, 
+              labelcolor="black", 
+              framealpha=0.9,
+              loc=0
+              )
+    
