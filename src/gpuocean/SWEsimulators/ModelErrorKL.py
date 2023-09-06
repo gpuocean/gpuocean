@@ -254,7 +254,7 @@ class ModelErrorKL(object):
                 include_cos=True, include_sin=True,
                 basis_x_start = 1, basis_y_start = 1,
                 basis_x_end = 10, basis_y_end = 10,
-                use_lcg=False, xorwow_seed = None,
+                use_lcg=False, xorwow_seed = None, np_seed=None,
                 block_width=16, block_height=16):
         return cls(sim.gpu_ctx, sim.gpu_stream,
                    sim.nx, sim.ny, sim.dx, sim.dy,
@@ -265,7 +265,7 @@ class ModelErrorKL(object):
                    basis_x_end=basis_x_end, basis_y_end=basis_y_end,
                    angle=sim.angle_texref.get_array(),
                    coriolis_f=sim.coriolis_texref.get_array(),
-                   use_lcg=use_lcg, xorwow_seed=xorwow_seed,
+                   use_lcg=use_lcg, xorwow_seed=xorwow_seed, np_seed=np_seed,
                    block_width=block_width, block_height=block_height)
 
     def getSeed(self):

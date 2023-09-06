@@ -645,14 +645,14 @@ class CDKLM16(Simulator.Simulator):
                         include_cos=True, include_sin=True,
                         basis_x_start = 1, basis_y_start = 1,
                         basis_x_end = 10, basis_y_end = 10,
-                        use_lcg=False, xorwow_seed = None,
+                        use_lcg=False, xorwow_seed = None, np_seed=None,
                         block_width=16, block_height=16):
         self.model_error = ModelErrorKL.ModelErrorKL.fromsim(self,
                                                              kl_decay=kl_decay, kl_scaling=kl_scaling,
                                                              include_cos=include_cos, include_sin=include_sin,
                                                              basis_x_start=basis_x_start, basis_y_start=basis_y_start,
                                                              basis_x_end=basis_x_end, basis_y_end=basis_y_end,
-                                                             use_lcg=use_lcg, xorwow_seed=xorwow_seed,
+                                                             use_lcg=use_lcg, xorwow_seed=xorwow_seed, np_seed=np_seed,
                                                              block_width=block_width, block_height=block_height)
         
     def setKLModelErrorSimilarAs(self, otherSim):
