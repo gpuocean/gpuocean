@@ -257,7 +257,7 @@ def background_from_mlensemble(mlensemble, figsize=None, domain=[0, None, 0, Non
     return ax
 
 
-def make_generic_background(dx, dy,
+def make_generic_background(dx, dy, nx=None, ny=None,
                             eta=None, hu=None, hv=None, landmask=None, H_m=None,
                             u=None, v=None, u_var=None, v_var=None,
                             figsize=None, cmap=None, vmax=None, cbar=True,
@@ -269,7 +269,7 @@ def make_generic_background(dx, dy,
     
     dx, dy      - grid cell sizes
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
-    background_type -  any of the following strings: [eta, velocity, velocity_variance*, velocity_stddev, landmask] (* default)
+    background_type -  any of the following strings: [eta, velocity, velocity_variance, velocity_stddev, landmask*, empty] (* default)
     drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
@@ -289,7 +289,7 @@ def make_generic_background(dx, dy,
     cmap = copy.copy(cmap)
     cmap.set_bad("grey", alpha=0.5)
     
-    nx, ny = None, None
+    nx, ny = nx, ny
     if eta is not None:
         ny, nx = eta.shape
     elif u is not None:
@@ -299,7 +299,11 @@ def make_generic_background(dx, dy,
     extent = [0, nx*dx/1000, 0, ny*dy/1000]
 
     # Make the different backgrounds
-    if background_type == 'landmask':
+    if background_type == 'empty':
+        ax.imshow(np.zeros((nx,ny)), origin="lower", cmap=cmap, vmin=0.0, vmax=0.0, extent=extent, **kwargs)
+        cbar = False
+        
+    elif background_type == 'landmask':
         assert(eta is not None), "require eta to make landmask background"
         if vmax is None:
             vmax = 1
@@ -365,7 +369,7 @@ def make_generic_background(dx, dy,
     return ax
 
 def _check_background_type(background_type):
-    valid_background_types = ["eta", "velocity", "velocity_variance", "velocity_stddev", "landmask"]
+    valid_background_types = ["eta", "velocity", "velocity_variance", "velocity_stddev", "landmask", "empty"]
     assert(background_type in valid_background_types), "'"+str(background_type)+"' is an invalid background_type. Valid background_type values are "+str(valid_background_types)
         
 ##################################################3
