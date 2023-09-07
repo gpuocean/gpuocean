@@ -40,7 +40,7 @@ from gpuocean.utils import OceanographicUtilities
 ##################################################3
 # BACKGROUND CANVASES
 
-def background_from_netcdf(source_url, figsize=None, t_idx=0, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
+def background_from_netcdf(source_url, ax=None, figsize=None, t_idx=0, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
                            background_type="velocity", cmap=None, vmax=None, cbar=True, lonlat_diff=None, **kwargs):
     """
     Creating a background canvas from netCDF files
@@ -93,7 +93,7 @@ def background_from_netcdf(source_url, figsize=None, t_idx=0, domain=[0, None, 0
     finally:
         ncfile.close()
 
-    ax, extent = make_generic_background(dx, dy,
+    ax, extent = make_generic_background(dx, dy, ax=ax,
                                          eta=eta, hu=hu, hv=hv, landmask=np.isnan(eta), H_m=H_m,
                                          u=None, v=None, u_var=None, v_var=None,
                                          figsize=figsize, cmap=cmap, vmax=vmax,
@@ -124,7 +124,7 @@ def background_from_netcdf(source_url, figsize=None, t_idx=0, domain=[0, None, 0
     return ax
 
 
-def background_from_sim(sim, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
+def background_from_sim(sim, ax=None, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
                         background_type="velocity", cmap=None, vmax=None, cbar=True, **kwargs):
     """
     Creating a background canvas from sim
@@ -153,7 +153,7 @@ def background_from_sim(sim, figsize=None, domain=[0, None, 0, None], drifter_do
 
     dx, dy = sim.dx, sim.dy
  
-    ax, extent = make_generic_background(dx, dy,
+    ax, extent = make_generic_background(dx, dy, ax=ax,
                                          eta=eta, hu=hu, hv=hv, landmask=landmask, H_m=H_m,
                                          u=None, v=None, u_var=None, v_var=None,
                                          figsize=figsize, cmap=cmap, vmax=vmax,
@@ -167,7 +167,7 @@ def background_from_sim(sim, figsize=None, domain=[0, None, 0, None], drifter_do
 
 
 
-def background_from_ensemble(ensemble, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
+def background_from_ensemble(ensemble, ax=None, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
                              background_type="landmask", cmap=None, vmax=None, **kwargs):
     """
     Creating a background canvas from ensemble
@@ -201,7 +201,7 @@ def background_from_ensemble(ensemble, figsize=None, domain=[0, None, 0, None], 
     u,     v     = [mean_velocity[i, y0:y1, x0:x1] for i in range(2)]
     u_var, v_var = [ var_velocity[i, y0:y1, x0:x1] for i in range(2)]
 
-    ax, extent = make_generic_background(dx, dy,
+    ax, extent = make_generic_background(dx, dy, ax=ax,
                                          eta=eta, hu=hu, hv=hv, landmask=landmask, H_m=H_m,
                                          u=u, v=v, u_var=u_var, v_var=v_var,
                                          figsize=figsize, cmap=cmap, vmax=vmax,
@@ -213,7 +213,7 @@ def background_from_ensemble(ensemble, figsize=None, domain=[0, None, 0, None], 
 
     return ax
 
-def background_from_mlensemble(mlensemble, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
+def background_from_mlensemble(mlensemble, ax=None, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
                                background_type="velocity_variance", cmap=None, vmax=None, **kwargs):
     """
     Creating a background canvas from multi-level ensemble
@@ -245,7 +245,7 @@ def background_from_mlensemble(mlensemble, figsize=None, domain=[0, None, 0, Non
     u_var, v_var = [ mlvar_velocity[i, y0:y1, x0:x1] for i in range(2)]
     dx, dy = mlensemble.dxs[-1], mlensemble.dys[-1]
 
-    ax, extent = make_generic_background(dx, dy,
+    ax, extent = make_generic_background(dx, dy, ax=ax, 
                                          eta=eta, hu=hu, hv=hv, landmask=landmask, H_m=H_m,
                                          u=u, v=v, u_var=u_var, v_var=v_var,
                                          figsize=figsize, cmap=cmap, vmax=vmax,
@@ -256,8 +256,19 @@ def background_from_mlensemble(mlensemble, figsize=None, domain=[0, None, 0, Non
 
     return ax
 
+def background_from_grid_parameters(nx, ny, dx, dy, ax=None, figsize=None, drifter_domain=[0, None, 0, None], **kwargs):
+    
 
-def make_generic_background(dx, dy, nx=None, ny=None,
+    ax, extent = make_generic_background(dx, dy, ax=ax, nx=nx, ny=ny,
+                                         figsize=figsize, return_extent=True,
+                                         background_type="empty",
+                                         **kwargs)
+    
+    set_drifter_zoom(ax, extent, drifter_domain, dx, dy)
+
+    return ax
+
+def make_generic_background(dx, dy, ax=None, nx=None, ny=None,
                             eta=None, hu=None, hv=None, landmask=None, H_m=None,
                             u=None, v=None, u_var=None, v_var=None,
                             figsize=None, cmap=None, vmax=None, cbar=True,
@@ -277,8 +288,10 @@ def make_generic_background(dx, dy, nx=None, ny=None,
     Note: `domain` sets the x/y axis extent and is therefore different from `drifter_domain`
     """
     _check_background_type(background_type)
+    
+    if ax is None:
+        fig, ax = plt.subplots(1,1, figsize=figsize)
 
-    fig, ax = plt.subplots(1,1, figsize=figsize)
     if cmap is None:
         if background_type == "eta":
             cmap = plt.cm.BrBG
