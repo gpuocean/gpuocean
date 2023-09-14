@@ -135,7 +135,7 @@ class MLEnKFOcean:
         
     def assimilate(self, MLOceanEnsemble, obs, obs_x, obs_y, R, 
                    r=None, relax_factor = 1.0, obs_var=slice(0,3), min_localisation_level=1,
-                   precomp_GC = None):
+                   precomp_GC = None, log=None):
         """
         Returning the posterior state after assimilating observation into multi-level ensemble
         after appyling MLEnKF
@@ -152,6 +152,7 @@ class MLEnKFOcean:
                             obs_var = slice(0,3) # eta, hu, hv
         min_localisation_level  - int, this and all higher levels are localised in the update
         precomp_GC      - ndarray of size (ny, nx) with weights. OBS! Should match obs_x, obs_y! 
+        log             - filehandle (already opened)
         """
 
         # Check that obs_x and obs_y are NOT integer types 
@@ -270,6 +271,11 @@ class MLEnKFOcean:
 
         if np.linalg.norm(np.linalg.inv(ML_YY + np.diag(R[obs_var]))) > np.linalg.norm(np.linalg.inv(np.diag(R[obs_var]))): 
             ML_YY = np.zeros((obs_varN,obs_varN))
+
+        if log is not None:
+            eigvals = np.linalg.eigvals(ML_YY + np.diag(R[obs_var]))
+            log.write("Eigenvalues: " + ", ".join([str(v) for v in eigvals]) + "\n")
+
         
         # Kalman Gain        
         ML_K = ML_XY @ np.linalg.inv(ML_YY + np.diag(R[obs_var]))
