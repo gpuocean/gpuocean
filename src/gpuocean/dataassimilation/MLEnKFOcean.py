@@ -23,7 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 import numpy as np
-import scipy
+import scipy, os
 
 from skimage.measure import block_reduce
 from scipy.spatial.distance import cdist
@@ -276,7 +276,14 @@ class MLEnKFOcean:
             eigvals = np.linalg.eigvals(ML_YY + np.diag(R[obs_var]))
             log.write("Eigenvalues: " + ", ".join([str(v) for v in eigvals]) + "\n")
 
-        
+        eigvals = np.linalg.eigvals(ML_YY + np.diag(R[obs_var]))
+        if eigvals.min() <= 0.0:
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
+            MultiLevelOceanEnsemble.MultiLevelOceanEnsemble.saveState2file(os.getcwd()+"/crash_reports/"+timestamp, ML_state)
+
+            ML_YY = ML_YY - 2*eigvals.min()*np.eye(obs_varN) # eigvals.min() negative => -eigvals.min() positive
+
         # Kalman Gain        
         ML_K = ML_XY @ np.linalg.inv(ML_YY + np.diag(R[obs_var]))
 
