@@ -168,6 +168,22 @@ class MultiLevelOceanEnsemble:
             ML_state[l_idx][1] = np.moveaxis(ML_state[l_idx][1], 0, -1) 
 
         return ML_state
+    
+
+    def save2file(self, filepath):
+        ML_state = self.download()
+        MultiLevelOceanEnsemble.saveState2file(filepath, ML_state)
+        
+
+    @staticmethod
+    def saveState2file(filepath, ML_state):
+        os.makedirs(filepath, exist_ok=True)
+        np.save(filepath+"/MLensemble_0.npy", np.array(ML_state[0]))
+        for l_idx in range(1,len(ML_state)):
+            np.save(filepath+"/MLensemble_"+str(l_idx)+"_0.npy", np.array(ML_state[l_idx][0]))
+            np.save(filepath+"/MLensemble_"+str(l_idx)+"_1.npy", np.array(ML_state[l_idx][1]))
+
+    
 
     def downloadVelocities(self, interior_domain_only=True):
         """"State of the ML ensemble as list of np-arrays per level
