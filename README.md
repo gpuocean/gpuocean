@@ -44,7 +44,7 @@ We recommend that you set up your python environment using the package manager C
     ```
 - Install pycuda (but none of its dependencies) using pip:
     ```
-    pip3 install --trusted-host files.pythonhosted.org --no-deps -U pycuda
+    pip3 install --trusted-host files.pythonhosted.org --no-deps -U pycuda==2021.1
     ```
 - Set the `PYTHONPATH` to find the source code:
     ```
