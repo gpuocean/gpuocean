@@ -281,6 +281,8 @@ class MLEnKFOcean:
             import datetime
             timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
             MultiLevelOceanEnsemble.MultiLevelOceanEnsemble.saveState2file(os.getcwd()+"/crash_reports/"+timestamp, ML_state)
+            if log is not None:
+                log.write("Crash report at " + timestamp + "\n")
 
             ML_YY = ML_YY - 2*eigvals.min()*np.eye(obs_varN) # eigvals.min() negative => -eigvals.min() positive
 
