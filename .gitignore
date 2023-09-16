@@ -25,3 +25,9 @@ cuda_cache/
 /cmake_install.cmake
 /CTestTestfile.cmake
 /doc/reference_python/
+
+bin
+lib
+share
+include
+lib64
