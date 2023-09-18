@@ -449,6 +449,11 @@ class Simulator(object):
             self.gpu_data.h1.upload(self.gpu_stream, eta1)
             self.gpu_data.hu1.upload(self.gpu_stream, hu1)
             self.gpu_data.hv1.upload(self.gpu_stream, hv1)
+
+        # Update boundary conditions
+        self.bc_kernel.update_bc_values(self.gpu_stream, self.t)
+        self.bc_kernel.boundaryCondition(self.gpu_stream, \
+                                             self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0)
             
     def _set_interior_domain_from_sponge_cells(self):
         """
