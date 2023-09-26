@@ -265,26 +265,36 @@ class MLEnKFOcean:
                         - 1/(Nes[l_idx]-1) *( (Y1 - Y1mean) @ (Y1 - Y1mean).T) 
         
         # Avoiding potential explosions caused by infeasible approximations 
-        for d_idx in range(obs_varN):
-            if ML_YY[d_idx,d_idx] < 0.0:
-                ML_YY[d_idx,d_idx] = 0.0
+        # This is not enough
+        # for d_idx in range(obs_varN):
+        #     if ML_YY[d_idx,d_idx] < 0.0:
+        #         ML_YY[d_idx,d_idx] = 0.0
 
-        if np.linalg.norm(np.linalg.inv(ML_YY + np.diag(R[obs_var]))) > np.linalg.norm(np.linalg.inv(np.diag(R[obs_var]))): 
-            ML_YY = np.zeros((obs_varN,obs_varN))
+        # if np.linalg.norm(np.linalg.inv(ML_YY + np.diag(R[obs_var]))) > np.linalg.norm(np.linalg.inv(np.diag(R[obs_var]))): 
+        #     ML_YY = np.zeros((obs_varN,obs_varN))
+
+
+        eigvalsYY = np.linalg.eigvals(ML_YY)
 
         if log is not None:
-            eigvals = np.linalg.eigvals(ML_YY + np.diag(R[obs_var]))
-            log.write("Eigenvalues: " + ", ".join([str(v) for v in eigvals]) + "\n")
+            log.write("Eigenvalues: " + ", ".join([str(v) for v in eigvalsYY]) + "\n")
 
-        eigvals = np.linalg.eigvals(ML_YY + np.diag(R[obs_var]))
-        if eigvals.min() <= 0.0:
+        if eigvalsYY.min() <= 0.0:
             import datetime
             timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
             MultiLevelOceanEnsemble.MultiLevelOceanEnsemble.saveState2file(os.getcwd()+"/crash_reports/"+timestamp, ML_state)
             if log is not None:
                 log.write("Crash report at " + timestamp + "\n")
 
-            ML_YY = ML_YY - 2*eigvals.min()*np.eye(obs_varN) # eigvals.min() negative => -eigvals.min() positive
+            # ML_YY = ML_YY - 2*eigvals.min()*np.eye(obs_varN) # eigvals.min() negative => -eigvals.min() positive
+
+            if isinstance(MLOceanEnsemble, MultiLevelOceanEnsemble.MultiLevelOceanEnsemble):
+                # Uploading update state to simulators
+                MLOceanEnsemble.upload(ML_state)  
+                return ML_K
+            
+            elif isinstance(MLOceanEnsemble, list):
+                return ML_state
 
         # Kalman Gain        
         ML_K = ML_XY @ np.linalg.inv(ML_YY + np.diag(R[obs_var]))
