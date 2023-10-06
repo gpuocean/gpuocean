@@ -203,7 +203,7 @@ class CDKLM16(Simulator.Simulator):
                     'options' : ["--ftz=true",          # false,   true,      true
                                  "--prec-div=false",    # true,    false,     false,
                                  "--prec-sqrt=false",   # true,    false,     false
-                                 "--fmad=false"]        # true,    true,      false
+                                 "--fmad=false"],        # true,    true,      false
                     
                     #'options': ["--use_fast_math"]
                     #'options': ["--generate-line-info"], 

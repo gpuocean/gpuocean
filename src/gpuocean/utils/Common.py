@@ -419,6 +419,14 @@ class CUDAContext(object):
         
         self.logger.debug("Getting %s", kernel_filename)
             
+        if not 'arch' in compile_args.keys():
+            # HACK: Since CUDA 11.1 does not know about newer compute architectures that 8.6
+            if ((cuda.Device(self.device).get_attribute(cuda.device_attribute.COMPUTE_CAPABILITY_MAJOR) > 8) or 
+                (cuda.Device(self.device).get_attribute(cuda.device_attribute.COMPUTE_CAPABILITY_MAJOR) == 8  and 
+                cuda.Device(self.device).get_attribute(cuda.device_attribute.COMPUTE_CAPABILITY_MINOR) > 6) ):
+
+                compile_args['arch'] = "sm_80"
+
         # Create a hash of the kernel (and its includes)
         options_hasher = hashlib.md5()
         options_hasher.update(str(defines).encode('utf-8') + str(compile_args).encode('utf-8'));
