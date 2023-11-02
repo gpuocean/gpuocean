@@ -134,9 +134,30 @@ class Analysis:
     
     def work(self, Nes):
         """
-        Evaluating the theoretical error for an ML ensemble
+        Evaluating the work for an ML ensemble
         work(0 and + ensemble members) + work(- ensemble members)
         """
         assert len(Nes) == len(self.dxs), "Wrong number of levels"
         return np.sum([self._level_work(l_idx) for l_idx in range(len(self.dxs))] * np.array(Nes))
 
+
+    def theoretical_error(self, Nes):
+        """
+        Evaluating the theoretical error for an ML ensemble
+        Ref: PhD thesis of Kjetil, Thm 5.2.1 or PhD thesis Florian Muller, eq. (2.21)
+        """
+        assert len(Nes) == len(self.dxs), "Wrong number of levels"
+
+        ## Kjetil:
+        # theo_err = np.sqrt(self.vars[0])/np.sqrt(Nes[0])
+        # for l_idx in range(1, len(self.dxs)):
+        #     theo_err += np.sqrt(self.diff_vars[l_idx-1])/np.sqrt(Nes[l_idx])
+
+        # return theo_err
+
+        ## Florian
+        theo_err = self.vars[0]/Nes[0]
+        for l_idx in range(1, len(self.dxs)):
+            theo_err += self.diff_vars[l_idx-1]/Nes[l_idx]
+
+        return np.sqrt(theo_err)
