@@ -271,7 +271,15 @@ class MultiLevelOceanEnsemble:
     
 
     def obsLoc2obsIdx(self, obs_x, obs_y):
-        """"""
+        """
+        Finding indices to location ON FINEST LEVEL
+        obs_x  - x-location in [m]
+        obs_y  - y-location in [y]
+
+        returns:
+        Hx     - x-index
+        Hy     - y-index
+        """
         Xs = np.linspace(self.dxs[-1]/2, (self.nxs[-1] - 1/2) * self.dxs[-1], self.nxs[-1])
         Ys = np.linspace(self.dys[-1]/2, (self.nys[-1] - 1/2) * self.dys[-1], self.nys[-1])
 
@@ -279,6 +287,43 @@ class MultiLevelOceanEnsemble:
         Hy = ((Ys - obs_y)**2).argmin()
 
         return Hx, Hy
+    
+
+    def loc2idxs(self, obs_x, obs_y):
+        """
+        Finding indices to location ON ALL LEVELS
+        obs_x  - x-location in [m]
+        obs_y  - y-location in [y]
+
+        returns:
+        [[Hx0, Hy0], [[Hx1+,Hy1+],[Hx1-,Hy1-]],...]
+        where the "-"-indices are the same as on the coarser level,
+        but for consistency with the other indexing in code this structure is chosen
+        """
+        # Keep field information (cell centers)
+        Xs = np.linspace(0.5*self.dxs[-1], (self.nxs[-1] - 0.5) * self.dxs[-1], self.nxs[-1])
+        Ys = np.linspace(0.5*self.dys[-1], (self.nys[-1] - 0.5) * self.dys[-1], self.nys[-1])
+        X, Y = np.meshgrid(Xs, Ys)
+
+        # Keep field information per level
+        lvl_X, lvl_Y = [], []
+        for l_idx in range(self.numLevels):
+            lvl_Xs = np.linspace(0.5*self.dxs[l_idx], (self.nxs[l_idx] - 0.5) * self.dxs[l_idx], self.nxs[l_idx])
+            lvl_Ys = np.linspace(0.5*self.dys[l_idx], (self.nys[l_idx] - 0.5) * self.dys[l_idx], self.nys[l_idx])
+            tmp_lvl_X, tmp_lvl_Y = np.meshgrid(lvl_Xs, lvl_Ys)
+            lvl_X.append(tmp_lvl_X)
+            lvl_Y.append(tmp_lvl_Y)
+
+
+        # NOTE: For factor-2 scalings, this can be simplified
+        obs_idxs = [list(np.unravel_index(np.argmin((lvl_X[0] - obs_x)**2 + (lvl_Y[0] - obs_y)**2), (self.nys[0], self.nxs[0])))]
+        for l_idx in range(1, self.numLevels):
+            obs_idxs0 = np.unravel_index(np.argmin((lvl_X[l_idx]   - obs_x)**2 + (lvl_Y[l_idx]   - obs_y)**2), (self.nys[l_idx  ], self.nxs[l_idx  ]))
+            obs_idxs1 = np.unravel_index(np.argmin((lvl_X[l_idx-1] - obs_x)**2 + (lvl_Y[l_idx-1] - obs_y)**2), (self.nys[l_idx-1], self.nxs[l_idx-1]))
+            obs_idxs.append([list(obs_idxs0), list(obs_idxs1)])
+
+        return obs_idxs
+
 
     def rank(self, truth, obs_locations, R=None):
         """
