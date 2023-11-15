@@ -135,7 +135,7 @@ class MLEnKFOcean:
         
     def assimilate(self, MLOceanEnsemble, obs, obs_x, obs_y, R, 
                    r=None, relax_factor = 1.0, obs_var=slice(0,3), min_localisation_level=1,
-                   precomp_GC = None, log=None):
+                   precomp_GC = None, log=None, write_crash=False):
         """
         Returning the posterior state after assimilating observation into multi-level ensemble
         after appyling MLEnKF
@@ -153,6 +153,7 @@ class MLEnKFOcean:
         min_localisation_level  - int, this and all higher levels are localised in the update
         precomp_GC      - ndarray of size (ny, nx) with weights. OBS! Should match obs_x, obs_y! 
         log             - filehandle (already opened)
+        write_crash     - flag, whether crash_reports are written to file or not. Crash_reports contain the state that gives negative eigenvalues 
         """
 
         # Check that obs_x and obs_y are NOT integer types 
@@ -282,7 +283,8 @@ class MLEnKFOcean:
         if eigvalsYY.min() <= 0.0:
             import datetime
             timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
-            MultiLevelOceanEnsemble.MultiLevelOceanEnsemble.saveState2file(os.getcwd()+"/crash_reports/"+timestamp, ML_state)
+            if write_crash:
+                MultiLevelOceanEnsemble.MultiLevelOceanEnsemble.saveState2file(os.getcwd()+"/crash_reports/"+timestamp, ML_state)
             if log is not None:
                 log.write("Crash report at " + timestamp + "\n")
 
