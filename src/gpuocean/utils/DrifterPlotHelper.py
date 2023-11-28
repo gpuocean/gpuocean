@@ -493,11 +493,15 @@ def add_kde_on_background(ax, ensemble_obs, drifter_id=0, cmap="Greens", label=N
     xmin, xmax = ax.get_xlim()
     ymin, ymax = ax.get_ylim()
     
-    kde_nx = int(ensemble_obs[0].domain_size_x/ensemble_obs[0].nx)
-    kde_ny = int(ensemble_obs[0].domain_size_y/ensemble_obs[0].ny)
+    nx = ensemble_obs[0].nx
+    ny = ensemble_obs[0].ny
 
-    x = np.linspace(xmin, xmax, kde_nx)
-    y = np.linspace(ymin, ymax, kde_ny)
+    dx = ensemble_obs[0].domain_size_x/nx
+    dy = ensemble_obs[0].domain_size_y/ny
+
+    x = np.linspace(xmin+0.5*dx/1000, xmax-0.5*dx/1000, nx)
+    y = np.linspace(ymin+0.5*dy/1000, ymax-0.5*dy/1000, ny)
+
     xx, yy = np.meshgrid(x,y)
     ccs = np.vstack([xx.ravel(), yy.ravel()])
     
@@ -515,14 +519,14 @@ def add_kde_on_background(ax, ensemble_obs, drifter_id=0, cmap="Greens", label=N
     cov = raw_cov * bw
     covinv = np.linalg.inv(cov)
         
-    f = np.zeros((kde_ny,kde_nx))
+    f = np.zeros((ny,nx))
     for e in range(numTrajectories):
         d = (ccs.T-last_positions[e]).T
         d[0][d[0] > (x[-1]/2)] = d[0][d[0] > (x[-1]/2)] - x[-1]
         d[0][d[0] < (-x[-1]/2)] = d[0][d[0] < (-x[-1]/2)] + x[-1]
         d[1][d[1] > (y[-1]/2)] = d[1][d[1] > (y[-1]/2)] - y[-1]
         d[1][d[1] < (-y[-1]/2)] = d[1][d[1] < (-y[-1]/2)] + y[-1]
-        f += np.exp(-1/2*np.sum((d*np.dot(covinv,d)), axis=0)).reshape(kde_ny,kde_nx)
+        f += np.exp(-1/2*np.sum((d*np.dot(covinv,d)), axis=0)).reshape(ny,nx)
         
     ## Levels for plotting
     fmass = np.sum(f)
