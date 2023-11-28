@@ -478,7 +478,7 @@ class MultiLevelOceanEnsemble:
         assert(self.drifters is not None), "No drifters found. Can't call drift() before attachDrifters(...)"
 
         mean_velocity = self.estimateVelocity(np.mean)
-        var_velocity  = self.estimateVelocity(np.var)
+        var_velocity  = self.estimateVelocity(np.var, ddof=1)
 
         self.drifters.drift(mean_velocity[0], mean_velocity[1], 
                             self.dxs[-1], self.dys[-1], 
