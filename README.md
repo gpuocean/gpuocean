@@ -35,7 +35,8 @@ See [here](https://github.com/metno/gpuocean/wiki/Installation).
 
 
 **Preprints**
-* F. Beiser, H. Holm, J. Eidsvik (2023) **Comparison of Ensemble-Based Data Assimilation Methods for Sparse Oceanographic Data**, [arXiv:2302.07197](https://arxiv.org/abs/2302.07197)
+* F. Beiser, H. Holm, J. Eidsvik (2023) **Comparison of Ensemble-Based Data Assimilation Methods for Sparse Oceanographic Data**, [arXiv:2302.07197](https://arxiv.org/abs/2302.07197). Accepted for publication in Quarterly Journal of the Royal Meteorological Society ([Early view](https://doi.org/10.1002/qj.4637))
+* F. Beiser, H. Holm, K. Lye, J. Eidsvik (2024) **Multi-level Data Assimilation for Simplified Ocean Models**, [Nonlinear Processes in Geophysics npg-2023-27](https://doi.org/10.5194/npg-2023-27)
 
 
 
