@@ -1,5 +1,5 @@
 
-<img src="https://github.com/havahol/io-pages-test/assets/5363644/673ca82e-dc40-456b-8d49-4d29084f685a" width=500>
+<img src="logo/gpuocean-logo.png" width=500>
 
  
 **A GPU-accelerated simulation framework for running large ensembles of simplified ocean models for real-world domains.**
