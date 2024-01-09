@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
 import logging
+import gc
 
 from gpuocean.SWEsimulators import CDKLM16
 from gpuocean.drifters import GPUDrifterCollection
@@ -107,7 +108,8 @@ class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
     def cleanUp(self):
         for oceanState in self.particles:
             if oceanState is not None:
-                oceanState.cleanUp()
+                oceanState.cleanUp(do_gc=False)
+        gc.collect()
     
     
     

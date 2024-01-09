@@ -448,6 +448,7 @@ def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
     
     return wind_source
 
+
 def rescaleInitialConditions(old_ic, scale):
     ic = copy.deepcopy(old_ic)
     
@@ -465,8 +466,12 @@ def rescaleInitialConditions(old_ic, scale):
     _, _, ic['hv0'] = OceanographicUtilities.rescaleMidpoints(old_ic['hv0'], ic['NX'], ic['NY'])
     if (old_ic['angle'].shape == old_ic['eta0'].shape):
         _, _, ic['angle'] = OceanographicUtilities.rescaleMidpoints(old_ic['angle'], ic['NX'], ic['NY'])
-    if (old_ic['latitude'].shape == old_ic['eta0'].shape):
-        _, _, ic['latitude'] = OceanographicUtilities.rescaleMidpoints(old_ic['latitude'], ic['NX'], ic['NY'])
+    if "latitude" in old_ic.keys():
+        if (old_ic['latitude'].shape == old_ic['eta0'].shape):
+            _, _, ic['latitude'] = OceanographicUtilities.rescaleMidpoints(old_ic['latitude'], ic['NX'], ic['NY'])
+    if not np.isscalar(old_ic["f"]):
+        if (old_ic['f'].shape == old_ic['eta0'].shape):
+            _, _, ic['f'] = OceanographicUtilities.rescaleMidpoints(old_ic['f'], ic['NX'], ic['NY'])
     
     #Scale number of sponge cells also
     for key in ic['boundary_conditions'].spongeCells.keys():
@@ -476,7 +481,10 @@ def rescaleInitialConditions(old_ic, scale):
     #"boundary_conditions": 
     #"boundary_conditions_data": 
     #"wind_stress": 
-    ic['note'] = old_ic['note'] + "\n" + datetime.datetime.now().isoformat() + ": Rescaled by factor " + str(scale)
+    if "note" in old_ic.keys():
+        ic['note'] = old_ic['note'] + "\n" + datetime.datetime.now().isoformat() + ": Rescaled by factor " + str(scale)
+    else: 
+        ic['note'] = datetime.datetime.now().isoformat() + ": Rescaled by factor " + str(scale)
 
     return ic
 

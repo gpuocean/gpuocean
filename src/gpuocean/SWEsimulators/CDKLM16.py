@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #Import packages we need
 import numpy as np
+import copy
 import gc
 import logging
 from scipy.interpolate import interp2d
@@ -42,7 +43,8 @@ import pycuda.driver as cuda
 
 class CDKLM16(Simulator.Simulator):
     """
-    Class that solves the SW equations using the Coriolis well balanced reconstruction scheme, as given by the publication of Chertock, Dudzinski, Kurganov and Lukacova-Medvidova (CDFLM) in 2016.
+    Class that solves the SW equations using the Coriolis well balanced reconstruction scheme, 
+    as given by the publication of Chertock, Dudzinski, Kurganov and Lukacova-Medvidova (CDFLM) in 2016.
     """
 
     def __init__(self, \
@@ -224,7 +226,7 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifffi")
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPPPPPPPPPPPPPiPifffi")
         self.update_wind_stress(self.kernel, self.cdklm_swe_2D)
         self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D)
         
@@ -253,6 +255,23 @@ class CDKLM16(Simulator.Simulator):
         
         # Create data by uploading to device
         self.gpu_data = Common.SWEDataArakawaA(self.gpu_stream, nx, ny, ghost_cells_x, ghost_cells_y, eta0, hu0, hv0)
+
+        # Buffers for flux accumulation (used for multilevel simulations)
+        # NOTE: Ghost cells included for simplicity!
+        init_to_zeros = np.zeros(ny+ghost_cells_y*2, dtype=np.float32)
+        self.accF1east  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        self.accF2east  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        self.accF3east  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        self.accF1west  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        self.accF2west  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        self.accF3west  = Common.CUDAArray1D(self.gpu_stream, ny+ghost_cells_y*2, init_to_zeros)
+        init_to_zeros = np.zeros(nx+ghost_cells_x*2, dtype=np.float32)
+        self.accG1north  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
+        self.accG2north  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
+        self.accG3north  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
+        self.accG1south  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
+        self.accG2south  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
+        self.accG3south  = Common.CUDAArray1D(self.gpu_stream, nx+ghost_cells_x*2, init_to_zeros)
 
         # Allocate memory for calculating maximum timestep
         host_dt = np.zeros((self.global_size[1], self.global_size[0]), dtype=np.float32)
@@ -394,7 +413,7 @@ class CDKLM16(Simulator.Simulator):
             self.updateDt()
         
         
-    def cleanUp(self):
+    def cleanUp(self, do_gc=True):
         """
         Clean up function
         """
@@ -413,12 +432,26 @@ class CDKLM16(Simulator.Simulator):
         if self.geoEq_Ly is not None:
             self.geoEq_Ly.release()
         self.bathymetry.release()
+
+        self.accF1east.release()
+        self.accF2east.release()
+        self.accF3east.release()
+        self.accF1west.release()
+        self.accF2west.release()
+        self.accF3west.release()
+        self.accG1north.release()
+        self.accG2north.release()
+        self.accG3north.release()
+        self.accG1south.release()
+        self.accG2south.release()
+        self.accG3south.release()
         
         self.device_dt.release()
         self.max_dt_buffer.release()
  
         self.gpu_ctx = None
-        gc.collect()
+        if do_gc:
+            gc.collect()
            
     @classmethod
     def fromfilename(cls, gpu_ctx, filename, cont_write_netcdf=True, use_lcg=False, xorwow_seed = None, new_netcdf_filename=None, time0=None):
@@ -500,24 +533,59 @@ class CDKLM16(Simulator.Simulator):
     
     
     
-    def step(self, t_end=0.0, apply_stochastic_term=True, write_now=True, update_dt=False):
+    def step(self, t_end=0.0, apply_stochastic_term=True, write_now=True, update_dt=False, reinit_exforcing_tex=False):
         """
         Function which steps n timesteps.
         apply_stochastic_term: Boolean value for whether the stochastic
             perturbation (if any) should be applied after every simulation time step
             by adding SOAR-generated random fields using OceanNoiseState.perturbSim(...)
         """
+        self.gpu_stream.synchronize()   
+        self.gpu_ctx.synchronize()
         
         if self.t == 0:
             self.bc_kernel.update_bc_values(self.gpu_stream, self.t)
             self.bc_kernel.boundaryCondition(self.gpu_stream, \
                                              self.gpu_data.h0, self.gpu_data.hu0, self.gpu_data.hv0)
+
+        if reinit_exforcing_tex: 
+            self.update_wind_stress(self.kernel, self.cdklm_swe_2D, reinit_wind_tex=True)
+            self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D, reinit_atmospres_tex=True)
         
         t_now = 0.0
         #print("self.p_atm_factor_handle(self.t) = " + str(self.p_atm_factor_handle(self.t)))
 
         while (t_now < t_end):
         #for i in range(0, n):
+            
+            ############################
+            # Temporary child code 
+            if len(self.children) > 0:
+                # Store BC for children
+                eta, hu, hv = self.download()
+
+                t0 = self.t
+
+                bc_data_north_t0 = []
+                bc_data_south_t0 = []
+                bc_data_west_t0 = []
+                bc_data_east_t0 = []
+                for child in self.children:
+                    bc_data_north_t0.append([x[ child.level_local_area[1][0]+self.ghost_cells_y+1, 
+                                                child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
+                                            for x in [eta, hu, hv]])
+                    bc_data_south_t0.append([x[ child.level_local_area[0][0]+self.ghost_cells_y-1, 
+                                                child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
+                                            for x in [eta, hu, hv]])
+                    bc_data_west_t0.append([x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
+                                                child.level_local_area[0][1]+self.ghost_cells_x-1 ] 
+                                            for x in [eta, hu, hv]])
+                    bc_data_east_t0.append([x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
+                                                child.level_local_area[1][1]+self.ghost_cells_x+1 ] 
+                                            for x in [eta, hu, hv]])
+            # (end temporary child code)
+
+
             # Get new random wind direction (emulationg large-scale model error)
             if(self.max_wind_direction_perturbation > 0.0 and self.wind_stress.type() == 1):
                 # max perturbation +/- max_wind_direction_perturbation deg within original wind direction (at t=0)
@@ -606,6 +674,85 @@ class CDKLM16(Simulator.Simulator):
             
         if self.write_netcdf and write_now:
             self.sim_writer.writeTimestep(self)
+
+
+        ############################
+        # Temporary child code 
+        self.gpu_stream.synchronize()   
+        self.gpu_ctx.synchronize()
+
+        if len(self.children) > 0:
+            
+            eta, hu, hv = copy.deepcopy(self.download()) 
+            # NOTE: The deepcopy is important that the gpudata does not get "confused" (mask of hu and hv may be effected)
+            
+            t1 = self.t
+            
+            for c, child in enumerate(self.children):
+                # Set BC for child
+                bc_data_north_t1 = [x[ child.level_local_area[1][0]+self.ghost_cells_y+1, 
+                                        child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
+                                    for x in [eta, hu, hv]]
+                bc_data_south_t1 = [x[ child.level_local_area[0][0]+self.ghost_cells_y-1, 
+                                        child.level_local_area[0][1]+self.ghost_cells_x : child.level_local_area[1][1]+self.ghost_cells_x ] 
+                                    for x in [eta, hu, hv]]
+                bc_data_west_t1 = [x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
+                                        child.level_local_area[0][1]+self.ghost_cells_x-1 ] 
+                                    for x in [eta, hu, hv]]
+                bc_data_east_t1 = [x[ child.level_local_area[0][0]+self.ghost_cells_y : child.level_local_area[1][0]+self.ghost_cells_y, 
+                                        child.level_local_area[1][1]+self.ghost_cells_x+1 ] 
+                                    for x in [eta, hu, hv]]
+
+                t = [t0, t1]
+                north = Common.SingleBoundaryConditionData(h = [bc_data_north_t0[c][0], bc_data_north_t1[0]],\
+                                                            hu = [bc_data_north_t0[c][1], bc_data_north_t1[1]],\
+                                                            hv = [bc_data_north_t0[c][2], bc_data_north_t1[2]])
+                south = Common.SingleBoundaryConditionData(h = [bc_data_south_t0[c][0], bc_data_south_t1[0]],\
+                                                            hu = [bc_data_south_t0[c][1], bc_data_south_t1[1]],\
+                                                            hv = [bc_data_south_t0[c][2], bc_data_south_t1[2]])
+                east = Common.SingleBoundaryConditionData(h = [bc_data_east_t0[c][0], bc_data_east_t1[0]],\
+                                                            hu = [bc_data_east_t0[c][1], bc_data_east_t1[1]],\
+                                                            hv = [bc_data_east_t0[c][2], bc_data_east_t1[2]])
+                west = Common.SingleBoundaryConditionData(h = [bc_data_west_t0[c][0], bc_data_west_t1[0]],\
+                                                            hu = [bc_data_west_t0[c][1], bc_data_west_t1[1]],\
+                                                            hv = [bc_data_west_t0[c][2], bc_data_west_t1[2]])
+
+                bc_data = Common.BoundaryConditionsData(t=t, north=north, south=south, east=east, west=west)
+
+                child.bc_kernel = Common.BoundaryConditionsArakawaA(child.gpu_ctx, child.nx, child.ny, 2, 2, \
+                                                            child.boundary_conditions, bc_data)
+                
+                # Step child 
+                child.step(t_end=t_end, apply_stochastic_term=apply_stochastic_term, write_now=write_now, update_dt=update_dt)
+
+                # Replacing parent values in local area of the child 
+                eta_child, hu_child, hv_child = child.download(interior_domain_only=True)
+
+                loc = child.level_local_area
+                # TODO: If bathymetry changes, this has to be adapted here!
+                eta_loc = OceanographicUtilities.rescaleMidpoints(eta_child, loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
+                hu_loc  = OceanographicUtilities.rescaleMidpoints(hu_child,  loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
+                hv_loc  = OceanographicUtilities.rescaleMidpoints(hv_child,  loc[1][1]-loc[0][1], loc[1][0]-loc[0][0])[2]
+
+                eta[loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y, 
+                    loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x]  = eta_loc
+                hu[loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y, 
+                    loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x]  = hu_loc
+                hv[loc[0][0]+self.ghost_cells_y : loc[1][0]+self.ghost_cells_y, 
+                    loc[0][1]+self.ghost_cells_x : loc[1][1]+self.ghost_cells_x]  = hv_loc
+
+                # Flux correction
+                # 1. Accumulate fluxes in child grids - *DONE* (might have to add some weights/scaling factors, see next step)
+                # 2. Diff w/parent grid (remember to take different grid resolutions and time step sizes into account) - *CONT HERE*
+                # 3. Correct parend grid fluxes ("rerun" time integration to correct state variables)
+                # See old AMR code and paper (https://link.springer.com/article/10.1007/s10915-014-9883-4#Sec5) for details
+
+            
+            self.upload(eta, hu, hv)
+
+            self.gpu_stream.synchronize()   
+            self.gpu_ctx.synchronize()
+        # (end temporary child code)
             
         return self.t
 
@@ -644,6 +791,18 @@ class CDKLM16(Simulator.Simulator):
                            h_out.data.gpudata, h_out.pitch, \
                            hu_out.data.gpudata, hu_out.pitch, \
                            hv_out.data.gpudata, hv_out.pitch, \
+                           self.accF1east.data.gpudata, \
+                           self.accF2east.data.gpudata, \
+                           self.accF3east.data.gpudata, \
+                           self.accF1west.data.gpudata, \
+                           self.accF2west.data.gpudata, \
+                           self.accF3west.data.gpudata, \
+                           self.accG1north.data.gpudata, \
+                           self.accG2north.data.gpudata, \
+                           self.accG3north.data.gpudata, \
+                           self.accG1south.data.gpudata, \
+                           self.accG2south.data.gpudata, \
+                           self.accG3south.data.gpudata, \
                            self.bathymetry.Bi.data.gpudata, self.bathymetry.Bi.pitch, \
                            self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
                            self.bathymetry.mask_value,
@@ -793,6 +952,42 @@ class CDKLM16(Simulator.Simulator):
     
     def downloadDt(self):
         return self.device_dt.download(self.gpu_stream)
+    
+    def downloadAccF1east(self):
+        return self.accF1east.download(self.gpu_stream)
+
+    def downloadAccF2east(self):
+        return self.accF2east.download(self.gpu_stream)
+
+    def downloadAccF3east(self):
+        return self.accF3east.download(self.gpu_stream)
+
+    def downloadAccF1west(self):
+        return self.accF1west.download(self.gpu_stream)
+
+    def downloadAccF2west(self):
+        return self.accF2west.download(self.gpu_stream)
+
+    def downloadAccF3west(self):
+        return self.accF3west.download(self.gpu_stream)
+
+    def downloadAccG1north(self):
+        return self.accG1north.download(self.gpu_stream)
+
+    def downloadAccG2north(self):
+        return self.accG2north.download(self.gpu_stream)
+
+    def downloadAccG3north(self):
+        return self.accG3north.download(self.gpu_stream)
+
+    def downloadAccG1south(self):
+        return self.accG1south.download(self.gpu_stream)
+
+    def downloadAccG2south(self):
+        return self.accG2south.download(self.gpu_stream)
+
+    def downloadAccG3south(self):
+        return self.accG3south.download(self.gpu_stream)
 
     def downloadGeoEqNorm(self):
         
