@@ -38,7 +38,8 @@ from gpuocean.utils import Common
 class CombinedCDKLM16test(unittest.TestCase):
 
     def setUp(self):
-        self.gpu_ctx = Common.CUDAContext()
+        self.gpu_ctx_in = Common.CUDAContext()
+        self.gpu_ctx_out = Common.CUDAContext()
 
         self.nx = 50
         self.ny = 70
@@ -91,9 +92,7 @@ class CombinedCDKLM16test(unittest.TestCase):
 
 
         # Individual sim with in-coming wave
-        gpu_ctx_in = Common.CUDAContext()
-
-        sim_in = CDKLM16.CDKLM16(gpu_ctx_in, eta0_in, hu0_in, hv0_in, Hi_in,\
+        sim_in = CDKLM16.CDKLM16(self.gpu_ctx_in, eta0_in, hu0_in, hv0_in, Hi_in,\
                                     self.nx, self.ny, self.dx, self.dy, 0.0, self.g, self.f, self.r, \
                                     boundary_conditions=bc_in, boundary_conditions_data=bc_data_in)
         
@@ -102,9 +101,7 @@ class CombinedCDKLM16test(unittest.TestCase):
         eta_in, hu_in, hv_in = sim_in.download(interior_domain_only=True)
 
         # Individual sim with in-coming wave
-        gpu_ctx_out = Common.CUDAContext()
-
-        sim_out = CDKLM16.CDKLM16(gpu_ctx_out, eta0_out, hu0_out, hv0_out, Hi_out,\
+        sim_out = CDKLM16.CDKLM16(self.gpu_ctx_out, eta0_out, hu0_out, hv0_out, Hi_out,\
                                     self.nx, self.ny, self.dx, self.dy, 0.0, self.g, self.f, self.r, \
                                     boundary_conditions=bc_out, boundary_conditions_data=bc_data_out)
         
@@ -113,19 +110,20 @@ class CombinedCDKLM16test(unittest.TestCase):
         eta_out, hu_out, hv_out = sim_out.download(interior_domain_only=True)
 
         # Combined sims 
-        sims = CombinedCDKLM16.CombinedCDKLM16(Common.CUDAContext(), Common.CUDAContext(), eta0_in, hu0_in, hv0_in, Hi_in,\
-                                                eta0_out, hu0_out, hv0_out, Hi_out, \
-                                                self.nx, self.ny, self.dx, self.dy, 0.0, \
-                                                self.g, self.g, self.f, self.r, \
-                                                boundary_conditions = bc_in, \
-                                                barotropic_boundary_conditions_data = bc_data_in, \
-                                                baroclinic_boundary_conditions_data = bc_data_out)
-                                                
+        sim_in2 = CDKLM16.CDKLM16(self.gpu_ctx_in, eta0_in, hu0_in, hv0_in, Hi_in,\
+                                    self.nx, self.ny, self.dx, self.dy, 0.0, self.g, self.f, self.r, \
+                                    boundary_conditions=bc_in, boundary_conditions_data=bc_data_in)
+        sim_out2 = CDKLM16.CDKLM16(self.gpu_ctx_out, eta0_out, hu0_out, hv0_out, Hi_out,\
+                                    self.nx, self.ny, self.dx, self.dy, 0.0, self.g, self.f, self.r, \
+                                    boundary_conditions=bc_out, boundary_conditions_data=bc_data_out)
+        
+        sims = CombinedCDKLM16.CombinedCDKLM16(sim_in2, sim_out2)                                        
         sims.combinedStep(self.T)
 
         eta_in2, hu_in2, hv_in2 = sims.barotropic_sim.download(interior_domain_only=True)
         eta_out2, hu_out2, hv_out2 = sims.baroclinic_sim.download(interior_domain_only=True)
                 
+        # Check 
         self.checkResults(eta_in, hu_in, hv_in, eta_in2, hu_in2, hv_in2)
         self.checkResults(eta_out, hu_out, hv_out, eta_out2, hu_out2, hv_out2)
 

@@ -111,7 +111,7 @@ class CDKLM16(Simulator.Simulator):
         coriolis_beta: Coriolis linear factor -> f = f + beta*(y-y_0)
         max_wind_direction_perturbation: Large-scale model error emulation by per-time-step perturbation of wind direction by +/- max_wind_direction_perturbation (degrees)
         wind: Wind stress parameters
-        wind_stress_factor: scaling of wind stress
+        wind_stress_factor: artificial scaling of the wind stress as used in reduced-gravity simulations (1.0)
         atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
         small_scale_perturbation: Boolean value for applying a stochastic model error
@@ -170,7 +170,6 @@ class CDKLM16(Simulator.Simulator):
                                       coriolis_beta, \
                                       y_zero_reference_cell, \
                                       wind, \
-                                      wind_stress_factor, \
                                       atmospheric_pressure, \
                                       write_netcdf, \
                                       ignore_ghostcells, \
@@ -198,7 +197,7 @@ class CDKLM16(Simulator.Simulator):
                          'GRAV': "{:.12f}f".format(self.g),
                          'FRIC': "{:.12f}f".format(self.r),
                          'RHO_O': "{:.12f}f".format(rho_o),
-                         'WIND_STRESS_FACTOR': "{:.12f}f".format(self.wind_stress_factor), 
+                         'WIND_STRESS_FACTOR': "{:.12f}f".format(wind_stress_factor), 
                          'ONE_DIMENSIONAL': int(0),
                          'FLUX_BALANCER': "{:.12f}f".format(flux_balancer)
         }

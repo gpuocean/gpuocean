@@ -241,6 +241,7 @@ class KP07(Simulator.Simulator):
         y_zero_reference_cell = sim_reader.get("y_zero_reference_cell")        
         
         wind = WindStress.WindStress()
+        wind_stress_factor=1.0
 
         boundaryConditions = sim_reader.getBC()
 
@@ -259,6 +260,7 @@ class KP07(Simulator.Simulator):
                  coriolis_beta=beta, \
                  y_zero_reference_cell = y_zero_reference_cell, \
                  wind=wind, \
+                 wind_stress_factor=wind_stress_factor, \
                  boundary_conditions=boundaryConditions, \
                  write_netcdf=cont_write_netcdf)
 
