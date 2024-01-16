@@ -21,11 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import unittest
-<<<<<<< HEAD
 
-=======
->>>>>>> 5a49d26fdcb8654f30510b44c5b8f313b7454dd7
-import time
 import numpy as np
 import sys
 import os
@@ -61,12 +57,9 @@ class CombinedCDKLM16test(unittest.TestCase):
 
         self.T = 600.0
 
-<<<<<<< HEAD
         self.dataRange = [-2, -2, 2, 2]
         self.refRange = self.dataRange
 
-=======
->>>>>>> 5a49d26fdcb8654f30510b44c5b8f313b7454dd7
         
     def tearDown(self):
         gc.collect() # Force run garbage collection to free up memory
@@ -74,11 +67,7 @@ class CombinedCDKLM16test(unittest.TestCase):
 
     def test_combined_vs_single_sims(self):
         """
-<<<<<<< HEAD
         Test case: negative or positive wave going in or out, respectively, simulated individually and with combined time stepping
-=======
-        Test case: negative or positive wave going in or out, respectively
->>>>>>> 5a49d26fdcb8654f30510b44c5b8f313b7454dd7
         """
         
         eta0_in = np.zeros(self.dataShape, dtype=np.float32)
