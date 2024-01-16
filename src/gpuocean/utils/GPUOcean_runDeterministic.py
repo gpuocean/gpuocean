@@ -11,7 +11,7 @@ import pyproj
 
 #For GPUOcean
 from gpuocean.SWEsimulators import CDKLM16
-from gpuocean.utils import Common, IPythonMagic, PlotHelper, NetCDFInitialization, Observation
+from gpuocean.utils import Common, PlotHelper, NetCDFInitialization, Observation
 from gpuocean.drifters import GPUDrifterCollection
 from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 

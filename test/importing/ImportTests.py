@@ -12,35 +12,74 @@ class ImportTests(unittest.TestCase):
         pass
 
     
-    def test_import_dataassimilation_DataAssimilationUtils(self):
-        from gpuocean.dataassimilation import DataAssimilationUtils
+    def test_import_utils_SimReader(self):
+        from gpuocean.utils import SimReader
         
-    def test_import_dataassimilation_EnKFOcean(self):
-        from gpuocean.dataassimilation import EnKFOcean
+    def test_import_utils_Common(self):
+        from gpuocean.utils import Common
         
-    def test_import_dataassimilation_ETKFOcean(self):
-        from gpuocean.dataassimilation import ETKFOcean
+    def test_import_utils_Observation(self):
+        from gpuocean.utils import Observation
         
-    def test_import_dataassimilation_IEWPFOcean(self):
-        from gpuocean.dataassimilation import IEWPFOcean
+    def test_import_utils_NetCDFInitialization(self):
+        from gpuocean.utils import NetCDFInitialization
         
-    def test_import_drifters_BaseDrifterCollection(self):
-        from gpuocean.drifters import BaseDrifterCollection
+    def test_import_utils_config(self):
+        from gpuocean.utils import config
         
-    def test_import_drifters_CPUDrifterCollection(self):
-        from gpuocean.drifters import CPUDrifterCollection
+    def test_import_utils_ParticleInfo(self):
+        from gpuocean.utils import ParticleInfo
         
-    def test_import_drifters_GPUDrifterCollection(self):
-        from gpuocean.drifters import GPUDrifterCollection
+    def test_import_utils_OceanographicUtilities(self):
+        from gpuocean.utils import OceanographicUtilities
         
-    def test_import_ensembles_BaseDrifterEnsemble(self):
-        from gpuocean.ensembles import BaseDrifterEnsemble
+    def test_import_utils_DoubleJetCase(self):
+        from gpuocean.utils import DoubleJetCase
+        
+    def test_import_utils_AtmosphericPressure(self):
+        from gpuocean.utils import AtmosphericPressure
+        
+    def test_import_utils_GPUOcean_runDeterministic(self):
+        from gpuocean.utils import GPUOcean_runDeterministic
+        
+    def test_import_utils_DoubleJetExperimentUtils(self):
+        from gpuocean.utils import DoubleJetExperimentUtils
+        
+    def test_import_utils_SimWriter(self):
+        from gpuocean.utils import SimWriter
+        
+    def test_import_utils_BathymetryAndICs(self):
+        from gpuocean.utils import BathymetryAndICs
+        
+    def test_import_utils_WindStress(self):
+        from gpuocean.utils import WindStress
+        
+    def test_import_utils_DrifterPlotHelper(self):
+        from gpuocean.utils import DrifterPlotHelper
+        
+    def test_import_utils_SkillScore(self):
+        from gpuocean.utils import SkillScore
+        
+    def test_import_utils_EnsemblePlot(self):
+        from gpuocean.utils import EnsemblePlot
+        
+    def test_import_utils_PlotHelper(self):
+        from gpuocean.utils import PlotHelper
+        
+    def test_import_ensembles_OceanNoiseEnsemble(self):
+        from gpuocean.ensembles import OceanNoiseEnsemble
+        
+    def test_import_ensembles_EnsembleFromFiles(self):
+        from gpuocean.ensembles import EnsembleFromFiles
+        
+    def test_import_ensembles_CPUDrifterEnsemble(self):
+        from gpuocean.ensembles import CPUDrifterEnsemble
         
     def test_import_ensembles_BaseOceanStateEnsemble(self):
         from gpuocean.ensembles import BaseOceanStateEnsemble
         
-    def test_import_ensembles_CPUDrifterEnsemble(self):
-        from gpuocean.ensembles import CPUDrifterEnsemble
+    def test_import_ensembles_WindForcingEnsemble(self):
+        from gpuocean.ensembles import WindForcingEnsemble
         
     def test_import_ensembles_DoubleJetEnsemble(self):
         from gpuocean.ensembles import DoubleJetEnsemble
@@ -48,84 +87,51 @@ class ImportTests(unittest.TestCase):
     def test_import_ensembles_DrifterEnsemble(self):
         from gpuocean.ensembles import DrifterEnsemble
         
-    def test_import_ensembles_EnsembleFromFiles(self):
-        from gpuocean.ensembles import EnsembleFromFiles
+    def test_import_ensembles_OceanModelEnsemble(self):
+        from gpuocean.ensembles import OceanModelEnsemble
         
     def test_import_ensembles_MPIOceanModelEnsemble(self):
         from gpuocean.ensembles import MPIOceanModelEnsemble
         
-    def test_import_ensembles_OceanModelEnsemble(self):
-        from gpuocean.ensembles import OceanModelEnsemble
+    def test_import_ensembles_BaseDrifterEnsemble(self):
+        from gpuocean.ensembles import BaseDrifterEnsemble
         
-    def test_import_ensembles_OceanNoiseEnsemble(self):
-        from gpuocean.ensembles import OceanNoiseEnsemble
-        
-    def test_import_ensembles_WindForcingEnsemble(self):
-        from gpuocean.ensembles import WindForcingEnsemble
-        
-    def test_import_SWEsimulators_CDKLM16(self):
-        from gpuocean.SWEsimulators import CDKLM16
-        
-    def test_import_SWEsimulators_CTCS(self):
-        from gpuocean.SWEsimulators import CTCS
+    def test_import_SWEsimulators_CombinedCDKLM16(self):
+        from gpuocean.SWEsimulators import CombinedCDKLM16
         
     def test_import_SWEsimulators_FBL(self):
         from gpuocean.SWEsimulators import FBL
         
+    def test_import_SWEsimulators_CTCS(self):
+        from gpuocean.SWEsimulators import CTCS
+        
     def test_import_SWEsimulators_KP07(self):
         from gpuocean.SWEsimulators import KP07
         
-    def test_import_SWEsimulators_OceanStateNoise(self):
-        from gpuocean.SWEsimulators import OceanStateNoise
+    def test_import_SWEsimulators_CDKLM16(self):
+        from gpuocean.SWEsimulators import CDKLM16
         
     def test_import_SWEsimulators_Simulator(self):
         from gpuocean.SWEsimulators import Simulator
         
-    def test_import_utils_BathymetryAndICs(self):
-        from gpuocean.utils import BathymetryAndICs
+    def test_import_SWEsimulators_OceanStateNoise(self):
+        from gpuocean.SWEsimulators import OceanStateNoise
         
-    def test_import_utils_Common(self):
-        from gpuocean.utils import Common
+    def test_import_dataassimilation_LEnKFOcean(self):
+        from gpuocean.dataassimilation import LEnKFOcean
         
-    def test_import_utils_config(self):
-        from gpuocean.utils import config
+    def test_import_dataassimilation_DataAssimilationUtils(self):
+        from gpuocean.dataassimilation import DataAssimilationUtils
         
-    def test_import_utils_DoubleJetCase(self):
-        from gpuocean.utils import DoubleJetCase
+    def test_import_dataassimilation_IEWPFOcean(self):
+        from gpuocean.dataassimilation import IEWPFOcean
         
-    def test_import_utils_DoubleJetExperimentUtils(self):
-        from gpuocean.utils import DoubleJetExperimentUtils
+    def test_import_drifters_GPUDrifterCollection(self):
+        from gpuocean.drifters import GPUDrifterCollection
         
-    def test_import_utils_EnsemblePlot(self):
-        from gpuocean.utils import EnsemblePlot
+    def test_import_drifters_CPUDrifterCollection(self):
+        from gpuocean.drifters import CPUDrifterCollection
         
-    def test_import_utils_GPUOcean_runDeterministic(self):
-        from gpuocean.utils import GPUOcean_runDeterministic
-        
-    def test_import_utils_NetCDFInitialization(self):
-        from gpuocean.utils import NetCDFInitialization
-        
-    def test_import_utils_Observation(self):
-        from gpuocean.utils import Observation
-        
-    def test_import_utils_OceanographicUtilities(self):
-        from gpuocean.utils import OceanographicUtilities
-        
-    def test_import_utils_ParticleInfo(self):
-        from gpuocean.utils import ParticleInfo
-        
-    def test_import_utils_PlotHelper(self):
-        from gpuocean.utils import PlotHelper
-        
-    def test_import_utils_SimReader(self):
-        from gpuocean.utils import SimReader
-        
-    def test_import_utils_SimWriter(self):
-        from gpuocean.utils import SimWriter
-        
-    def test_import_utils_SkillScore(self):
-        from gpuocean.utils import SkillScore
-        
-    def test_import_utils_WindStress(self):
-        from gpuocean.utils import WindStress
+    def test_import_drifters_BaseDrifterCollection(self):
+        from gpuocean.drifters import BaseDrifterCollection
         
