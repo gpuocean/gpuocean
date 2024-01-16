@@ -80,7 +80,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
                          iterations=10, \
                          sponge_cells={'north':20, 'south': 20, 'east': 20, 'west': 20}, \
                          erode_land=0, 
-                         download_data=True):
+                         download_data=False):
     ic = {}
     
     if type(source_url_list) is not list:
