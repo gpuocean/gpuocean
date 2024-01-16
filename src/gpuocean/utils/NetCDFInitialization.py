@@ -34,102 +34,19 @@ from scipy.ndimage.morphology import binary_erosion, grey_dilation
 from gpuocean.utils import Common, WindStress, OceanographicUtilities
 
 
-def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data):
+def getNorkystSubdomains():
     """
-    timestep_indices => index into netcdf-array, e.g. [1, 3, 5]
-    timestep => time at timestep, e.g. [1800, 3600, 7200]
+    Lists (and defines) predefined subdomains for the NorKyst-800 model.
     """
-    num_files = len(source_url_list)
-    
-    nt = 0
-    for i in range(num_files):
-        nt += len(timesteps[i])
-    
-    if (timestep_indices is None):
-        timestep_indices = [None]*num_files
-        for i in range(num_files):
-            timestep_indices[i] = range(len(timesteps[i]))
-
-    bc_eta = {}
-    bc_eta['north'] = np.empty((nt, x1-x0), dtype=np.float32)
-    bc_eta['south'] = np.empty((nt, x1-x0), dtype=np.float32)
-    bc_eta['east'] = np.empty((nt, y1-y0), dtype=np.float32)
-    bc_eta['west'] = np.empty((nt, y1-y0), dtype=np.float32)
-
-    bc_hu = {}
-    bc_hu['north'] = np.empty((nt, x1-x0), dtype=np.float32)
-    bc_hu['south'] = np.empty((nt, x1-x0), dtype=np.float32)
-    bc_hu['east'] = np.empty((nt, y1-y0), dtype=np.float32)
-    bc_hu['west'] = np.empty((nt, y1-y0), dtype=np.float32)
-
-    bc_hv = {}
-    bc_hv['north'] = np.empty((nt, x1-x0), dtype=np.float32)
-    bc_hv['south'] = np.empty((nt, x1-x0), dtype=np.float32)
-    bc_hv['east'] = np.empty((nt, y1-y0), dtype=np.float32)
-    bc_hv['west'] = np.empty((nt, y1-y0), dtype=np.float32)
-    
-    
-    bc_index = 0
-    for i in range(num_files):
-        try:
-            ncfile = Dataset(source_url_list[i])
-
-            H = ncfile.variables['h'][y0-1:y1+1, x0-1:x1+1]
-            
-            for timestep_index in timestep_indices[i]:
-                zeta = ncfile.variables['zeta'][timestep_index, y0-1:y1+1, x0-1:x1+1]
-                zeta = zeta.filled(0)
-                bc_eta['north'][bc_index] = zeta[-1, 1:-1]
-                bc_eta['south'][bc_index] = zeta[0, 1:-1]
-                bc_eta['east'][bc_index] = zeta[1:-1, -1]
-                bc_eta['west'][bc_index] = zeta[ 1:-1, 0]
-
-                h = H + zeta
-                
-                if norkyst_data:
-                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
-                    hu = hu.filled(0) #zero on land
-                else: 
-                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+2]
-                    hu = hu.filled(0) #zero on land
-                    hu = (hu[:,1:] + hu[:, :-1]) * 0.5
-                    
-                hu = h*hu
-
-                bc_hu['north'][bc_index] = hu[-1, 1:-1]
-                bc_hu['south'][bc_index] = hu[0, 1:-1]
-                bc_hu['east'][bc_index] = hu[1:-1, -1]
-                bc_hu['west'][bc_index] = hu[1:-1, 0]
-
-                if norkyst_data:
-                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
-                    hv = hv.filled(0) #zero on land
-                else:
-                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+2, x0-1:x1+1]
-                    hv = hv.filled(0) #zero on land
-                    hv = (hv[1:,:] + hv[:-1, :]) * 0.5
-                hv = h*hv
-
-                bc_hv['north'][bc_index] = hv[-1, 1:-1]
-                bc_hv['south'][bc_index] = hv[0, 1:-1]
-                bc_hv['east'][bc_index] = hv[1:-1, -1]
-                bc_hv['west'][bc_index] = hv[1:-1, 0]
-
-                bc_index = bc_index + 1
-                
-
-        except Exception as e:
-            raise e
-        finally:
-            ncfile.close()
-
-    bc_data = Common.BoundaryConditionsData(np.ravel(timesteps).copy(), 
-        north=Common.SingleBoundaryConditionData(bc_eta['north'], bc_hu['north'], bc_hv['north']),
-        south=Common.SingleBoundaryConditionData(bc_eta['south'], bc_hu['south'], bc_hv['south']),
-        east=Common.SingleBoundaryConditionData(bc_eta['east'], bc_hu['east'], bc_hv['east']),
-        west=Common.SingleBoundaryConditionData(bc_eta['west'], bc_hu['west'], bc_hv['west']))
-    
-    return bc_data
+    return [
+        {'name': 'norwegian_sea',  'x0':  900, 'x1': 1400, 'y0':  600, 'y1':  875 },
+        {'name': 'lofoten',        'x0': 1400, 'x1': 1900, 'y0':  450, 'y1':  750 },
+        {'name': 'complete_coast', 'x0':   25, 'x1': 2575, 'y0':   25, 'y1':  875 },
+        {'name': 'skagerak',       'x0':  300, 'x1':  600, 'y0':   50, 'y1':  250 },
+        {'name': 'oslo',           'x0':  500, 'x1':  550, 'y0':  160, 'y1':  210 },
+        {'name': 'denmark',        'x0':    2, 'x1':  300, 'y0':    2, 'y1':  300 },
+        {'name': 'lovese',         'x0': 1400, 'x1': 2034, 'y0':  450, 'y1':  769 }
+    ]
 
 
 def getInitialConditionsNorKystCases(source_url, casename, **kwargs):
@@ -143,85 +60,18 @@ def getCaseLocation(casename):
     """
     Domains for pre-defined areas within the NorKyst-800 model domain. 
     """
-    cases = [
-        {'name': 'norwegian_sea',  'x0':  900, 'x1': 1400, 'y0':  600, 'y1':  875 },
-        {'name': 'lofoten',        'x0': 1400, 'x1': 1900, 'y0':  450, 'y1':  750 },
-        {'name': 'complete_coast', 'x0':   25, 'x1': 2575, 'y0':   25, 'y1':  875 },
-        {'name': 'skagerak',       'x0':  300, 'x1':  600, 'y0':   50, 'y1':  250 },
-        {'name': 'oslo',           'x0':  500, 'x1':  550, 'y0':  160, 'y1':  210 },
-        {'name': 'denmark',        'x0':    2, 'x1':  300, 'y0':    2, 'y1':  300 },
-        {'name': 'lovese',         'x0': 1400, 'x1': 2034, 'y0':  450, 'y1':  769 }
-    ]
+    cases = getNorkystSubdomains()
     use_case = None
     for case in cases:
         if case['name'] == casename:
             use_case = case
             break
 
-    assert(use_case is not None), 'Invalid case. Please choose between:\n'+str([case['name'] for case in cases])
+    assert(use_case is not None), 'Invalid case. Check NetCDFInitialization.getNorkystSubdomains() to see valid case names'
 
     return use_case
 
-# Returns True if the current execution context is an IPython notebook, e.g. Jupyter.
-# https://stackoverflow.com/questions/15411967/how-can-i-check-if-code-is-executed-in-the-ipython-notebook
-def in_ipynb():
-    try:
-        cfg = get_ipython().config
-        if str(type(get_ipython())) == "<class 'ipykernel.zmqshell.ZMQInteractiveShell'>":
-        #if cfg['IPKernelApp']['parent_appname'] == 'ipython-notebook':
-            #print ('Running in ipython notebook env.')
-            return True
-        else:
-            return False
-    except NameError:
-        #print ('NOT Running in ipython notebook env.')
-        return False
 
-def checkCachedNetCDF(source_url, download_data=True):
-    """ 
-    Checks if the file represented by source_url is available locally already.
-    We search for the file in the working directory, or in a folder called 
-    'netcdf_cache' in the working directory.
-    If download_data is true, it will  download the netcfd file into 'netcdf_cache' 
-    if it is not found locally already.
-    """
-    ### Check if local file exists:
-    filename = os.path.abspath(os.path.basename(source_url))
-    cache_folder='netcdf_cache'
-    cache_filename = os.path.abspath(os.path.join(cache_folder,
-                                                  os.path.basename(source_url)))
-                                                  
-    if (os.path.isfile(filename)):
-        source_url = filename
-        
-    elif (os.path.isfile(cache_filename)):
-        source_url = cache_filename
-        
-    elif (download_data):
-        import requests
-        download_url = source_url.replace("dodsC", "fileServer")
-
-        req = requests.get(download_url, stream = True)
-        filesize = int(req.headers.get('content-length'))
-
-        is_notebook = False
-        if(in_ipynb()):
-            progress = Common.ProgressPrinter()
-            pp = display(progress.getPrintString(0),display_id=True)
-            is_notebook = True
-        
-        os.makedirs(cache_folder, exist_ok=True)
-
-        print("Downloading data to local file (" + str(filesize // (1024*1024)) + " MB)")
-        with open(cache_filename, "wb") as outfile:
-            for chunk in req.iter_content(chunk_size = 10*1024*1024):
-                if chunk:
-                    outfile.write(chunk)
-                    if(is_notebook):
-                        pp.update(progress.getPrintString(outfile.tell() / filesize))
-
-        source_url = cache_filename
-    return source_url
 
 def getInitialConditions(source_url_list, x0, x1, y0, y1, \
                          timestep_indices=None, \
@@ -367,7 +217,11 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     #FIXME: Assumes equal for all.. .should check
     ic['dx'] = np.average(x[1:] - x[:-1])
     ic['dy'] = np.average(y[1:] - y[:-1])
-    
+
+    # Numerical time step
+    # Set to zero so that the CFL condition is computed automatically
+    ic['dt'] = 0.0
+
     #Gravity and friction
     #FIXME: Friction coeff from netcdf?
     ic['g'] = 9.81
@@ -479,6 +333,169 @@ def rescaleInitialConditions(old_ic, scale):
     ic['note'] = old_ic['note'] + "\n" + datetime.datetime.now().isoformat() + ": Rescaled by factor " + str(scale)
 
     return ic
+
+
+
+
+def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data):
+    """
+    timestep_indices => index into netcdf-array, e.g. [1, 3, 5]
+    timestep => time at timestep, e.g. [1800, 3600, 7200]
+    """
+    num_files = len(source_url_list)
+    
+    nt = 0
+    for i in range(num_files):
+        nt += len(timesteps[i])
+    
+    if (timestep_indices is None):
+        timestep_indices = [None]*num_files
+        for i in range(num_files):
+            timestep_indices[i] = range(len(timesteps[i]))
+
+    bc_eta = {}
+    bc_eta['north'] = np.empty((nt, x1-x0), dtype=np.float32)
+    bc_eta['south'] = np.empty((nt, x1-x0), dtype=np.float32)
+    bc_eta['east'] = np.empty((nt, y1-y0), dtype=np.float32)
+    bc_eta['west'] = np.empty((nt, y1-y0), dtype=np.float32)
+
+    bc_hu = {}
+    bc_hu['north'] = np.empty((nt, x1-x0), dtype=np.float32)
+    bc_hu['south'] = np.empty((nt, x1-x0), dtype=np.float32)
+    bc_hu['east'] = np.empty((nt, y1-y0), dtype=np.float32)
+    bc_hu['west'] = np.empty((nt, y1-y0), dtype=np.float32)
+
+    bc_hv = {}
+    bc_hv['north'] = np.empty((nt, x1-x0), dtype=np.float32)
+    bc_hv['south'] = np.empty((nt, x1-x0), dtype=np.float32)
+    bc_hv['east'] = np.empty((nt, y1-y0), dtype=np.float32)
+    bc_hv['west'] = np.empty((nt, y1-y0), dtype=np.float32)
+    
+    
+    bc_index = 0
+    for i in range(num_files):
+        try:
+            ncfile = Dataset(source_url_list[i])
+
+            H = ncfile.variables['h'][y0-1:y1+1, x0-1:x1+1]
+            
+            for timestep_index in timestep_indices[i]:
+                zeta = ncfile.variables['zeta'][timestep_index, y0-1:y1+1, x0-1:x1+1]
+                zeta = zeta.filled(0)
+                bc_eta['north'][bc_index] = zeta[-1, 1:-1]
+                bc_eta['south'][bc_index] = zeta[0, 1:-1]
+                bc_eta['east'][bc_index] = zeta[1:-1, -1]
+                bc_eta['west'][bc_index] = zeta[ 1:-1, 0]
+
+                h = H + zeta
+                
+                if norkyst_data:
+                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
+                    hu = hu.filled(0) #zero on land
+                else: 
+                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+2]
+                    hu = hu.filled(0) #zero on land
+                    hu = (hu[:,1:] + hu[:, :-1]) * 0.5
+                    
+                hu = h*hu
+
+                bc_hu['north'][bc_index] = hu[-1, 1:-1]
+                bc_hu['south'][bc_index] = hu[0, 1:-1]
+                bc_hu['east'][bc_index] = hu[1:-1, -1]
+                bc_hu['west'][bc_index] = hu[1:-1, 0]
+
+                if norkyst_data:
+                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
+                    hv = hv.filled(0) #zero on land
+                else:
+                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+2, x0-1:x1+1]
+                    hv = hv.filled(0) #zero on land
+                    hv = (hv[1:,:] + hv[:-1, :]) * 0.5
+                hv = h*hv
+
+                bc_hv['north'][bc_index] = hv[-1, 1:-1]
+                bc_hv['south'][bc_index] = hv[0, 1:-1]
+                bc_hv['east'][bc_index] = hv[1:-1, -1]
+                bc_hv['west'][bc_index] = hv[1:-1, 0]
+
+                bc_index = bc_index + 1
+                
+
+        except Exception as e:
+            raise e
+        finally:
+            ncfile.close()
+
+    bc_data = Common.BoundaryConditionsData(np.ravel(timesteps).copy(), 
+        north=Common.SingleBoundaryConditionData(bc_eta['north'], bc_hu['north'], bc_hv['north']),
+        south=Common.SingleBoundaryConditionData(bc_eta['south'], bc_hu['south'], bc_hv['south']),
+        east=Common.SingleBoundaryConditionData(bc_eta['east'], bc_hu['east'], bc_hv['east']),
+        west=Common.SingleBoundaryConditionData(bc_eta['west'], bc_hu['west'], bc_hv['west']))
+    
+    return bc_data
+
+
+
+# Returns True if the current execution context is an IPython notebook, e.g. Jupyter.
+# https://stackoverflow.com/questions/15411967/how-can-i-check-if-code-is-executed-in-the-ipython-notebook
+def in_ipynb():
+    try:
+        cfg = get_ipython().config
+        if str(type(get_ipython())) == "<class 'ipykernel.zmqshell.ZMQInteractiveShell'>":
+        #if cfg['IPKernelApp']['parent_appname'] == 'ipython-notebook':
+            #print ('Running in ipython notebook env.')
+            return True
+        else:
+            return False
+    except NameError:
+        #print ('NOT Running in ipython notebook env.')
+        return False
+
+def checkCachedNetCDF(source_url, download_data=True):
+    """ 
+    Checks if the file represented by source_url is available locally already.
+    We search for the file in the working directory, or in a folder called 
+    'netcdf_cache' in the working directory.
+    If download_data is true, it will  download the netcfd file into 'netcdf_cache' 
+    if it is not found locally already.
+    """
+    ### Check if local file exists:
+    filename = os.path.abspath(os.path.basename(source_url))
+    cache_folder='netcdf_cache'
+    cache_filename = os.path.abspath(os.path.join(cache_folder,
+                                                  os.path.basename(source_url)))
+                                                  
+    if (os.path.isfile(filename)):
+        source_url = filename
+        
+    elif (os.path.isfile(cache_filename)):
+        source_url = cache_filename
+        
+    elif (download_data):
+        import requests
+        download_url = source_url.replace("dodsC", "fileServer")
+
+        req = requests.get(download_url, stream = True)
+        filesize = int(req.headers.get('content-length'))
+
+        is_notebook = False
+        if(in_ipynb()):
+            progress = Common.ProgressPrinter()
+            pp = display(progress.getPrintString(0),display_id=True)
+            is_notebook = True
+        
+        os.makedirs(cache_folder, exist_ok=True)
+
+        print("Downloading data to local file (" + str(filesize // (1024*1024)) + " MB)")
+        with open(cache_filename, "wb") as outfile:
+            for chunk in req.iter_content(chunk_size = 10*1024*1024):
+                if chunk:
+                    outfile.write(chunk)
+                    if(is_notebook):
+                        pp.update(progress.getPrintString(outfile.tell() / filesize))
+
+        source_url = cache_filename
+    return source_url
 
 
 def removeMetadata(old_ic):
