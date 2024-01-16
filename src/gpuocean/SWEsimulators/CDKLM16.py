@@ -605,7 +605,7 @@ class CDKLM16(Simulator.Simulator):
             self.num_iterations += 1
             
         if self.write_netcdf and write_now:
-            self.sim_writer.writeTimestep(self)
+            self.writeState()
             
         return self.t
 
