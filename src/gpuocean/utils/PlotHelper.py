@@ -4,8 +4,8 @@
 This software is part of GPU Ocean. 
 
 Copyright (C) 2016 SINTEF ICT, 
-Copyright (C) 2017-2019 SINTEF Digital
-Copyright (C) 2017-2019 Norwegian Meteorological Institute
+Copyright (C) 2017-2024 SINTEF Digital
+Copyright (C) 2017-2024 Norwegian Meteorological Institute
 
 This python class aids in plotting results from the numerical 
 simulations
@@ -28,11 +28,419 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.colors import Normalize
+from matplotlib import animation
+
 import numpy as np
 import time
 import re
+import sys
+import copy
+import tqdm
+from datetime import timedelta
+from netCDF4 import Dataset
+
 
 from gpuocean.utils import OceanographicUtilities
+
+def plotState(eta, hu, hv, h, 
+              dx, dy, t,
+              fig=None,
+              plot_title="",
+              eta_max=None, 
+              huv_max=None, 
+              add_extra=False, 
+              ax=None, sp=None):
+    """
+    Utility function for plotting the simplified ocean state.
+    The default is to plot the conserved variables (eta, hu, hv), but the 
+    flag 'add_extra' also enables plotting of particle velocity and 
+    vorticity magnitude.
+    """
+
+    if fig is None and add_extra:
+        fig = plt.figure(figsize=(12, 5))  
+    elif fig is None:
+        fig = plt.figure(figsize=(12, 3))  
+
+    fig.suptitle("{:s} (time: {:0>8})".format(plot_title, str(timedelta(seconds=int(t)))), 
+                 fontsize=18, x=0.13,
+                 horizontalalignment='left')
+    
+    ny, nx = eta.shape
+    domain_extent = [0, nx*dx/1000, 0, ny*dy/1000]
+    
+    x_plots = 3
+    y_plots = 1
+    if (add_extra == True):
+        x_plots=3
+        y_plots=2
+
+    if not eta_max:
+        eta_max = np.max(np.abs(eta))
+    if not huv_max:
+        huv_max = max(np.max(np.abs(hv)), np.max(np.abs(hv)))
+    
+    V_max = 6 * huv_max / np.max(h)
+    R_min = -V_max/2000
+    R_max = V_max/2000
+    
+    # Fix colormaps
+
+    eta_cmap = copy.copy(plt.cm.BrBG)
+    eta_cmap.set_bad(color='grey')
+    huv_cmap = copy.copy(plt.cm.coolwarm)
+    huv_cmap.set_bad(color='grey')
+    vel_cmap = copy.copy(plt.cm.Oranges)
+    vel_cmap.set_bad(color='grey')
+    vor_cmap = copy.copy(plt.cm.seismic)
+    vor_cmap.set_bad(color='grey')
+
+    
+    if (ax is None):
+        ax = [None]*x_plots*y_plots
+        sp = [None]*x_plots*y_plots
+
+        ax[0] = plt.subplot(y_plots, x_plots, 1)
+        sp[0] = ax[0].imshow(eta, interpolation="none", origin='lower', 
+                             cmap=eta_cmap, 
+                             vmin=-eta_max, vmax=eta_max, 
+                             extent=domain_extent)
+        plt.colorbar(sp[0], shrink=0.9)
+        plt.axis('image')
+        plt.title("eta")
+        
+        ax[1] = plt.subplot(y_plots, x_plots, 2)
+        sp[1] = ax[1].imshow(hu, interpolation="none", origin='lower', 
+                             cmap=huv_cmap, 
+                             vmin=-huv_max, vmax=huv_max, 
+                             extent=domain_extent)
+        plt.colorbar(sp[1], shrink=0.9)
+        plt.axis('image')
+        plt.title("hu")
+
+        ax[2] = plt.subplot(y_plots, x_plots, 3)
+        sp[2] = ax[2].imshow(hv, interpolation="none", origin='lower', 
+                             cmap=huv_cmap, 
+                             vmin=-huv_max, vmax=huv_max, 
+                             extent=domain_extent)
+        plt.colorbar(sp[2], shrink=0.9)
+        plt.axis('image')
+        plt.title("hv")
+        
+        if (add_extra == True):
+            V = genVelocity(h, hu, hv)
+            ax[3] = plt.subplot(y_plots, x_plots, 4)
+            sp[3] = ax[3].imshow(V, interpolation="none", origin='lower', 
+                               cmap=vel_cmap, 
+                               vmin=0, vmax=V_max, 
+                               extent=domain_extent)
+            plt.colorbar(sp[3], shrink=0.9)
+            plt.axis('image')
+            plt.title("Particle velocity magnitude")
+
+            R = genColors(h, hu/dy, hv/dx, vor_cmap, R_min, R_max)
+            ax[4] = plt.subplot(y_plots, x_plots, 5)
+            sp[4] = ax[4].imshow(R, interpolation="none", 
+                               origin='lower',
+                               cmap=vor_cmap,
+                               extent=domain_extent)
+            plt.colorbar(sp[4], shrink=0.9)
+            plt.axis('image')
+            plt.title("Vorticity magnitude")
+            
+    else:        
+        #Update plots
+        fig.sca(ax[0])
+        sp[0].set_data(eta)
+        
+        fig.sca(ax[1])
+        sp[1].set_data(hu)
+        
+        fig.sca(ax[2])
+        sp[2].set_data(hv)
+        
+        if (add_extra == True):
+            V = genVelocity(h, hu, hv)
+            fig.sca(ax[3])
+            sp[3].set_data(V)
+
+            R = genColors(h, hu/dx, hv/dy, vor_cmap, R_min, R_max)
+            fig.sca(ax[4])
+            sp[4].set_data(R)
+    
+    return ax, sp
+
+
+
+def plotSim(sim, **kwargs):
+    """
+    Plot the state of the sim.
+
+    For kwargs: See plotState.
+    """
+
+    eta, hu, hv = sim.download(interior_domain_only=True)
+    _, Hm = sim.downloadBathymetry(interior_domain_only=True)
+    h = Hm + eta
+     
+    return plotState(eta, hu, hv, h, 
+                     sim.dx, sim.dy, sim.t,
+                     **kwargs)
+
+
+
+def simAnimation(sim, T_end, anim_dt, huv_max=100.0, eta_max=1, 
+                 plot_title="", add_extra=False, fig=None, create_movie=True):
+    """
+    Creates an animation of the simulator with frames anim_dt apart.
+    Number of frames are therefore T_end//anim_dt.
+    """
+
+    num_frames = T_end // anim_dt
+    
+    #Create figure 
+    if fig is None and add_extra:
+        fig = plt.figure(figsize=(12, 5))  
+    elif fig is None:
+        fig = plt.figure(figsize=(12, 3))  
+
+    if not create_movie:
+        for i in range(num_frames):
+            sim.step(anim_dt)
+            sim.updateDt()
+        if T_end > sim.t:
+            sim.step(T_end - sim.t)
+        
+    # Plot initial conditions (or end state if not create_movie)
+    ax, sp = plotSim(sim, fig=fig, plot_title=plot_title,
+                    eta_max=eta_max, huv_max=huv_max, add_extra=add_extra)
+    
+    if not create_movie:
+        return 
+    
+    #Helper function which simulates and plots the solution
+    def animate(i):
+        if (i>0):
+            sim.step(anim_dt)
+            sim.updateDt()
+            print("."+str(i)+"/"+str(num_frames)+".", end='')
+
+        plotSim(sim, fig=fig, plot_title=plot_title, 
+                ax=ax, sp=sp,
+                add_extra=add_extra)
+        
+    #Matplotlib for creating an animation
+    anim = animation.FuncAnimation(fig, animate, range(num_frames), interval=100)
+    plt.close(fig)
+    return anim
+
+
+
+def ncAnimation(filename, movie_frames=None, create_movie=True, fig=None,
+                add_extra=False, **kwargs):
+    """
+    Make animation of the netcdf file. 
+    If movie_frames is not None, the plotted states are interpolated between the available timesteps
+    """
+    #Create figure and plot initial conditions
+    ncfile = None
+    if fig is None:
+        fig = _plotHelperInitFig(add_extra)
+
+    try:
+        ncfile = Dataset(filename)
+        x = ncfile.variables['x'][:]
+        y = ncfile.variables['y'][:]
+        t = ncfile.variables['time'][:]
+
+        H_m = ncfile.variables['Hm'][:,:]
+        eta = ncfile.variables['eta'][:,:,:]
+        hu = ncfile.variables['hu'][:,:,:]
+        hv = ncfile.variables['hv'][:,:,:]
+    except Exception as e:
+        raise e
+    finally:
+        if ncfile is not None:
+            ncfile.close()
+
+
+    if movie_frames is None:
+        movie_frames = len(t)
+
+    dx = x[1] - x[0]
+    dy = y[1] - y[0]
+
+    if (create_movie):
+        ax, sp = plotState( 
+                            eta[0],
+                            hu[0],
+                            hv[0],
+                            H_m+eta[0],
+                            dx, dy, t[0], 
+                            fig=fig,
+                            plot_title=filename,
+                            add_extra=add_extra,
+                            **kwargs)
+    else:
+        ax, sp = plotState(
+                            eta[-1],
+                            hu[-1],
+                            hv[-1],
+                            H_m+eta[-1],
+                            dx, dy, t[0], 
+                            fig=fig,
+                            plot_title=filename,
+                            add_extra=add_extra,
+                           **kwargs)
+        return
+
+    #Helper function which simulates and plots the solution    
+    def animate(i):
+        t_now = t[0] + (i / (movie_frames-1)) * (t[-1] - t[0]) 
+
+        k = np.searchsorted(t, t_now)
+        if (k >= eta.shape[0]):
+            k = eta.shape[0] - 1
+        j = max(0, k-1)
+        if (j == k):
+            k += 1
+        s = (t_now - t[j]) / (t[k] - t[j])
+
+        plotState(
+                (1-s)*eta[j] + s*eta[k], 
+                (1-s)*hu[j]  + s*hu[k], 
+                (1-s)*hv[j]  + s*hv[k], 
+                H_m+(1-s)*eta[j] + s*eta[k], 
+                dx, dy, t_now, 
+                fig=fig, 
+                plot_title=filename, 
+                add_extra=add_extra,
+                **kwargs, ax=ax, sp=sp)
+
+        print("."+str(i)+"/"+str(movie_frames)+".", end='')
+
+
+    #Matplotlib for creating an animation
+    anim = animation.FuncAnimation(fig, animate, range(movie_frames), interval=100)
+    plt.close(fig)
+    
+    return anim
+
+def norkystAnimation(source_url, x0, x1, y0, y1, fig=None, tsteps=None, movie_frames=None, create_movie=True, add_extra=False, **kwargs):
+    """
+    Norkyst-specific animation function
+    tsteps can be a list of indices to 
+    """
+    #Create figure and plot initial conditions
+    if fig is None:
+        fig = _plotHelperInitFig(add_extra)
+
+    # Read num timesteps
+    try:
+        ncfile = Dataset(source_url)
+        time_var = ncfile.variables['time']
+
+        if tsteps is None:
+            t = time_var[:]
+            tsteps = list(range(len(t)))
+        else:
+            t = time_var[tsteps]
+    except Exception as e:
+        raise e
+    finally:
+        ncfile.close()
+    t = t - t[0]
+
+    if (not create_movie):
+        tsteps = [tsteps[0]] + [tsteps[-1]]
+        
+    if movie_frames is None:
+        movie_frames = len(tsteps)
+        
+    ncfile = None
+    try:
+        ncfile = Dataset(source_url)
+        H_m = ncfile.variables['h'][y0:y1, x0:x1]
+        eta = ncfile.variables['zeta'][tsteps, y0:y1, x0:x1]
+        hu = ncfile.variables['ubar'][tsteps, y0:y1, x0:x1]
+        hv = ncfile.variables['vbar'][tsteps, y0:y1, x0:x1]
+        
+        for timestep in range(len(tsteps)):
+            hu[timestep] = hu[timestep] * (H_m + eta[timestep])
+            hv[timestep] = hv[timestep] * (H_m + eta[timestep])
+
+        x = ncfile.variables['X'][x0:x1]
+        y = ncfile.variables['Y'][y0:y1]
+        dx = np.average(x[1:] - x[:-1])
+        dy = np.average(y[1:] - y[:-1])
+
+    except Exception as e:
+        raise e
+    finally:
+        if ncfile is not None:
+            ncfile.close()
+
+    if (create_movie):
+        ax, sp = plotState( eta[0],
+                            hu[0],
+                            hv[0],
+                            H_m+eta[0],
+                            dx, dy, t[0], 
+                            fig=fig, plot_title="Reference solution",
+                            add_extra=add_extra,
+                            **kwargs)
+    else:
+        ax, sp = plotState(eta[-1],
+                            hu[-1],
+                            hv[-1],
+                            H_m+eta[-1],
+                            dx, dy, t[-1],
+                            fig=fig, plot_title="Reference solution",
+                            add_extra=add_extra,
+                            **kwargs)
+        return
+        
+    #Helper function which simulates and plots the solution    
+    def animate(i):
+        t_now = t[0] + (i / (movie_frames-1)) * (t[-1] - t[0]) 
+        
+        k = np.searchsorted(t, t_now)
+        if (k >= eta.shape[0]):
+            k = eta.shape[0] - 1
+        j = max(0, k-1)
+        if (j == k):
+            k += 1
+        s = (t_now - t[j]) / (t[k] - t[j])
+        
+        plotState((1-s)*eta[j] + s*eta[k], 
+                    (1-s)*hu[j]  + s*hu[k], 
+                    (1-s)*hv[j]  + s*hv[k], 
+                    H_m+(1-s)*eta[j] + s*eta[k], 
+                    dx, dy, t_now,
+                    fig=fig, plot_title="Reference solution",
+                    add_extra=add_extra,
+                    **kwargs, ax=ax, sp=sp)
+
+    #Matplotlib for creating an animation
+    anim = animation.FuncAnimation(fig, animate, range(movie_frames), interval=100)
+    plt.close(fig)
+    return anim
+
+
+
+
+def _plotHelperInitFig(add_extra):
+    #Create figure 
+    if add_extra:
+        return plt.figure(figsize=(12, 5))  
+    else:
+        return plt.figure(figsize=(12, 3))  
+    
+
+
+##################################################
+# Functions from before 2020. 
+# Might be useful again for certain simulations...
 
 """
 Class that makes plotting faster by caching the plots instead of recreating them
@@ -41,7 +449,7 @@ class PlotHelper:
 
     def __init__(self, fig, x_coords, y_coords, radius, eta1, u1, v1, eta2=None, u2=None, v2=None, interpolation_type='spline36', plotRadial=False):
         self.ny, self.nx = eta1.shape
-        self.fig = fig;
+        self.fig = fig
         self.plotRadial = plotRadial
         
         if self.plotRadial:
@@ -461,6 +869,10 @@ class EnsembleAnimator:
         
         
         
+
+
+##################################################3
+# DRIFTERS ON CANVAS
 
 
 def genVelocity(rho, rho_u, rho_v):
