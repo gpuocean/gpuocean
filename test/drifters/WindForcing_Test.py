@@ -137,4 +137,4 @@ class WindForcingTest(unittest.TestCase):
             [4943.3984375, 5060.05859375],
             [4987.31787109375, 5104.00390625]]
 
-        self.assertAlmostEqual(np.array(drifter_positions), np.array(ref), places=4)
+        self.assertAlmostEqual(np.max(np.array(drifter_positions) - np.array(ref)), 0.0, places=4)
