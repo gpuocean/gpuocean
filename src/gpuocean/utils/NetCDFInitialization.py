@@ -103,7 +103,7 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
                         u = u.filled(fill_value = 0.0)
                         u = (u[:, :,1:] + u[:, :, :-1]) * 0.5
                         
-                        integrator = MLD_integrator(source_url_list[i], H, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1)
+                        integrator = vertical_integrator(source_url_list[i], H, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1)
                         u = np.sum(integrator * u, axis=0)/h
                 hu = h*u
 
@@ -126,7 +126,7 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
                         v = v.filled(fill_value = 0.0)
                         v = (v[:, 1:, :] + v[:, :-1, :]) * 0.5
                         
-                        integrator = MLD_integrator(source_url_list[i], H, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1)
+                        integrator = vertical_integrator(source_url_list[i], H, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1)
                         v = np.sum(integrator * v, axis=0)/h 
                 hv = h*v
 
@@ -144,7 +144,7 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
         finally:
             ncfile.close()
 
-    all_timesteps = [time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist]
+    all_timesteps = [time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist] # from list of lists to a single list.
 
     bc_data = Common.BoundaryConditionsData(all_timesteps.copy(), 
         north=Common.SingleBoundaryConditionData(bc_eta['north'], bc_hu['north'], bc_hv['north']),
@@ -154,78 +154,6 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
     
     return bc_data
 
-
-def getWindSourceterm(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
-    """
-    timestep_indices => index into netcdf-array, e.g. [1, 3, 5]
-    timestep => time at timestep, e.g. [1800, 3600, 7200]
-    """
-    
-    if type(source_url_list) is not list:
-        source_url_list = [source_url_list]
-    
-    num_files = len(source_url_list)
-    
-    source_url = source_url_list[0]
-    
-    assert(num_files == len(timesteps)), str(num_files) +' vs '+ str(len(timesteps))
-    
-    if (timestep_indices is None):
-        timestep_indices = [None]*num_files
-        for i in range(num_files):
-            timestep_indices[i] = range(len(timesteps[i]))
-        
-    u_wind_list = [None]*num_files
-    v_wind_list = [None]*num_files
-    
-    if "Uwind" in Dataset(source_url_list[0]).variables:
-        for i in range(num_files):
-            try:
-                ncfile = Dataset(source_url_list[i])
-                if i == 0 and len(ncfile.variables['Uwind'].shape) == 0:
-                    return WindStress.WindStress()
-                u_wind_list[i] = ncfile.variables['Uwind'][timestep_indices[i], y0:y1, x0:x1]
-                v_wind_list[i] = ncfile.variables['Vwind'][timestep_indices[i], y0:y1, x0:x1]
-            except Exception as e:
-                raise e
-            finally:
-                ncfile.close()
-    else:
-        return WindStress.WindStress()
-
-    u_wind = u_wind_list[0].filled(0)
-    v_wind = v_wind_list[0].filled(0)
-    for i in range(1, num_files):
-        u_wind = np.concatenate((u_wind, u_wind_list[i].filled(0)))
-        v_wind = np.concatenate((v_wind, v_wind_list[i].filled(0)))
-    
-    u_wind = u_wind.astype(np.float32)
-    v_wind = v_wind.astype(np.float32)
-    
-    wind_speed = np.sqrt(np.power(u_wind, 2) + np.power(v_wind, 2))
-
-    # C_drag as defined by Engedahl (1995)
-    #(See "Documentation of simple ocean models for use in ensemble predictions. Part II: Benchmark cases"
-    #at https://www.met.no/publikasjoner/met-report/met-report-2012 for details.) /
-    def computeDrag(wind_speed):
-        C_drag = np.where(wind_speed < 11, 0.0012, 0.00049 + 0.000065*wind_speed)
-        return C_drag
-    C_drag = computeDrag(wind_speed)
-
-    rho_a = 1.225 # Density of air
-    rho_w = 1025 # Density of water
-
-    #Wind stress is then 
-    # tau_s = rho_a * C_drag * |W|W
-    wind_stress = C_drag * wind_speed * rho_a / rho_w
-    wind_stress_u = wind_stress*u_wind
-    wind_stress_v = wind_stress*v_wind
-
-    all_timesteps = [time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist]
-
-    wind_source = WindStress.WindStress(t=all_timesteps.copy(), X=wind_stress_u, Y=wind_stress_v)
-    
-    return wind_source
 
 def getInitialConditionsNorKystCases(source_url, casename, **kwargs):
     """
@@ -399,7 +327,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
                 u0 = (u0[:, :,1:] + u0[:, :, :-1]) * 0.5
                 v0 = (v0[:, 1:,:] + v0[:, :-1, :]) * 0.5
                 
-                integrator = MLD_integrator(source_url, H_m[1:-1,1:-1], x0=x0, x1=x1, y0=y0, y1=y1)
+                integrator = vertical_integrator(source_url, H_m[1:-1,1:-1], x0=x0, x1=x1, y0=y0, y1=y1)
                 u0 = np.sum(integrator * u0, axis=0)/(H_m[1:-1,1:-1])
                 v0 = np.sum(integrator * v0, axis=0)/(H_m[1:-1,1:-1])
 
@@ -1023,6 +951,12 @@ def MLD(source_url, thres, min_mld, max_mld=None, t=0, x0=0, x1=-1, y0=0, y1=-1)
 
 
 def MLD_integrator(source_url, mld, t=0, x0=0, x1=-1, y0=0, y1=-1):
+
+    return vertical_integrator(source_url, mld, t, x0, x1, y0, y1)
+
+
+
+def vertical_integrator(source_url, mld, t=0, x0=0, x1=-1, y0=0, y1=-1):
 
     s_nc = Dataset(source_url)
 
