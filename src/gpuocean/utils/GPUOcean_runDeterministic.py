@@ -88,7 +88,7 @@ def initlonlat2initgpuocean(source_url, lon, lat,norkyst = True, num_cells_x = 1
     return xinit, yinit, int(x0), int(x1), int(y0), int(y1)
 
 
-def plot_initgpuocean(source_url, initx, inity, x0, x1, y0, y1):
+def plot_initDrifters(source_url, initx, inity, x0, x1, y0, y1):
     """
     Plots the initial drifter location on top of the bathymetry from NorKyst
     The domain is the domain for the gpuocean simulations
