@@ -362,6 +362,9 @@ class Simulator(object):
         self.drifter_t = 0.0
 
     def attachCrossProductDrifters(self, drifter_list, sim_list):
+        """
+        Attach drifters that are affected by this sim (self), but also others from sim_list.
+        """
         assert len(drifter_list) == len(sim_list), "Same number of drifter objects and partner simulations needed!"
         self.hasCrossProductDrifter = True
         self.CrossProductDrifter = drifter_list

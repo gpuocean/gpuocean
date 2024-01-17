@@ -111,7 +111,7 @@ class CDKLM16(Simulator.Simulator):
         coriolis_beta: Coriolis linear factor -> f = f + beta*(y-y_0)
         max_wind_direction_perturbation: Large-scale model error emulation by per-time-step perturbation of wind direction by +/- max_wind_direction_perturbation (degrees)
         wind: Wind stress parameters
-        wind_stress_factor: artificial scaling of the wind stress as used in reduced-gravity simulations (1.0)
+        wind_stress_factor: artificial scaling of the wind stress acting on the water column. Won't affect drifters.
         atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
         small_scale_perturbation: Boolean value for applying a stochastic model error
