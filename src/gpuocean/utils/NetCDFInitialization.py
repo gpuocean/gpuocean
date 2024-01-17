@@ -263,6 +263,8 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         
         time_str = 'time'
     else:
+        # Assuming staggered grid
+        # First, try to read ubar and vbar. If it fails, integrate velocities vertically 
         try:
             ncfile = Dataset(source_url)
             H_m = ncfile.variables['h'][y0-1:y1+1, x0-1:x1+1]
@@ -527,7 +529,6 @@ def rescaleInitialConditions(old_ic, scale):
 
 
 
-
 def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1, norkyst_data):
     """
     timestep_indices => index into netcdf-array, e.g. [1, 3, 5]
@@ -581,14 +582,24 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
                 h = H + zeta
                 
                 if norkyst_data:
-                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
-                    hu = hu.filled(0) #zero on land
-                else: 
-                    hu = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+2]
-                    hu = hu.filled(0) #zero on land
-                    hu = (hu[:,1:] + hu[:, :-1]) * 0.5
-                    
-                hu = h*hu
+                    u = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
+                    u = u.filled(0) #zero on land
+                else:
+                    # Assuming staggered grid                    
+                    try:
+                        u = ncfile.variables['ubar'][timestep_index, y0-1:y1+1, x0-1:x1+2]
+                        u = u.filled(0) #zero on land
+                        u = (u[:,1:] + u[:, :-1]) * 0.5   
+                    except:
+                        # If ubar don't exist, integrate u vertically
+                        u = ncfile.variables['u'][timestep_index, :, y0-1:y1+1, x0-1:x1+2]
+                        u = u.filled(fill_value = 0.0)
+                        u = (u[:, :,1:] + u[:, :, :-1]) * 0.5
+                        
+                        integrator = vertical_integrator(source_url_list[i], H, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1)
+                        u = np.sum(integrator * u, axis=0)/h
+                hu = h*u
+
 
                 bc_hu['north'][bc_index] = hu[-1, 1:-1]
                 bc_hu['south'][bc_index] = hu[0, 1:-1]
@@ -596,13 +607,24 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
                 bc_hu['west'][bc_index] = hu[1:-1, 0]
 
                 if norkyst_data:
-                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
-                    hv = hv.filled(0) #zero on land
+                    v = ncfile.variables['vbar'][timestep_index, y0-1:y1+1, x0-1:x1+1]
+                    v = v.filled(0) #zero on land
                 else:
-                    hv = ncfile.variables['vbar'][timestep_index, y0-1:y1+2, x0-1:x1+1]
-                    hv = hv.filled(0) #zero on land
-                    hv = (hv[1:,:] + hv[:-1, :]) * 0.5
-                hv = h*hv
+                    # Assuming staggered grid
+                    try:
+                        v = ncfile.variables['vbar'][timestep_index, y0-1:y1+2, x0-1:x1+1]
+                        v = v.filled(0) #zero on land
+                        v = (v[1:,:] + v[:-1, :]) * 0.5
+                    except:
+                        # If vbar don't exist, integrate v vertically
+                        v = ncfile.variables['v'][timestep_index, :, y0-1:y1+2, x0-1:x1+1]
+                        v = v.filled(fill_value = 0.0)
+                        v = (v[:, 1:, :] + v[:, :-1, :]) * 0.5
+                        
+                        integrator = vertical_integrator(source_url_list[i], H, x0=x0-1, x1=x1+1, y0=y0-1, y1=y1+1)
+                        v = np.sum(integrator * v, axis=0)/h 
+                hv = h*v
+
 
                 bc_hv['north'][bc_index] = hv[-1, 1:-1]
                 bc_hv['south'][bc_index] = hv[0, 1:-1]
@@ -617,14 +639,15 @@ def getBoundaryConditionsData(source_url_list, timestep_indices, timesteps, x0, 
         finally:
             ncfile.close()
 
-    bc_data = Common.BoundaryConditionsData(np.ravel(timesteps).copy(), 
+    all_timesteps = [time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist] # from list of lists to a single list.
+
+    bc_data = Common.BoundaryConditionsData(all_timesteps.copy(), 
         north=Common.SingleBoundaryConditionData(bc_eta['north'], bc_hu['north'], bc_hv['north']),
         south=Common.SingleBoundaryConditionData(bc_eta['south'], bc_hu['south'], bc_hv['south']),
         east=Common.SingleBoundaryConditionData(bc_eta['east'], bc_hu['east'], bc_hv['east']),
         west=Common.SingleBoundaryConditionData(bc_eta['west'], bc_hu['west'], bc_hv['west']))
     
     return bc_data
-
 
 
 # Returns True if the current execution context is an IPython notebook, e.g. Jupyter.
