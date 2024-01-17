@@ -868,8 +868,8 @@ __global__ void cdklm_swe_2D(
             // If not land
             if (R[0][j][i] != CDKLM_DRY_FLAG) {
                 // Wind
-                const float X = windStressX(wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4);
-                const float Y = windStressY(wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4);
+                const float X = WIND_STRESS_FACTOR * windStressX(wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4);
+                const float Y = WIND_STRESS_FACTOR * windStressY(wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4);
 
                 // Bottom topography source terms!
                 // -g*(eta + H)*(-1)*dH/dx   * dx

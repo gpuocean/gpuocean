@@ -11,7 +11,7 @@ import pyproj
 
 #For GPUOcean
 from gpuocean.SWEsimulators import CDKLM16
-from gpuocean.utils import Common, NetCDFInitialization, Observation, PlotHelper
+from gpuocean.utils import Common, PlotHelper, NetCDFInitialization, Observation
 from gpuocean.drifters import GPUDrifterCollection
 from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
@@ -86,6 +86,25 @@ def initlonlat2initgpuocean(source_url, lon, lat,norkyst = True, num_cells_x = 1
         yinit += Y[0]
         
     return xinit, yinit, int(x0), int(x1), int(y0), int(y1)
+
+
+def plot_initDrifters(source_url, initx, inity, x0, x1, y0, y1):
+    """
+    Plots the initial drifter location on top of the bathymetry from NorKyst
+    The domain is the domain for the gpuocean simulations
+    """
+    nc = Dataset(source_url)
+
+    H = np.array(nc.variables['h'])
+    land_value = H.min()
+    land = np.ma.masked_where(H == land_value, H)
+
+    plt.title("Simulation area around initial drifter location")
+    plt.imshow(-land[y0:y1,x0:x1], interpolation="None", origin="lower", cmap=plt.cm.get_cmap('ocean').reversed(), vmin=-1500)
+    plt.colorbar()
+    plt.scatter(initx/800,inity/800, marker="x", c="red")
+    
+    plt.show()
 
 
 def lonlat2xygpuocean(source_url, lon, lat, x0, y0, norkyst = True):
@@ -226,7 +245,8 @@ def simulate_gpuocean_deterministic(source_url, domain, initx, inity,
                                     sim_args, norkyst_data = True, erode_land = 1, 
                                     wind_drift_factor = 0.0, rescale=0,
                                     forecast_file = None, start_forecast_hours = 0, duration = 23, 
-                                    ocean_state_file = None, netcdf_frequency = 5 ):
+                                    ocean_state_file = None, netcdf_frequency = 5,
+                                    reduced_gravity_interface=None):
     """
     source_url: url or local file or list of either with fielddata in NetCDF-format
     domain: array/list on form [x0,x1,y0,y1] defining the domain for the simulation
@@ -249,7 +269,8 @@ def simulate_gpuocean_deterministic(source_url, domain, initx, inity,
     
     #Create simulator
     data_args = NetCDFInitialization.getInitialConditions(source_url, domain[0], domain[1], domain[2],domain[3] , 
-                     timestep_indices = None,norkyst_data = norkyst_data, erode_land = erode_land, download_data = False)
+                     timestep_indices = None,norkyst_data = norkyst_data, erode_land = erode_land, download_data = False, 
+                     reduced_gravity_interface=reduced_gravity_interface)
     
     if wind_drift_factor:
         wind_data = data_args.pop('wind', None)
