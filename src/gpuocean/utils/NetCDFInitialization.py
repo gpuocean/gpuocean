@@ -25,11 +25,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 
+import time
 import numpy as np
 import datetime, os, copy
-from netCDF4 import Dataset
+from netCDF4 import Dataset, MFDataset
 import pyproj
 from scipy.ndimage.morphology import binary_erosion, grey_dilation
+
+import seawater as sw
+from scipy.ndimage.filters import convolve, gaussian_filter
 
 from gpuocean.utils import Common, WindStress, OceanographicUtilities
 
@@ -47,6 +51,60 @@ def getNorkystSubdomains():
         {'name': 'denmark',        'x0':    2, 'x1':  300, 'y0':    2, 'y1':  300 },
         {'name': 'lovese',         'x0': 1400, 'x1': 2034, 'y0':  450, 'y1':  769 }
     ]
+
+
+def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
+    """
+    timestep_indices => index into netcdf-array, e.g. [1, 3, 5]
+    timestep => time at timestep, e.g. [1800, 3600, 7200]
+    """
+    
+    if type(source_url_list) is not list:
+        source_url_list = [source_url_list]
+    
+    num_files = len(source_url_list)
+    
+    assert(num_files == len(timesteps)), str(num_files) +' vs '+ str(len(timesteps))
+    
+    if (timestep_indices is None):
+        timestep_indices = [None]*num_files
+        for i in range(num_files):
+            timestep_indices[i] = range(len(timesteps[i]))
+        
+    u_wind_list = [None]*num_files
+    v_wind_list = [None]*num_files
+    
+    if "Uwind" in Dataset(source_url_list[0]).variables:
+        for i in range(num_files):
+            try:
+                ncfile = Dataset(source_url_list[i])
+                if i == 0 and len(ncfile.variables['Uwind'].shape) == 0:
+                    return WindStress.WindStress()
+                u_wind_list[i] = ncfile.variables['Uwind'][timestep_indices[i], y0:y1, x0:x1]
+                v_wind_list[i] = ncfile.variables['Vwind'][timestep_indices[i], y0:y1, x0:x1]
+            except Exception as e:
+                raise e
+            finally:
+                ncfile.close()
+    else:
+        return WindStress.WindStress()
+
+    u_wind = u_wind_list[0].filled(0)
+    v_wind = v_wind_list[0].filled(0)
+    for i in range(1, num_files):
+        u_wind = np.concatenate((u_wind, u_wind_list[i].filled(0)))
+        v_wind = np.concatenate((v_wind, v_wind_list[i].filled(0)))
+    
+    u_wind = u_wind.astype(np.float32)
+    v_wind = v_wind.astype(np.float32)
+    
+    source_filename = ' and '.join([url for url in source_url_list])
+
+    all_timesteps = [time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist]
+
+    wind_source = WindStress.WindStress(t=all_timesteps.copy(), wind_u=u_wind, wind_v=v_wind, source_filename=source_filename)
+    
+    return wind_source
 
 
 def getInitialConditionsNorKystCases(source_url, casename, **kwargs):
@@ -73,14 +131,102 @@ def getCaseLocation(casename):
 
 
 
+
+def depth_integration(source_url, interface_depth, x0, x1, y0, y1, var, timestep_index=0): 
+    """
+    depth integration of var (variable in source_url-netcdf file) 
+    for depth 0 down to interface depth using trpeziodal rule 
+    NB! the interface depth has to be a depth level in the netcdf file
+    """
+    if isinstance(source_url, str):
+        nc = Dataset(source_url)
+    else: 
+        nc = source_url
+    #prepartions 
+    nx = x1 - x0
+    ny = y1 - y0
+
+    depth = nc["depth"][:].data
+    level_idx = np.where(depth == interface_depth)[0][0]
+
+    # trapeziod average of u or v 
+    uv = nc[var][timestep_index,:,y0:y1, x0:x1]
+    uv_hat = (uv[:level_idx] + uv[1:level_idx+1])/2
+
+    # depth steps and restructuring to the same dimensions as uv_hat
+    depth_diff = depth[1:level_idx+1] - depth[:level_idx]
+    for dd_idx in range(len(depth_diff)):
+        if dd_idx == 0:
+            dd_xy = np.full((ny,nx),depth_diff[dd_idx])[np.newaxis,:,:]
+        else:
+            dd_xy = np.concatenate((dd_xy, np.full((ny,nx),depth_diff[dd_idx])[np.newaxis,:,:]), axis=0 )
+
+    huv = np.ma.sum(dd_xy * uv_hat, axis=0)
+
+    if isinstance(source_url, str):
+        nc.close()
+    
+    return huv
+
+
+def vertical_integrator(source_url, mld, t=0, x0=0, x1=-1, y0=0, y1=-1):
+
+    s_nc = Dataset(source_url)
+
+    # Collect information about s-levels
+    w_lvls = s_nc["Cs_w"][:].data
+
+    # Collect information about domain
+    s_hs   = s_nc["h"][y0:y1,x0:x1] + s_nc["zeta"][t,y0:y1,x0:x1]
+
+    mask = False
+    if  isinstance(mld.mask, np.ndarray):
+        mask = np.array((len(w_lvls)*[mld.mask.copy()]))
+    w_depths = np.ma.array(np.multiply.outer(w_lvls,s_hs), mask=mask)
+
+    ny, nx = s_hs.shape
+
+    ## Construct integration weights 
+    depths_diff = w_depths[1:] - w_depths[:-1]
+    weights = np.ma.array(np.zeros_like(depths_diff), mask=depths_diff.mask.copy())
+
+    lvl_idxs = (np.arange(len(w_lvls)-1)[:,np.newaxis,np.newaxis]*np.ones((len(w_lvls)-1,ny,nx)))
+    mld_upper_idx = np.maximum(np.argmax(-w_depths < mld, axis=0), 1)
+
+    # Full w-levels
+    weights[lvl_idxs >= mld_upper_idx] = 1
+
+    # Partial w-levels as fraction 
+    mld_lower_idx = np.ma.maximum(mld_upper_idx - 1, 0)
+    mld_upper_depth = -np.take_along_axis(w_depths, mld_upper_idx.reshape(1,ny,nx), axis=0)[0]
+    mld_lower_depth = -np.take_along_axis(w_depths, mld_lower_idx.reshape(1,ny,nx), axis=0)[0]
+
+    np.put_along_axis(weights, mld_lower_idx.reshape(1,ny,nx), ((mld - mld_upper_depth)/(mld_lower_depth - mld_upper_depth)), axis=0)
+    # NOTE: If the mld is below the bathymetry the last level can have weight >1
+
+    integrator = depths_diff * weights
+
+    return integrator
+
+
 def getInitialConditions(source_url_list, x0, x1, y0, y1, \
+                         t0_index=0, \
                          timestep_indices=None, \
                          norkyst_data = True,
                          land_value=5.0, \
                          iterations=10, \
                          sponge_cells={'north':20, 'south': 20, 'east': 20, 'west': 20}, \
                          erode_land=0, 
-                         download_data=False):
+                         download_data=False
+                         ):
+    """
+    Constructing input arguments for CDKLM16 instances
+    source_url_list    - list with urls or paths to NetCDF-files (single files are allows)
+    timestep_indices   - list with timestep_indices per file (for a single file, e.g., "[[12,13,14,15,16]]") 
+    norkyst_data       - boolean whether source_url corresponds to a *Z-level* file from NorKyst800 model outputs
+    download_data      - downloading the source file for faster initialization next time - warning: downloaded files might be large
+    """
+    
     ic = {}
     
     if type(source_url_list) is not list:
@@ -91,6 +237,8 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     for i in range(len(source_url_list)):
         source_url_list[i] = checkCachedNetCDF(source_url_list[i], download_data=download_data)
     
+    if timestep_indices is not None:
+        t0_index = timestep_indices[0][0]
         
     # Read constants and initial values from the first source url
     source_url = source_url_list[0]
@@ -98,9 +246,9 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         try:
             ncfile = Dataset(source_url)
             H_m = ncfile.variables['h'][y0-1:y1+1, x0-1:x1+1]
-            eta0 = ncfile.variables['zeta'][0, y0-1:y1+1, x0-1:x1+1]
-            u0 = ncfile.variables['ubar'][0, y0:y1, x0:x1]
-            v0 = ncfile.variables['vbar'][0, y0:y1, x0:x1]
+            eta0 = ncfile.variables['zeta'][t0_index, y0-1:y1+1, x0-1:x1+1]
+            u0 = ncfile.variables['ubar'][t0_index, y0:y1, x0:x1]
+            v0 = ncfile.variables['vbar'][t0_index, y0:y1, x0:x1]
             angle = ncfile.variables['angle'][y0:y1, x0:x1]
             latitude = ncfile.variables['lat'][y0:y1, x0:x1]
             x = ncfile.variables['X'][x0:x1]
@@ -118,9 +266,31 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         try:
             ncfile = Dataset(source_url)
             H_m = ncfile.variables['h'][y0-1:y1+1, x0-1:x1+1]
-            eta0 = ncfile.variables['zeta'][0, y0-1:y1+1, x0-1:x1+1]
-            u0 = ncfile.variables['ubar'][0, y0:y1, x0:x1+1]
-            v0 = ncfile.variables['vbar'][0, y0:y1+1, x0:x1]
+            eta0 = ncfile.variables['zeta'][t0_index, y0-1:y1+1, x0-1:x1+1]
+
+            try: 
+                u0 = ncfile.variables['ubar'][t0_index, y0:y1, x0:x1+1]
+                v0 = ncfile.variables['vbar'][t0_index, y0:y1+1, x0:x1]
+                #Find u,v at cell centers
+                u0 = u0.filled(fill_value = 0.0)
+                v0 = v0.filled(fill_value = 0.0)
+        
+                u0 = (u0[:,1:] + u0[:, :-1]) * 0.5
+                v0 = (v0[1:,:] + v0[:-1, :]) * 0.5
+            except:
+                u0 = ncfile.variables['u'][t0_index, :, y0:y1, x0:x1+1]
+                v0 = ncfile.variables['v'][t0_index, :, y0:y1+1, x0:x1]
+                #Find u,v at cell centers
+                u0 = u0.filled(fill_value = 0.0)
+                v0 = v0.filled(fill_value = 0.0)
+        
+                u0 = (u0[:, :,1:] + u0[:, :, :-1]) * 0.5
+                v0 = (v0[:, 1:,:] + v0[:, :-1, :]) * 0.5
+                
+                integrator = vertical_integrator(source_url, H_m[1:-1,1:-1], x0=x0, x1=x1, y0=y0, y1=y1)
+                u0 = np.sum(integrator * u0, axis=0)/(H_m[1:-1,1:-1])
+                v0 = np.sum(integrator * v0, axis=0)/(H_m[1:-1,1:-1])
+
             angle = ncfile.variables['angle'][y0:y1, x0:x1]
             #lon, lat at cell centers:
             lat_rho = ncfile.variables['lat_rho'][y0:y1, x0:x1]
@@ -134,17 +304,21 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         
         #Find x, y (in Norkyst800 reference system, origin at norkyst800 origin)
         proj_str= '+proj=stere +ellps=WGS84 +lat_0=90.0 +lat_ts=60.0 +x_0=3192800 +y_0=1784000 +lon_0=70'
+        #Check for other projection information in ncfile
+        if np.any(np.array(list(map(lambda x: x.lower().startswith("projection"), ncfile.variables.keys())))):
+            try: 
+                ncfile = Dataset(source_url)
+                proj_var_str = [key for key in ncfile.variables.keys() if key.lower().startswith("proj")][0]
+                proj_str = ncfile.variables[proj_var_str].__getattr__('proj4')
+            except Exception as e:
+                raise e
+            finally:
+                ncfile.close()
+
         proj = pyproj.Proj(proj_str)
         
         x_rho, y_rho = proj(lon_rho, lat_rho, inverse = False)
         x, y = x_rho[0], y_rho[:,0]
-        
-        #Find u,v at cell centers
-        u0 = u0.filled(fill_value = 0.0)
-        v0 = v0.filled(fill_value = 0.0)
-   
-        u0 = (u0[:,1:] + u0[:, :-1]) * 0.5
-        v0 = (v0[1:,:] + v0[:-1, :]) * 0.5
         
         time_str = 'ocean_time'
 
@@ -166,8 +340,12 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
             if (timestep_indices[i] is not None):
                 timesteps[i] = ncfile.variables[time_str][timestep_indices[i][:]]
             else:
-                timesteps[i] = ncfile.variables[time_str][:]
-                timestep_indices[i] = range(len(timesteps[i]))
+                if i == 0: 
+                    timesteps[i] = ncfile.variables[time_str][t0_index:]
+                    timestep_indices[i] = range(t0_index, len(ncfile.variables[time_str][:]))
+                else:
+                    timesteps[i] = ncfile.variables[time_str][:]
+                    timestep_indices[i] = range(len(timesteps[i]))
         except Exception as e:
             print('exception in obtaining timestep for file '+str(i))
             raise e
@@ -178,13 +356,19 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     t0 = timesteps[0][0]
     for ts in timesteps:
         t0 = min(t0, min(ts))
+
     
-    assert(np.all(np.diff(timesteps)>=0))
+    assert(np.all(np.diff([time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist])>=0))
     for i in range(num_files):
         timesteps[i] = timesteps[i] - t0
     
+    #Fallback if input quantities are not properly masked
+    mask = eta0.mask.copy()
+    if eta0.data.shape != eta0.mask.shape:
+        mask = (H_m == land_value)
+
     #Generate intersections bathymetry
-    H_m_mask = eta0.mask.copy()
+    H_m_mask = mask.copy()
     H_m = np.ma.array(H_m, mask=H_m_mask)
     for i in range(erode_land):
         new_water = H_m.mask ^ binary_erosion(H_m.mask)
@@ -192,16 +376,17 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
         eta0_dil = grey_dilation(eta0.filled(0.0), size=(3,3))
         H_m[new_water] = land_value+eps
         eta0[new_water] = eta0_dil[new_water]
-        
+    
     H_i, _ = OceanographicUtilities.midpointsToIntersections(H_m, land_value=land_value, iterations=iterations)
     eta0 = eta0[1:-1, 1:-1]
     h0 = OceanographicUtilities.intersectionsToMidpoints(H_i).filled(land_value) + eta0.filled(0.0)
+
     
     #Generate physical variables
-    eta0 = np.ma.array(eta0.filled(0), mask=eta0.mask.copy())
-    hu0 = np.ma.array(h0*u0, mask=eta0.mask.copy())
-    hv0 = np.ma.array(h0*v0, mask=eta0.mask.copy())
-    
+    eta0 = np.ma.array(eta0.filled(0), mask=mask[1:-1, 1:-1].copy())
+    hu0 = np.ma.array(h0*u0, mask=mask[1:-1, 1:-1].copy())
+    hv0 = np.ma.array(h0*v0, mask=mask[1:-1, 1:-1].copy())
+
     #Spong cells for e.g., flow relaxation boundary conditions
     ic['sponge_cells'] = sponge_cells
     
@@ -229,7 +414,7 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     
     #Physical variables
     ic['H'] = H_i
-    ic['eta0'] = eta0
+    ic['eta0'] = eta0 #fill_coastal_data(eta0)
     ic['hu0'] = hu0
     ic['hv0'] = hv0
     
@@ -252,55 +437,61 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     
     #Initial reference time and all timesteps
     ic['t0'] = t0
-    ic['timesteps'] = np.ravel(timesteps)
+    ic['timesteps'] = np.array([time_item for timesteps_sublist in timesteps for time_item in timesteps_sublist])
     
     return ic
 
-def getWind(source_url_list, timestep_indices, timesteps, x0, x1, y0, y1):
+def fill_coastal_data(maarr):
     """
-    timestep_indices => index into netcdf-array, e.g. [1, 3, 5]
-    timestep => time at timestep, e.g. [1800, 3600, 7200]
+    Function manipulating the data of a masked array in the dry-zone.
+    If a dry cell has one or more wet neighbors, the average data is filled (otherwise the dry data stays 0, what is the default)
+
+    Input:  maarr - masked array
+    Output: maarr - masked array (with same mask, but modified data)
     """
-    
-    if type(source_url_list) is not list:
-        source_url_list = [source_url_list]
-    
-    num_files = len(source_url_list)
-    
-    assert(num_files == len(timesteps)), str(num_files) +' vs '+ str(len(timesteps))
-    
-    if (timestep_indices is None):
-        timestep_indices = [None]*num_files
-        for i in range(num_files):
-            timestep_indices[i] = range(len(timesteps[i]))
-        
-    u_wind_list = [None]*num_files
-    v_wind_list = [None]*num_files
-    
-    for i in range(num_files):
-        try:
-            ncfile = Dataset(source_url_list[i])
-            u_wind_list[i] = ncfile.variables['Uwind'][timestep_indices[i], y0:y1, x0:x1]
-            v_wind_list[i] = ncfile.variables['Vwind'][timestep_indices[i], y0:y1, x0:x1]
-        except Exception as e:
-            raise e
-        finally:
-            ncfile.close()
 
-    u_wind = u_wind_list[0].filled(0)
-    v_wind = v_wind_list[0].filled(0)
-    for i in range(1, num_files):
-        u_wind = np.concatenate((u_wind, u_wind_list[i].filled(0)))
-        v_wind = np.concatenate((v_wind, v_wind_list[i].filled(0)))
-    
-    u_wind = u_wind.astype(np.float32)
-    v_wind = v_wind.astype(np.float32)
-    
-    source_filename = ' and '.join([url for url in source_url_list])
+    for i in range(maarr.shape[1]):
+        for j in range(maarr.shape[0]):
+            if (maarr.mask[j,i]):
+                N_wet_neighbors = 0
+                sum = 0.0
+                if i > 0:
+                    if maarr.mask[j,i-1] == False:
+                        sum += maarr.data[j,i-1]
+                        N_wet_neighbors += 1 
+                if i < maarr.shape[1]-1: 
+                    if maarr.mask[j,i+1] == False:
+                        sum += maarr.data[j,i-1]
+                        N_wet_neighbors += 1 
+                if j > 0: 
+                    if maarr.mask[j-1,i] == False:
+                        sum += maarr.data[j-1,i]
+                        N_wet_neighbors += 1 
+                if j < maarr.shape[0]-1: 
+                    if maarr.mask[j+1,i] == False:
+                        sum += maarr.data[j+1,i]
+                        N_wet_neighbors += 1 
+                if i > 0 and j > 0:
+                    if maarr.mask[j-1,i-1] == False:
+                        sum += maarr.data[j-1,i-1]
+                        N_wet_neighbors += 1 
+                if i < maarr.shape[1]-1 and j > 0:
+                    if maarr.mask[j-1,i+1] == False:
+                        sum += maarr.data[j-1,i+1]
+                        N_wet_neighbors += 1 
+                if i > 0 and j < maarr.shape[0]-1:
+                    if maarr.mask[j+1,i-1] == False:
+                        sum += maarr.data[j+1,i-1]
+                        N_wet_neighbors += 1 
+                if i < maarr.shape[1]-1 and j < maarr.shape[0]-1:
+                    if maarr.mask[j+1,i+1] == False:
+                        sum += maarr.data[j+1,i+1]
+                        N_wet_neighbors += 1 
+                if N_wet_neighbors > 0:
+                    maarr.data[j,i] = sum/N_wet_neighbors
+    return maarr
 
-    wind_source = WindStress.WindStress(t=np.ravel(timesteps).copy(), wind_u=u_wind, wind_v=v_wind, source_filename=source_filename)
-    
-    return wind_source
+
 
 def rescaleInitialConditions(old_ic, scale):
     ic = copy.deepcopy(old_ic)

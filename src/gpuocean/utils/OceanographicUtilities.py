@@ -354,39 +354,61 @@ def rescaleIntersections(data, nx1, ny1, **kwargs):
         return (nx0-1)/(nx1-1), (ny0-1)/(ny1-1), out_data
     
     
-def calcGeostrophicBalance(eta, H_m, hu, hv, angle, f_beta, dx, dy, g=9.81, use_minmod=False, minmod_theta=1.3):
-    
+def calcGeostrophicBalance(eta, H_m, hu, hv, angle, f_beta, dx, dy, g=9.81, use_minmod=False, minmod_theta=1.3, norkyst=False):
+    """
+    Functionality for evaluating geostropic balance/imbalance in the system.
+    If inputs hu and hv are set to None, then geostrophic balanced momenta are returned instead
+    """
+
+
     #Calculate derivatives
     if (use_minmod):
         DetaDx = minmodX(eta, minmod_theta)/dx
         DetaDy = minmodY(eta, minmod_theta)/dy
     else:
         DetaDx, DetaDy = np.gradient(eta)
+        # in NorKyst y is first axis and x is second axis
+        if norkyst: 
+            DetaDx, DetaDy = DetaDy, DetaDx
         DetaDx = DetaDx / dx
         DetaDy = DetaDy / dy
     
     #Get north and east vectors
     north = [np.sin(angle), np.cos(angle)]
     east = [np.cos(angle), -np.sin(angle)]
-    
-    #Calculate h
-    h = H_m + eta
-    
-    #Get northward and eastward momentums
-    hu_east = east[0]*hu + east[1]*hv
-    hv_north = north[0]*hu + north[1]*hv
-    
+
     #Calculat derivatives towards north and east for eta
     DetaDeast = east[0]*DetaDx + east[1]*DetaDy
     DetaDnorth = north[0]*DetaDx + north[1]*DetaDy
     
-    #  f*hv - gh d\eta/dx = 0
-    geos_x = f_beta*hv_north - g*h*DetaDeast
-
-    #- f*hu - gh d\eta/dy = 0
-    geos_y = -f_beta*hu_east - g*h*DetaDnorth
+    #Calculate h
+    h = H_m + eta
     
-    return [geos_x, geos_y], [f_beta*hv_north, g*h*DetaDeast], [-f_beta*hu_east, g*h*DetaDnorth]
+    if hu is None and hv is None:
+        #Get northward and eastward momentums
+        hu_east = -g/f_beta * h * DetaDnorth
+        hv_north = g/f * h * DetaDeast
+
+        # Analytic inversion of 2x2 linear system
+        det = east[0]*north[1] - east[1]*north[0]
+
+        hu = 1/det * ( north[1] * hu_east - east[1] * hv_north )
+        hv = 1/det * ( -north[0] * hu_east + east[0] * hv_north)
+
+        return hu, hv
+        
+    else: 
+        #Get northward and eastward momentums
+        hu_east = east[0]*hu + east[1]*hv
+        hv_north = north[0]*hu + north[1]*hv
+    
+        #  f*hv - gh d\eta/dx = 0
+        geos_x = f_beta*hv_north - g*h*DetaDeast
+
+        #- f*hu - gh d\eta/dy = 0
+        geos_y = -f_beta*hu_east - g*h*DetaDnorth
+        
+        return [geos_x, geos_y], [f_beta*hv_north, g*h*DetaDeast], [-f_beta*hu_east, g*h*DetaDnorth]
 
 def desingularise(h, hu, eps):
     return hu / np.maximum(np.minimum(h*h/(2.0*eps)+0.5*eps, eps), np.abs(h))

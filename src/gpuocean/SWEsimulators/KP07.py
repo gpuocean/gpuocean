@@ -244,7 +244,7 @@ class KP07(Simulator.Simulator):
 
         boundaryConditions = sim_reader.getBC()
 
-        H = sim_reader.getH();
+        H = sim_reader.getH()
         
         # get last timestep (including simulation time of last timestep)
         eta0, hu0, hv0, time0 = sim_reader.getLastTimeStep()

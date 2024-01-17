@@ -28,7 +28,7 @@ import xmlrunner
 # install xmlrunner by
 # $ sudo easy_install unittest-xml-reporting
 
-from drifters.WindForcing_Test import WindForcingTest
+from windForcing.WindForcing_Test import WindForcingTest
 
 # In order to format the test report so that Jenkins can read it:
 jenkins = False
