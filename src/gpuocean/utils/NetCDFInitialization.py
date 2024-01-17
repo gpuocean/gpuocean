@@ -46,10 +46,14 @@ def getNorkystSubdomains():
         {'name': 'norwegian_sea',  'x0':  900, 'x1': 1400, 'y0':  600, 'y1':  875 },
         {'name': 'lofoten',        'x0': 1400, 'x1': 1900, 'y0':  450, 'y1':  750 },
         {'name': 'complete_coast', 'x0':   25, 'x1': 2575, 'y0':   25, 'y1':  875 },
-        {'name': 'skagerak',       'x0':  300, 'x1':  600, 'y0':   50, 'y1':  250 },
+        {'name': 'skagerrak',      'x0':   50, 'x1':  550, 'y0':   35, 'y1':  285 },
         {'name': 'oslo',           'x0':  500, 'x1':  550, 'y0':  160, 'y1':  210 },
         {'name': 'denmark',        'x0':    2, 'x1':  300, 'y0':    2, 'y1':  300 },
-        {'name': 'lovese',         'x0': 1400, 'x1': 2034, 'y0':  450, 'y1':  769 }
+        {'name': 'lovese',         'x0': 1400, 'x1': 2034, 'y0':  450, 'y1':  769 },
+        {'name': 'barents_sea',    'x0': 2150, 'x1': 2575, 'y0':  575, 'y1':  875 },
+        {'name': 'north_sea',      'x0':   25, 'x1':  350, 'y0':  550, 'y1':  875 },
+        {'name': 'vestlandskysten','x0':  350, 'x1':  850, 'y0':  550, 'y1':  850 },
+        {'name': 'sorvestlandet',  'x0':  100, 'x1':  550, 'y0':  350, 'y1':  700 }
     ]
 
 
