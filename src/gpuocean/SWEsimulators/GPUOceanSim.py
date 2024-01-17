@@ -25,5 +25,5 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from gpuocean.SWEsimulators import CDKLM16
 
-class SimplifiedOceanModel(CDKLM16.CDKLM16):
+class GPUOceanSim(CDKLM16.CDKLM16):
     pass
