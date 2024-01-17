@@ -614,17 +614,17 @@ class CDKLM16(Simulator.Simulator):
 
     def drifterStep(self, dt):
         # Evolve drifters
-        if self.hasCPdrifters:
-            for d in range(len(self.CPdrifters)):
+        if self.hasCrossProductDrifter:
+            for d in range(len(self.CrossProductDrifter)):
                 if self.CPsims[d] is not None:
-                    self.CPdrifters[d].drift(self.CPsims[d].gpu_data.h0, \
+                    self.CrossProductDrifter[d].drift(self.CPsims[d].gpu_data.h0, \
                                         self.CPsims[d].gpu_data.hu0, \
                                         self.CPsims[d].gpu_data.hv0, \
                                         self.CPsims[d].bathymetry.Bm, \
                                         self.nx, self.ny, self.t, self.dx, self.dy, \
                                         dt, \
                                         np.int32(2), np.int32(2)) 
-                self.CPdrifters[d].drift(self.gpu_data.h0, self.gpu_data.hu0, \
+                self.CrossProductDrifter[d].drift(self.gpu_data.h0, self.gpu_data.hu0, \
                                     self.gpu_data.hv0, \
                                     self.bathymetry.Bm, \
                                     self.nx, self.ny, self.t, self.dx, self.dy, \
