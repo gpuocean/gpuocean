@@ -251,8 +251,15 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
     H_m = np.ma.array(H_m, mask=H_m_mask)
     for i in range(erode_land):
         new_water = H_m.mask ^ binary_erosion(H_m.mask)
+        new_water[0,:]  = False # Avoid erosion along boundary
+        new_water[-1,:] = False
+        new_water[:,0]  = False
+        new_water[:,-1] = False
         eps = 1.0e-5 #Make new Hm slighlyt different from land_value
-        eta0_dil = grey_dilation(eta0.filled(0.0), size=(3,3))
+
+        # Grey_dilation only works on positive numbers, so we add and subtract 10 to eta
+        eta0_tmp = eta0 + 10
+        eta0_dil = grey_dilation(eta0_tmp.filled(0.0), size=(3,3)) - 10        
         H_m[new_water] = land_value+eps
         eta0[new_water] = eta0_dil[new_water]
     
@@ -262,9 +269,9 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
 
     
     #Generate physical variables
-    eta0 = np.ma.array(eta0.filled(0), mask=mask[1:-1, 1:-1].copy())
-    hu0 = np.ma.array(h0*u0, mask=mask[1:-1, 1:-1].copy())
-    hv0 = np.ma.array(h0*v0, mask=mask[1:-1, 1:-1].copy())
+    eta0 = np.ma.array(eta0.filled(0), mask=eta0.mask.copy())
+    hu0 = np.ma.array(h0*u0, mask=eta0.mask.copy())
+    hv0 = np.ma.array(h0*v0, mask=eta0.mask.copy())
 
     #Spong cells for e.g., flow relaxation boundary conditions
     ic['sponge_cells'] = sponge_cells
