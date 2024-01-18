@@ -438,6 +438,35 @@ def _plotHelperInitFig(add_extra):
     
 
 
+def imshow3(eta, hu, hv, 
+            eta_max=None, huv_max=None, figsize=(12, 3), 
+            titles=["eta", "hu", "hv"], suptitle=None,
+            cmaps=[plt.cm.BrBG, plt.cm.coolwarm, plt.cm.coolwarm],
+            interpolation="none"):
+   
+    fig = plt.figure(figsize=figsize)
+
+    if not eta_max:
+        eta_max = np.max(np.abs(eta))
+    if not huv_max:
+        huv_max = max(np.max(np.abs(hv)), np.max(np.abs(hv)))
+
+    maxvals = [eta_max, huv_max, huv_max]
+    data = [eta, hu, hv]
+
+    for i in range(3):
+        ax = plt.subplot(1, 3, i+1)
+        sp = ax.imshow(data[i], interpolation=interpolation, origin='lower', 
+                                cmap=cmaps[i], vmin=-maxvals[i], vmax=maxvals[i])
+        plt.colorbar(sp, shrink=0.9)
+        plt.axis('image')
+        plt.title(titles[i])
+
+    if suptitle:
+        plt.suptitle(suptitle)
+            
+
+
 ##################################################
 # Functions from before 2020. 
 # Might be useful again for certain simulations...
