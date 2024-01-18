@@ -51,6 +51,8 @@ def getNorkystSubdomains():
         {'name': 'denmark',        'x0':    2, 'x1':  300, 'y0':    2, 'y1':  300 },
         {'name': 'lovese',         'x0': 1400, 'x1': 2034, 'y0':  450, 'y1':  769 },
         {'name': 'barents_sea',    'x0': 2150, 'x1': 2575, 'y0':  575, 'y1':  875 },
+        {'name': 'finnmark',       'x0': 2000, 'x1': 2450, 'y0':  200, 'y1':  625 },
+        {'name': 'north_cape',     'x0': 2080, 'x1': 2350, 'y0':  390, 'y1':  590 },
         {'name': 'north_sea',      'x0':   25, 'x1':  350, 'y0':  550, 'y1':  875 },
         {'name': 'vestlandskysten','x0':  350, 'x1':  850, 'y0':  550, 'y1':  850 },
         {'name': 'sorvestlandet',  'x0':  100, 'x1':  550, 'y0':  350, 'y1':  700 }
@@ -128,7 +130,8 @@ def getInitialConditions(source_url_list, x0, x1, y0, y1, \
 
     t0_index = 0
     if timestep_indices is not None:
-        t0_index = timestep_indices[0][0]
+        if timestep_indices[0] is not None:
+            t0_index = timestep_indices[0][0]
         
 
         
