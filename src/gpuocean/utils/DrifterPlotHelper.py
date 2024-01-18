@@ -3,7 +3,7 @@
 """
 This software is part of GPU Ocean. 
 
-Copyright (C) 2023 SINTEF Digital
+Copyright (C) 2023, 2024 SINTEF Digital
 Copyright (C) 2023 Norwegian Meteorological Institute
 
 This python class aids in plotting results from the numerical 
@@ -134,7 +134,7 @@ def background_from_netcdf(source_url, figsize=None, t_idx=0, domain=[0, None, 0
 
 
 def background_from_sim(sim, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
-                          cmap=plt.cm.Oranges, vmax=1, cbar=True, **kwargs):
+                          cmap=plt.cm.Oranges, vmax=None, cbar=True, **kwargs):
     """
     Creating a background canvas from sim
     
@@ -167,6 +167,9 @@ def background_from_sim(sim, figsize=None, domain=[0, None, 0, None], drifter_do
     u = OceanographicUtilities.desingularise(eta + H_m, hu, 0.00001)
     v = OceanographicUtilities.desingularise(eta + H_m, hv, 0.00001)
     velo = np.sqrt(u**2 + v**2)
+
+    if vmax is None:
+        vmax = np.max(velo)
 
     import copy
     cmap = copy.copy(cmap)
@@ -264,6 +267,8 @@ def add_ensemble_drifter_on_background(ax, ensemble_obs, drifter_id=0,
         for path in paths:
             ax.plot(path[:,0], path[:,1], c=color,**kwargs)
 
+def add_drifter_positions_on_background(ax, drifter_pos, color="black", **kwargs):
+    ax.scatter(drifter_pos[:,0]/1000.0, drifter_pos[:,1]/1000.0, c=color, **kwargs)
 
 ##################################################3
 # UTILS TO GET DRIFTER DOMAIN
