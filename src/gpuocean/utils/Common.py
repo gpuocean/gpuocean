@@ -406,7 +406,8 @@ class CUDAContext(object):
     """
     Reads a text file and creates an CUDA kernel from that
     """
-    def get_kernel(self, kernel_filename, include_dirs=[], defines={}, compile_args={'no_extern_c': True}, jit_compile_args={}):
+    def get_kernel(self, kernel_filename, include_dirs=[], defines={}, compile_args={'no_extern_c': True}, jit_compile_args={},
+                   is_abs_path=False):
         """
         Helper function to print compilation output
         """
@@ -432,13 +433,15 @@ class CUDAContext(object):
         options_hash = options_hasher.hexdigest()
         options_hasher = None
         root, ext = os.path.splitext(kernel_filename)
-        kernel_path = os.path.abspath(os.path.join(self.module_path, "..", "gpu_kernels", kernel_filename))
-        kernel_hash = root \
-                + "_" + CUDAContext.hash_kernel( \
+        _, filename_with_ext = os.path.split(kernel_filename)
+        filename_no_ext, _ = os.path.splitext(filename_with_ext)
+        kernel_path = kernel_filename
+        if not is_abs_path:
+            kernel_path = os.path.abspath(os.path.join(self.module_path, "..", "gpu_kernels", kernel_filename))
+        hash = CUDAContext.hash_kernel( \
                     kernel_path, \
-                    include_dirs=[os.path.join(self.module_path, "../kernels")] + include_dirs) \
-                + "_" + options_hash \
-                + ext
+                    include_dirs=[os.path.join(self.module_path, "../kernels")] + include_dirs)
+        kernel_hash = filename_no_ext + "_" +  hash + "_" + options_hash + ext
         cached_kernel_filename = os.path.join(self.cache_path, kernel_hash)
         
         # If we have the kernel in our hashmap, return it
