@@ -43,3 +43,7 @@ See [here](https://github.com/gpuocean/gpuocean/wiki/Installation).
 ## Development and funding
 GPU Ocean is developed through a collaboration between the Norwegian Meteorological Institute and the Applied Computational Science research group at SINTEF Digital. We are greatful for the support from the Norwegian Research Council under grant numbers 250935 (GPU Ocean) and 310515 (Havvarsel).
 
+![image](https://github.com/gpuocean/gpuocean/assets/5363644/34bcbdfa-96d3-4c27-987d-36c9f2007ca3)  <html>&nbsp;&nbsp;&nbsp;</html>    ![image](https://github.com/gpuocean/gpuocean/assets/5363644/267d4675-5a87-4cf6-aa46-a1809b134fe2)
+
+
+
