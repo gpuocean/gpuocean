@@ -4,7 +4,7 @@
  
 **A GPU-accelerated simulation framework for running large ensembles of simplified ocean models for real-world domains.**
 
-Operational ocean forecasting models are computationally expensive and are therefore often run as a single deterministic simulation at given intervals. This means that often lack information about forecast uncertainties, which are significant given that there are relative few observations of the ocean compared to its sheer size. Information on uncertainty is, however, vital for various applications, including search-and-rescue operations at sea.
+Operational ocean forecasting models are computationally expensive and are therefore often run as a single deterministic simulation at given intervals. This means that they often lack information about forecast uncertainties, which are significant given that there are relative few observations of the ocean compared to its sheer size. Information on uncertainty is, however, vital for various applications, including search-and-rescue operations at sea.
 
 ### What is GPU Ocean?
 GPU Ocean is a simulation framework designed to explore the short-term uncertainty in forecasted ocean currents. It achieves this by running ensembles of simplified ocean models nested within operational ocean forecasts. These simplified models efficiently solve barotropic dynamics described by the shallow-water equations using GPUs.
@@ -13,16 +13,16 @@ GPU Ocean is a simulation framework designed to explore the short-term uncertain
 
 * **Efficient simulation:** GPU Ocean utilizes GPU acceleration and state-of-the-art finite-volume methods to solve shallow-water equations efficiently.
 * **Model nesting:**  Easily import initialization data, terrain information, forcing, and boundary conditions from NetCDF files containing operational 3D ocean forecasts.
-* **Drift trajectory prediction:** Conduct online drift trajectory simulations for drifting objects within the ocean models, directly assessing uncertainty in drift trajectories concerning ocean current uncertainties.
-* **Data Assimilation**: GPU Ocean includes tailored data-assimilation methods for sparse in-situ observations.
-* **Python with CUDA Performance**: Rapid prototyping and easy orchestration, pre-, and post-processing using Python while getting the computational performance of CUDA.
-* **Parallel Processing:** MPI support for running even larger ensembles on multiple GPUs. 
+* **Drift trajectory prediction:** Conduct online drift trajectory simulations for drifting objects within the ocean models, directly assessing uncertainty in drift trajectories based on the uncertainty in the ocean currents.
+* **Data assimilation**: GPU Ocean includes tailored data-assimilation methods for sparse in-situ observations.
+* **Python with CUDA performance**: Rapid prototyping and easy orchestration, pre-, and post-processing using Python while getting the computational performance of CUDA.
+* **Parallel processing:** MPI support for running even larger ensembles on multiple GPUs. 
 
 
 GPU Ocean aims to be a powerful tool to complement ocean current forecasts through estimating and accounting for forecast uncertainties. By combining local observations and advanced data assimilation methods, users can make more informed decisions based on the latest oceanic data.
 
 ## Installation
-See [here](https://github.com/metno/gpuocean/wiki/Installation).
+See [here](https://github.com/gpuocean/gpuocean/wiki/Installation).
 
 ## Academic publications using GPU Ocean
 * H. Holm, F. Beiser (2023) **Reducing Numerical Artifacts by Sacrificing Well-Balance for Rotating Shallow-Water Flow**. In: Franck, E., Fuhrmann, J., Michel-Dansac, V., Navoret, L. (eds) Finite Volumes for Complex Applications X — Volume 2, Hyperbolic and Related Problems. FVCA 2023. Springer Proceedings in Mathematics & Statistics, vol 433. Springer, Cham. DOI: [10.1007/978-3-031-40860-1_19](https://doi.org/10.1007/978-3-031-40860-1_19)
@@ -35,7 +35,7 @@ See [here](https://github.com/metno/gpuocean/wiki/Installation).
 
 
 **Preprints**
-* F. Beiser, H. Holm, J. Eidsvik (2023) **Comparison of Ensemble-Based Data Assimilation Methods for Sparse Oceanographic Data**, [arXiv:2302.07197](https://arxiv.org/abs/2302.07197). Accepted for publication in Quarterly Journal of the Royal Meteorological Society ([Early view](https://doi.org/10.1002/qj.4637))
+* F. Beiser, H. Holm, J. Eidsvik (2024) **Comparison of Ensemble-Based Data Assimilation Methods for Sparse Oceanographic Data**, [arXiv:2302.07197](https://arxiv.org/abs/2302.07197). Accepted for publication in Quarterly Journal of the Royal Meteorological Society ([Early view](https://doi.org/10.1002/qj.4637))
 * F. Beiser, H. Holm, K. Lye, J. Eidsvik (2024) **Multi-level Data Assimilation for Simplified Ocean Models**, [Nonlinear Processes in Geophysics npg-2023-27](https://doi.org/10.5194/npg-2023-27)
 
 
