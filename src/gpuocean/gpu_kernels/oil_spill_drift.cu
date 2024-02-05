@@ -49,7 +49,8 @@ __global__ void superSimpleDrift(
         float* Hm_ptr, const int Hm_pitch,
 
         const int num_drifters,
-        float* drifters_positions, const int drifters_pitch)
+        float* drifters_positions, const int drifters_pitch,
+        float* random_numbers, const int rand_pitch)
     {
         // Each thread will be responsible for one drifter only 
         // Local index of thread within block (only needed in one dim)
@@ -85,6 +86,11 @@ __global__ void superSimpleDrift(
             // Move drifter with a simple forward Euler
             drifter_pos_x += u*dt;
             drifter_pos_y += v*dt;
+
+            // Diffusion in x and y
+            float* rand_drifter = (float*)((char*) random_numbers + rand_pitch*ti);
+            drifter_pos_x += rand_drifter[0]*sqrt(dt);
+            drifter_pos_y += rand_drifter[1]*sqrt(dt);
 
             // Assuming periodic boundary conditions
             drifter_pos_x -= floor(drifter_pos_x / (nx*dx))*(nx*dx);
