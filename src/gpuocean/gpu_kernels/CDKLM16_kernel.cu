@@ -487,6 +487,8 @@ __global__ void cdklm_swe_2D(
         float land_value_,
 
         //External forcing parameters
+        const float* atmospheric_pressure_current_arr,
+        const float* atmospheric_pressure_next_arr,
         const float wind_stress_t_,
         const float atmospheric_pressure_t_,
 
@@ -905,7 +907,7 @@ __global__ void cdklm_swe_2D(
                 const float hv_cor = up.x*hu_east_cor + up.y*hv_north_cor;
 
                 // Atmospheric pressure
-                const float2 atm_p_central_diff = atmospheric_pressure_central_diff(atmospheric_pressure_t_,  ti+0.5, tj+0.5, NX+4, NY+4);
+                const float2 atm_p_central_diff = atmospheric_pressure_central_diff(atmospheric_pressure_current_arr, atmospheric_pressure_next_arr, atmospheric_pressure_t_,  ti+0.5, tj+0.5, NX+4, NY+4, ATMOS_PRES_NX, ATMOS_PRES_NY);
                 const float atm_pressure_x = -atm_p_central_diff.x*h/(2.0f*DX*RHO_O);
                 const float atm_pressure_y = -atm_p_central_diff.y*h/(2.0f*DY*RHO_O);
 

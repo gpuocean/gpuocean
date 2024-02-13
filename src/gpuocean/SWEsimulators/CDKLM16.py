@@ -189,7 +189,9 @@ class CDKLM16(Simulator.Simulator):
                          'RHO_O': "{:.12f}f".format(rho_o),
                          'WIND_STRESS_FACTOR': "{:.12f}f".format(wind_stress_factor), 
                          'ONE_DIMENSIONAL': int(0),
-                         'FLUX_BALANCER': "{:.12f}f".format(flux_balancer)
+                         'FLUX_BALANCER': "{:.12f}f".format(flux_balancer),
+                         'ATMOS_PRES_NX': int(self.atmospheric_pressure.P[0].shape[1]),
+                         'ATMOS_PRES_NY': int(self.atmospheric_pressure.P[0].shape[0]),
         }
         
         if one_dimensional:
@@ -217,7 +219,7 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifffi")
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifPPffi")
         self.update_wind_stress(self.kernel, self.cdklm_swe_2D)
         self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D)
         
@@ -714,6 +716,8 @@ class CDKLM16(Simulator.Simulator):
                            self.bathymetry.Bi.data.gpudata, self.bathymetry.Bi.pitch, \
                            self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
                            self.bathymetry.mask_value,
+                           self.atmospheric_pressure_current_arr.data.gpudata,
+                           self.atmospheric_pressure_next_arr.data.gpudata,
                            wind_stress_t, \
                            atmospheric_pressure_t, \
                            boundary_conditions)

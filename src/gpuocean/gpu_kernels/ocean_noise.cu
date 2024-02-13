@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "common.cu"
+#include "interpolation.cu"
 #include "random_number_generators.cu"
 
 texture<float, cudaTextureType2D> coriolis_f_tex;
