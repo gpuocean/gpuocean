@@ -61,7 +61,7 @@ __device__ float windStressY(float wind_stress_t_, float ti_, float tj_, int nx_
   * @param nx_ Number of cells along x axis including ghost cells
   * @param ny_ Number of cells along y axis including ghost cells
   */
-__device__ float2 atmospheric_pressure_central_diff(float atmospheric_pressure_t_, float ti_, float tj_, int nx_, int ny_) {
+__device__ float2 atmospheric_pressure_central_diff(const float* atmospheric_pressure_current_arr, const float* atmospheric_pressure_next_arr, float atmospheric_pressure_t_, float ti_, float tj_, int nx_, int ny_) {
     
     //Normalize coordinates (to [0, 1])
     const float s = ti_ / float(nx_);
@@ -71,15 +71,17 @@ __device__ float2 atmospheric_pressure_central_diff(float atmospheric_pressure_t
     const float dx = 1.0f/ float(nx_);
     const float dy = 1.0f/ float(ny_);
     
+
+
     //Look up current and next timestep (using bilinear texture interpolation)
-    const float current_n = tex2D(atmospheric_pressure_current, s     , t + dy);
-    const float next_n    = tex2D(atmospheric_pressure_next,    s     , t + dy);
-    const float current_s = tex2D(atmospheric_pressure_current, s     , t - dy);
-    const float next_s    = tex2D(atmospheric_pressure_next,    s     , t - dy);
-    const float current_e = tex2D(atmospheric_pressure_current, s + dx, t     );
-    const float next_e    = tex2D(atmospheric_pressure_next,    s + dx, t     );
-    const float current_w = tex2D(atmospheric_pressure_current, s - dx, t     );
-    const float next_w    = tex2D(atmospheric_pressure_next,    s - dx, t     );
+    const float current_n = bilinear_interpolation(atmospheric_pressure_current_arr, 504, 404, s,      t + dy);
+    const float next_n    = bilinear_interpolation(atmospheric_pressure_next_arr,    504, 404, s,      t + dy);
+    const float current_s = bilinear_interpolation(atmospheric_pressure_current_arr, 504, 404, s,      t - dy);
+    const float next_s    = bilinear_interpolation(atmospheric_pressure_next_arr,    504, 404, s,      t - dy);
+    const float current_e = bilinear_interpolation(atmospheric_pressure_current_arr, 504, 404, s + dx, t     );
+    const float next_e    = bilinear_interpolation(atmospheric_pressure_next_arr,    504, 404, s + dx, t     );
+    const float current_w = bilinear_interpolation(atmospheric_pressure_current_arr, 504, 404, s - dx, t     );
+    const float next_w    = bilinear_interpolation(atmospheric_pressure_next_arr,    504, 404, s - dx, t     );
     
     //Interpolate in time
     const float atm_p_n = atmospheric_pressure_t_*next_n + (1.0f - atmospheric_pressure_t_)*current_n;

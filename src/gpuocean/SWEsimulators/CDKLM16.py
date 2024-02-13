@@ -227,7 +227,7 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifffi")
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifPPffi")
         self.update_wind_stress(self.kernel, self.cdklm_swe_2D)
         self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D)
         
@@ -668,6 +668,8 @@ class CDKLM16(Simulator.Simulator):
                            self.bathymetry.Bi.data.gpudata, self.bathymetry.Bi.pitch, \
                            self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
                            self.bathymetry.mask_value,
+                           self.atmospheric_pressure_current_arr.data.gpudata,
+                           self.atmospheric_pressure_next_arr.data.gpudata,
                            wind_stress_t, \
                            atmospheric_pressure_t, \
                            boundary_conditions)
