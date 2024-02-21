@@ -14,10 +14,12 @@ class OilDrift:
     At the same time, it should be mentioned that there are a lot of functions there that are never used...
     """
 
-    def __init__(self, gpu_ctx, drifter_positions):
+    def __init__(self, gpu_ctx, drifter_positions, diffusion=True):
 
         assert(drifter_positions.shape[1] == 3), "expecting drifter_positions to be of shape (N, 3)"
         self.num_drifters = drifter_positions.shape[0]
+
+        self.diffusion = diffusion
 
         # GPU stuff
         self.gpu_ctx = gpu_ctx
@@ -40,6 +42,14 @@ class OilDrift:
                                                            3, self.num_drifters, 0, 0,
                                                            drifter_positions)
 
+
+        # Allocate GPU memory for random numbers.
+        # 5 rands per drifter, initialize to zero
+        self.random_numbers_device = Common.CUDAArray2D(self.gpu_stream, 
+                                                        5, self.num_drifters, 0, 0,
+                                                        np.zeros((self.num_drifters, 5), dtype=np.float32))
+
+        
         # Compile cuda file found in this repository
         # To do that, we need to provide the absolute path along with the corresponding flag
         self.kernel_filename = os.path.join("..", "gpu_kernels", "super_simple_drift_kernel.cu")
@@ -51,7 +61,7 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPi")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPi")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
 
@@ -69,6 +79,12 @@ class OilDrift:
         # Call the kernel to simulate the drifters for dt seconds using the ocean state available in the sim
         # Note: Only pointers to GPU memory can be given to the cuda kernel function
 
+        # Transfer new random numbers to the GPU if we have diffusion
+        # assuming normal distribution for now...
+        if self.diffusion:
+            random_numbers_host = np.random.randn(self.num_drifters, 5).astype(np.float32)
+            self.random_numbers_device.upload(self.gpu_stream, random_numbers_host)
+
         # Disclaimer:The gpu arrays for the simulator has does not have the correct names for historical reasons...
         # The values for eta are called h
         # The values for Hm are called Bm
@@ -85,7 +101,9 @@ class OilDrift:
                                                sim.bathymetry.Bm.data.gpudata, sim.bathymetry.Bm.pitch,
                                                np.int32(self.num_drifters),
                                                self.drifter_positions_device.data.gpudata,
-                                               self.drifter_positions_device.pitch )
+                                               self.drifter_positions_device.pitch,
+                                               self.random_numbers_device.data.gpudata,
+                                               self.random_numbers_device.pitch )
         
     def is_submerged(self):
         # Return True if the oil drifter is submerged
