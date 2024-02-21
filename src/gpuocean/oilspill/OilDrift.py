@@ -16,7 +16,7 @@ class OilDrift:
 
     def __init__(self, gpu_ctx, drifter_positions):
 
-        assert(drifter_positions.shape[1] == 2), "expecting drifter_positions to be of shape (N, 2)"
+        assert(drifter_positions.shape[1] == 3), "expecting drifter_positions to be of shape (N, 3)"
         self.num_drifters = drifter_positions.shape[0]
 
         # GPU stuff
@@ -37,7 +37,7 @@ class OilDrift:
         # Allocate GPU memory and intialize using the 2D Array utility function, which is a wrapper around pycuda.gpuarray
         # Data size parameters are given by the signature (_, nx, ny, ghost_cells_x, ghost_cells_y, _)
         self.drifter_positions_device = Common.CUDAArray2D(self.gpu_stream, 
-                                                           2, self.num_drifters, 0, 0,
+                                                           3, self.num_drifters, 0, 0,
                                                            drifter_positions)
 
         # Compile cuda file found in this repository
@@ -62,7 +62,7 @@ class OilDrift:
 
     def setDrifterPositions(self, drifter_positions):
         # Upload new positions from the cpu (host) to the device (gpu)
-        assert(drifter_positions.shape == (self.num_drifters, 2)), "expecting drifter_positions of shape "+str((self.num_drifters, 2))+" but got "+str(drifter_positions.shape)
+        assert(drifter_positions.shape == (self.num_drifters, 3)), "expecting drifter_positions of shape "+str((self.num_drifters, 3))+" but got "+str(drifter_positions.shape)
         self.drifter_positions_device.upload(self.gpu_stream, drifter_positions)
 
     def drift(self, sim, dt):
@@ -86,4 +86,14 @@ class OilDrift:
                                                np.int32(self.num_drifters),
                                                self.drifter_positions_device.data.gpudata,
                                                self.drifter_positions_device.pitch )
+        
+    def is_submerged(self):
+        # Return True if the oil drifter is submerged
+        return self.getDrifterPositions()[:,2] < 0
+    
+    def is_stranded(self):
+        # Return True if the oil drifter is stranded
+        return self.getDrifterPositions()[:,2] == 999
+            
+            
         
