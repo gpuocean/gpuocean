@@ -30,7 +30,9 @@ class MultiLevelScore:
     def __init__(self, args_list):
         """
         Preparing arrays to to write scores.
-        Copying frequently used ensemble quantities.
+        
+        Input:
+        args_list   - dict with nx, ny and dx, dy information for a multi-level ensemble
         """
 
         self.args_list = args_list

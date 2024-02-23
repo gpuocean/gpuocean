@@ -153,9 +153,8 @@ class Simulator(object):
     Function which updates the wind stress textures
     @param kernel_module Module (from get_kernel in CUDAContext)
     @param kernel_function Kernel function (from kernel_module.get_function)
-    @optional reinit_wind_tex Boolean to force reset of gpu-textures
     """
-    def update_wind_stress(self, kernel_module, kernel_function, reinit_wind_tex=False):
+    def update_wind_stress(self, kernel_module, kernel_function):
         #Key used to access the hashmaps
         key = str(kernel_module)
         self.logger.debug("Setting up wind stress for %s", key)
@@ -202,7 +201,7 @@ class Simulator(object):
             texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
             
         #If time interval has changed, upload new data
-        if (new_t0 != old_t0) or reinit_wind_tex:
+        if (new_t0 != old_t0):
             self.gpu_stream.synchronize()
             self.gpu_ctx.synchronize()
             self.logger.debug("Updating T0")
@@ -212,7 +211,7 @@ class Simulator(object):
             kernel_function.param_set_texref(Y0_texref)
             self.gpu_ctx.synchronize()
 
-        if (new_t1 != old_t1) or reinit_wind_tex:
+        if (new_t1 != old_t1):
             self.gpu_stream.synchronize()
             self.gpu_ctx.synchronize()
             self.logger.debug("Updating T1")
@@ -239,9 +238,8 @@ class Simulator(object):
     Function which updates the atmospheric pressure textures
     @param kernel_module Module (from get_kernel in CUDAContext)
     @param kernel_function Kernel function (from kernel_module.get_function)
-    @optional reinit_atmospres_tex Boolean to force reset of gpu-textures
     """
-    def update_atmospheric_pressure(self, kernel_module, kernel_function, reinit_atmospres_tex=False):
+    def update_atmospheric_pressure(self, kernel_module, kernel_function):
         #Key used to access the hashmaps
         key = str(kernel_module)
         self.logger.debug("Setting up atmospheric pressure for %s", key)
@@ -287,7 +285,7 @@ class Simulator(object):
             texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
             
         #If time interval has changed, upload new data
-        if (new_t0 != old_t0) or reinit_atmospres_tex:
+        if (new_t0 != old_t0):
             self.gpu_stream.synchronize()
             self.gpu_ctx.synchronize()
             self.logger.debug("Updating T0")
@@ -295,7 +293,7 @@ class Simulator(object):
             kernel_function.param_set_texref(P0_texref)
             self.gpu_ctx.synchronize()
 
-        if (new_t1 != old_t1) or reinit_atmospres_tex:
+        if (new_t1 != old_t1):
             self.gpu_stream.synchronize()
             self.gpu_ctx.synchronize()
             self.logger.debug("Updating T1")

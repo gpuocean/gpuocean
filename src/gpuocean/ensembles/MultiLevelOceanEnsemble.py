@@ -35,12 +35,12 @@ class MultiLevelOceanEnsemble:
     """
 
     def __init__(self, ML_ensemble):
-        # For the time being, the ML ensemble has to be constructed outside of this class, 
-        # since construction can work in different ways
+        # Note ML ensemble has to be constructed outside of this class, 
+        # the construction can be done in different ways
         # 
         # The assumed structure is a list with the same length as number of levels!
         # The 0-level directly contains a list of the CDKLM16 ensemble members, 
-        # While the subsequent level contain TWO equally long lists which the sim-partners 
+        # While the subsequent level contain TWO equally long lists with the sim-partners 
         # Where the first list is the + and the second list is the - partner with a coarser resolution 
         
         assert len(ML_ensemble) > 1, "Single level ensembles are not valid"
@@ -523,7 +523,10 @@ from gpuocean.SWEsimulators import ModelErrorKL
 class MultiLevelOceanEnsembleCase(MultiLevelOceanEnsemble):
     """
     Class for holding a multi-level ensemble of ocean models
-    which is constructed in class
+    which is constructed from lists with simulator arguments
+
+    i.e. ML_ensemble is constructed from the simulator arguments
+    and the superclass initialized
     """
 
     def __init__(self, ML_Nes, args_list, make_data_args, sample_args, make_sim,
