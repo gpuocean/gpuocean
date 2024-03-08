@@ -25,6 +25,7 @@ GPU Ocean aims to be a powerful tool to complement ocean current forecasts throu
 See [here](https://github.com/gpuocean/gpuocean/wiki/Installation).
 
 ## Academic publications using GPU Ocean
+* F. Beiser, H. Holm, J. Eidsvik (2024) **Comparison of Ensemble-Based Data Assimilation Methods for Sparse Oceanographic Data**,  Quarterly Journal of the Royal Meteorological Society, 150(759), 1068–1095. DOI: [10.1002/qj.4637](https://doi.org/10.1002/qj.4637) [arXiv:2302.07197](https://arxiv.org/abs/2302.07197). 
 * H. Holm, F. Beiser (2023) **Reducing Numerical Artifacts by Sacrificing Well-Balance for Rotating Shallow-Water Flow**. In: Franck, E., Fuhrmann, J., Michel-Dansac, V., Navoret, L. (eds) Finite Volumes for Complex Applications X — Volume 2, Hyperbolic and Related Problems. FVCA 2023. Springer Proceedings in Mathematics & Statistics, vol 433. Springer, Cham. DOI: [10.1007/978-3-031-40860-1_19](https://doi.org/10.1007/978-3-031-40860-1_19)
 *	A. Brodtkorb, H. Holm (2021) **Coastal Ocean Forecasting on the GPU using a Two-Dimensional Finite Volume Scheme**. Tellus A: Dynamic Meteorology and Oceanography, 73:1, 1-22, DOI: [10.1080/16000870.2021.1876341](https://doi.org/10.1080/16000870.2021.1876341) [Preprint: [arXiv:1912.02457](https://arxiv.org/abs/1912.02457)]
 *	H. Holm, A. Brodtkorb, M. Sætra (2020) **Data Assimilation for Ocean Drift Trajectories Using Massive Ensembles and GPUs**. In: Klöfkorn, R., Keilegavlen, E., Radu, F.A., Fuhrmann, J. (eds) Finite Volumes for Complex Applications IX - Methods, Theoretical Aspects, Examples. FVCA 2020. Springer Proceedings in Mathematics & Statistics, vol 323. Springer, Cham. DOI: [10.1007/978-3-030-43651-3_68](https://doi.org/10.1007/978-3-030-43651-3_68)
@@ -35,7 +36,6 @@ See [here](https://github.com/gpuocean/gpuocean/wiki/Installation).
 
 
 **Preprints**
-* F. Beiser, H. Holm, J. Eidsvik (2024) **Comparison of Ensemble-Based Data Assimilation Methods for Sparse Oceanographic Data**, [arXiv:2302.07197](https://arxiv.org/abs/2302.07197). Accepted for publication in Quarterly Journal of the Royal Meteorological Society ([Early view](https://doi.org/10.1002/qj.4637))
 * F. Beiser, H. Holm, K. Lye, J. Eidsvik (2024) **Multi-level Data Assimilation for Simplified Ocean Models**, [Nonlinear Processes in Geophysics npg-2023-27](https://doi.org/10.5194/npg-2023-27)
 
 
