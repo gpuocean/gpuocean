@@ -30,6 +30,7 @@ import xmlrunner
 # $ sudo easy_install unittest-xml-reporting
 
 #import testUtils
+from stochastic.RandomNumbers_test import RandomNumbersTest
 from stochastic.OceanStateNoise_test import OceanStateNoiseTest
 from stochastic.OceanStateNoise_LCG_test import OceanStateNoiseLCGTest
 from stochastic.RandThroughOceanNoise_test import RandThroughOceanNoiseTest
@@ -62,12 +63,13 @@ if (jenkins):
 # Define the tests that will be part of our test suite:
 test_classes_to_run = None
 if tests == 0:
-    test_classes_to_run = [RandThroughOceanNoiseTest, 
+    test_classes_to_run = [RandomNumbersTest,
+                           RandThroughOceanNoiseTest, 
                            OceanStateNoiseTest,
                            RandThroughOceanNoiseLCGTest,
                            OceanStateNoiseLCGTest]
 elif tests == 1:
-    test_classes_to_run = []
+    test_classes_to_run = [RandomNumbersTest]
 elif tests == 2:
     test_classes_to_run = [RandThroughOceanNoiseTest]
 elif tests == 3:

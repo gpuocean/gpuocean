@@ -4,7 +4,8 @@ This software is part of GPU Ocean.
 
 Copyright (C) 2018 SINTEF Digital
 
-This python module implements regression tests for generation of random numbers.
+This python module implements regression tests for generation of random 
+numbers through the OceanNoise class.
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
