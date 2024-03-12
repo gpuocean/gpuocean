@@ -34,7 +34,7 @@ from gpuocean.SWEsimulators.OceanStateNoise import *
 from stochastic.OceanStateNoise_parent import OceanStateNoiseTestParent
 
 
-class RandomNumbersTest(OceanStateNoiseTestParent):
+class RandThroughOceanNoiseTest(OceanStateNoiseTestParent):
         
     def test_random_uniform(self):
         self.create_large_noise()
