@@ -172,8 +172,8 @@ class RandThroughOceanNoiseTest(OceanStateNoiseTestParent):
             assert2DListNotAlmostEqual(self, uniform_seed.tolist(), init_seed.tolist(), tol, "test_seed_diff, uniform vs init_seed")
             assert2DListNotAlmostEqual(self, uniform_seed.tolist(), normal_seed.tolist(), tol, "test_seed_diff, uniform vs normal_seed")
         else:
-            self.assertIsNone(self.noise.seed)
-            self.assertIsNone(self.noise.host_seed)
+            self.assertIsNone(self.noise.rng.seed)
+            self.assertIsNone(self.noise.rng.host_seed)
             self.failUnlessRaises(AssertionError, self.noise.getSeed)
             self.failUnlessRaises(AssertionError, self.noise.resetSeed)
            

@@ -37,8 +37,8 @@ class RandomNumbersTest(unittest.TestCase):
         self.gpu_ctx = Common.CUDAContext()
         self.gpu_stream = cuda.Stream()
         
-        self.nx = 256
-        self.ny = 256
+        self.nx = 512
+        self.ny = 512
         
         self.rng = None
         self.random_numbers = None
