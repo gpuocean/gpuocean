@@ -4,7 +4,7 @@ import numpy as np
 
 import pycuda.driver as cuda
 
-from gpuocean.utils import Common
+from gpuocean.utils import Common, RandomNumbers
 
 class OilDrift:
     """
@@ -14,7 +14,16 @@ class OilDrift:
     At the same time, it should be mentioned that there are a lot of functions there that are never used...
     """
 
-    def __init__(self, gpu_ctx, drifter_positions, diffusion=True):
+    def __init__(self, gpu_ctx, drifter_positions, diffusion=True, rng_type=1,
+                 block_width=32, rng_block_height=32):
+        supported_rng_types = [1, # CPU generation with numpy with upload
+                               2, # GPU generation using pycuda XORWOW
+                               3, # GPU generation using GPU Ocean LCG (separate kernel)
+                               4, # GPU generation using GPU Ocean LCG (device functions)  
+                               ] 
+        assert(rng_type in supported_rng_types),  "invalid rng_type " + str(rng_type) + ", choose between "+str(supported_rng_types)
+        self.rng_type = rng_type
+
 
         assert(drifter_positions.shape[1] == 3), "expecting drifter_positions to be of shape (N, 3)"
         self.num_drifters = drifter_positions.shape[0]
@@ -29,7 +38,7 @@ class OilDrift:
         # Here, we assume that each thread is responsible for moving one drifter
         # Local size refers to the number of threads in each block (organized in 3D)
         # global size refers to the number of blocks that will be run on the GPU (can be organized in 2D or 3D)
-        self.block_width = 32 
+        self.block_width = block_width 
         self.block_height = 1
 
         self.local_size = (self.block_width, self.block_height, 1)
@@ -48,7 +57,15 @@ class OilDrift:
         self.random_numbers_device = Common.CUDAArray2D(self.gpu_stream, 
                                                         5, self.num_drifters, 0, 0,
                                                         np.zeros((self.num_drifters, 5), dtype=np.float32))
-
+        
+        # Initialize random number generators from pycuda
+        self.rng = None
+        if self.rng_type in [2, 3]:
+            use_lcg = self.rng_type == 3
+            self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
+                                                   5, self.num_drifters, 
+                                                   use_lcg=use_lcg,
+                                                   block_width=4, block_height=rng_block_height)
         
         # Compile cuda file found in this repository
         # To do that, we need to provide the absolute path along with the corresponding flag
@@ -82,8 +99,11 @@ class OilDrift:
         # Transfer new random numbers to the GPU if we have diffusion
         # assuming normal distribution for now...
         if self.diffusion:
-            random_numbers_host = np.random.randn(self.num_drifters, 5).astype(np.float32)
-            self.random_numbers_device.upload(self.gpu_stream, random_numbers_host)
+            if self.rng_type == 1:
+                random_numbers_host = np.random.randn(self.num_drifters, 5).astype(np.float32)
+                self.random_numbers_device.upload(self.gpu_stream, random_numbers_host)
+            elif self.rng_type in [2, 3]:
+                self.rng.generateNormalDistribution(self.random_numbers_device)
 
         # Disclaimer:The gpu arrays for the simulator has does not have the correct names for historical reasons...
         # The values for eta are called h
@@ -103,7 +123,7 @@ class OilDrift:
                                                self.drifter_positions_device.data.gpudata,
                                                self.drifter_positions_device.pitch,
                                                self.random_numbers_device.data.gpudata,
-                                               self.random_numbers_device.pitch )
+                                               self.random_numbers_device.pitch)
         
     def is_submerged(self):
         # Return True if the oil drifter is submerged
