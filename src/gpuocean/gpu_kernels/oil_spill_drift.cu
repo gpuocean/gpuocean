@@ -19,7 +19,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "../../havahol-gpuocean/src/gpuocean/gpu_kernels/random_number_generators.cu"
+#include "random_number_generators.cu"
 
 __device__ float waterVelocity(
         float* eta_ptr, const int eta_pitch,
