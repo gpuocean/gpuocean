@@ -60,12 +60,24 @@ class OilDrift:
         
         # Initialize random number generators from pycuda
         self.rng = None
-        if self.rng_type in [2, 3]:
-            use_lcg = self.rng_type == 3
+        self.rng_pycuda = None
+        if self.rng_type > 2:
             self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
-                                                   5, self.num_drifters, 
-                                                   use_lcg=use_lcg,
-                                                   block_width=4, block_height=rng_block_height)
+                                                    5, self.num_drifters, 
+                                                    use_lcg=True,
+                                                    block_width=4, block_height=rng_block_height)
+        else:
+            # Ensure that we have the seed pointer, although we don't use it...
+            self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
+                                                   1, 1, use_lcg=True)
+        if self.rng_type == 2:
+            # Make rng_pycuda for that purpose
+            self.rng_pycuda = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
+                                                    5, self.num_drifters, 
+                                                    use_lcg=False,
+                                                    block_width=4, block_height=rng_block_height)
+
+            # Hack to ensure that we can still run deterministic
         
         # Compile cuda file found in this repository
         # To do that, we need to provide the absolute path along with the corresponding flag
@@ -78,9 +90,23 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPi")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiPii")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
+
+    # Destructor and memory deallocation
+    def __del__(self):
+        self.cleanUp()
+     
+    def cleanUp(self):
+        if self.rng is not None:
+            self.rng.cleanUp()
+        if self.rng_pycuda is not None:
+            self.rng_pycuda.cleanUp()
+        if self.random_numbers_device is not None:
+            self.random_numbers_device.release()
+        self.gpu_ctx = None
+        
 
 
     def getDrifterPositions(self):
@@ -102,7 +128,9 @@ class OilDrift:
             if self.rng_type == 1:
                 random_numbers_host = np.random.randn(self.num_drifters, 5).astype(np.float32)
                 self.random_numbers_device.upload(self.gpu_stream, random_numbers_host)
-            elif self.rng_type in [2, 3]:
+            elif self.rng_type == 2:
+                self.rng_pycuda.generateNormalDistribution(self.random_numbers_device)
+            elif self.rng_type == 3:
                 self.rng.generateNormalDistribution(self.random_numbers_device)
 
         # Disclaimer:The gpu arrays for the simulator has does not have the correct names for historical reasons...
@@ -123,7 +151,9 @@ class OilDrift:
                                                self.drifter_positions_device.data.gpudata,
                                                self.drifter_positions_device.pitch,
                                                self.random_numbers_device.data.gpudata,
-                                               self.random_numbers_device.pitch)
+                                               self.random_numbers_device.pitch,
+                                               self.rng.seed.data.gpudata, self.rng.seed.pitch,
+                                               np.int32(self.rng_type) )
         
     def is_submerged(self):
         # Return True if the oil drifter is submerged

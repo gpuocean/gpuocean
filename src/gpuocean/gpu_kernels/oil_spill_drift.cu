@@ -19,7 +19,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-
+#include "../../havahol-gpuocean/src/gpuocean/gpu_kernels/random_number_generators.cu"
 
 __device__ float waterVelocity(
         float* eta_ptr, const int eta_pitch,
@@ -50,7 +50,9 @@ __global__ void superSimpleDrift(
 
         const int num_drifters,
         float* drifters_positions, const int drifters_pitch,
-        float* random_numbers, const int rand_pitch)
+        float* random_numbers, const int rand_pitch,
+        unsigned long long* seed_ptr, int seed_pitch, 
+        const int rng_type)
     {
         // Each thread will be responsible for one drifter only 
         // Local index of thread within block (only needed in one dim)
@@ -89,6 +91,23 @@ __global__ void superSimpleDrift(
 
             // Diffusion in x and y
             float* rand_drifter = (float*)((char*) random_numbers + rand_pitch*ti);
+            if (rng_type == 4) {
+                unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
+                unsigned long long seed = seed_row[0];
+                
+                // Generating 5 normal distributed random numbers
+                for (int i = 0; i < 3; i++) {
+                    float2 const rand_u = ansic_lcg(&seed);
+                    float2 rand_n = boxMuller(rand_u);
+                    rand_drifter[i*2] = rand_n.x;
+                    if (i < 2) {
+                        rand_drifter[i*2+1]= rand_n.y;
+                    }
+                }
+                
+                // Write seed back to global memory
+                seed_row[0] = seed;
+            }
             drifter_pos_x += rand_drifter[0]*sqrt(dt);
             drifter_pos_y += rand_drifter[1]*sqrt(dt);
 
