@@ -24,7 +24,7 @@ __device__ float2 ansic_lcg(unsigned long long* seed_ptr) {
     return out;
     //return make_float2(u1, u2);
 }
-__device__ float2 rand_u(unsigned long long* seed_ptr) {
+__device__ float2 rand_uniform(unsigned long long* seed_ptr) {
     return ansic_lcg(seed_ptr);
 }
 
@@ -42,7 +42,8 @@ __device__ float2 boxMuller(float2 u) {
     out.y = n2;
     return out;
 }
-__device__ float2 rand_n(float2 u) {
+__device__ float2 rand_normal(unsigned long long* seed_ptr) {
+    float2 u = ansic_lcg(seed_ptr);
     return boxMuller(u);
 }
 
