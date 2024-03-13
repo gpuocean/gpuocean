@@ -2,7 +2,7 @@
 """
 This software is part of GPU Ocean. 
 
-Copyright (C) 2018 SINTEF Digital
+Copyright (C) 2018, 2024 SINTEF Digital
 
 This python module implements regression tests for generation of random numbers.
 
@@ -29,19 +29,49 @@ import pycuda.driver as cuda
 
 from testUtils import *
 
-from gpuocean.utils import Common
-from gpuocean.SWEsimulators.OceanStateNoise import *
-from stochastic.OceanStateNoise_parent import OceanStateNoiseTestParent
+from gpuocean.utils import Common, RandomNumbers
 
+class RandomNumbersTest(unittest.TestCase):
 
-class RandomNumbersTest(OceanStateNoiseTestParent):
+    def setUp(self):
+        self.gpu_ctx = Common.CUDAContext()
+        self.gpu_stream = cuda.Stream()
         
-    def test_random_uniform(self):
-        self.create_large_noise()
+        self.nx = 512
+        self.ny = 512
+        
+        self.rng = None
+        self.random_numbers = None
+                
+        self.floatMax = 2147483648.0
 
-        self.large_noise.generateUniformDistribution()
+        
+    def tearDown(self):
+        if self.rng is not None:
+            self.rng.cleanUp()
+            del self.rng
+        if self.random_numbers is not None:
+            self.random_numbers.release()
+        if self.gpu_ctx is not None:
+            self.assertEqual(sys.getrefcount(self.gpu_ctx), 2)
+            self.gpu_ctx = None
+   
+        gc.collect()
+            
+    def create_rng(self, lcg):
+        self.rng = RandomNumbers.RandomNumbers(self.gpu_ctx, self.gpu_stream,
+                                               self.nx, self.ny,
+                                               use_lcg=lcg)
+        self.random_numbers = Common.CUDAArray2D(self.gpu_stream, self.nx, self.ny, 0, 0,
+                                                np.zeros((self.ny, self.nx), dtype=np.float32))
 
-        U = self.large_noise.getRandomNumbers()
+    #########################################################################
+    ### Tests 
+    #########################################################################
+    def random_uniform(self, lcg):
+        self.create_rng(lcg)
+        self.rng.generateUniformDistribution(self.random_numbers)
+        U = self.random_numbers.download(self.gpu_stream)
 
         mean = np.mean(U)
         var = np.var(U)
@@ -50,44 +80,17 @@ class RandomNumbersTest(OceanStateNoiseTestParent):
         # Gives error if the distribution is way off
         self.assertLess(np.abs(mean - 0.5), 0.005)
         self.assertLess(np.abs(var - 1/12), 0.001)
-
-
-    def test_random_uniform_CPU(self):
-        self.create_large_noise()
-
-        self.large_noise.generateUniformDistributionCPU()
-
-        U = self.large_noise.getRandomNumbersCPU()
-
-        mean = np.mean(U)
-        var = np.var(U)
-
-        # Check the mean and var with very low accuracy.
-        # Gives error if the distribution is way off
-        self.assertLess(np.abs(mean - 0.5), 0.005)
-        self.assertLess(np.abs(var - 1/12), 0.001)
-
-    def test_random_normal(self):
-        self.create_large_noise()
-
-        self.large_noise.generateNormalDistribution()
-
-        U = self.large_noise.getRandomNumbers()
-
-        mean = np.mean(U)
-        var = np.var(U)
-
-        # Check the mean and var with very low accuracy.
-        # Gives error if the distribution is way off
-        self.assertLess(np.abs(mean), 0.01)
-        self.assertLess(np.abs(var - 1.0), 0.01)
         
-    def test_random_normal_CPU(self):
-        self.create_large_noise()
+    def test_random_uniform_lcg(self):
+        self.random_uniform(lcg=True)
 
-        self.large_noise.generateNormalDistributionCPU()
+    def test_random_uniform_curand(self):
+        self.random_uniform(lcg=False)
 
-        U = self.large_noise.getRandomNumbersCPU()
+    def random_normal(self, lcg):
+        self.create_rng(lcg)
+        self.rng.generateNormalDistribution(self.random_numbers)
+        U = self.random_numbers.download(self.gpu_stream)
 
         mean = np.mean(U)
         var = np.var(U)
@@ -97,105 +100,35 @@ class RandomNumbersTest(OceanStateNoiseTestParent):
         self.assertLess(np.abs(mean), 0.01)
         self.assertLess(np.abs(var - 1.0), 0.01)
 
-    def test_random_normal_nu(self):
-        self.create_large_noise()
+    def test_random_normal_lcg(self):
+        self.random_normal(lcg=True)
 
-        self.large_noise.generateNormalDistributionPerpendicular()
+    def test_random_normal_curand(self):
+        self.random_normal(lcg=False)
 
-        U = self.large_noise.getPerpendicularRandomNumbers()
 
-        mean = np.mean(U)
-        var = np.var(U)
+    def seed_diff(self, lcg):
+        self.create_rng(lcg=lcg)
+        tol = 7
 
-        # Check the mean and var with very low accuracy.
-        # Gives error if the distribution is way off
-        self.assertLess(np.abs(mean), 0.01)
-        self.assertLess(np.abs(var - 1.0), 0.01)
-        
-    def test_random_normal_perpendicular(self):
-        self.create_large_noise()
-        tol = 6
-
-        self.large_noise.generatePerpendicularNormalDistributions()
-
-        xi = self.large_noise.getRandomNumbers()
-        nu = self.large_noise.getPerpendicularRandomNumbers()
-        rel = np.sum(xi*xi)
-        
-        mean_xi = np.mean(xi)
-        var_xi = np.var(xi)
-        mean_nu = np.mean(nu)
-        var_nu = np.var(nu)
-
-        # Check the mean and var with very low accuracy.
-        # Gives error if the distribution is way off
-        self.assertLess(np.abs(mean_xi), 0.01)
-        self.assertLess(np.abs(var_xi - 1.0), 0.01)
-        self.assertLess(np.abs(mean_nu), 0.01)
-        self.assertLess(np.abs(var_nu - 1.0), 0.01)
-        
-        # Get the norms of the random vectors before they became perpendicular 
-        pre_reduction_buffer = self.large_noise.getReductionBuffer()
-        
-        # Get the norms of the random vectors after they became perpendicular 
-        self.large_noise.findDoubleNormAndDot()
-        post_reduction_buffer = self.large_noise.getReductionBuffer()
-        
-        # Check that the final norms on the GPU matches those on the CPU
-        self.assertAlmostEqual(post_reduction_buffer[0,0]/rel, np.sum(xi*xi)/rel, tol)
-        self.assertAlmostEqual(post_reduction_buffer[0,1]/rel, np.sum(nu*nu)/rel, tol)
-        
-        # Check that the first values are the same:
-        self.assertAlmostEqual(post_reduction_buffer[0,0]/rel, pre_reduction_buffer[0,0]/rel, tol)
-        self.assertAlmostEqual(post_reduction_buffer[0,1]/rel, pre_reduction_buffer[0,1]/rel, tol)
-        
-        # Check that their dot-products (both from the GPU and CPU) are zero
-        self.assertAlmostEqual(post_reduction_buffer[0,2]/rel, 0.0, places=3)
-        self.assertAlmostEqual(np.sum(xi*nu), 0.0, places=3)
-        
-        
-
-    def test_seed_diff(self):
-        
-        self.create_noise()
-        tol = 6
-
-        if self.noise.use_lcg:
-            init_seed = self.noise.getSeed()/self.floatMax
-            self.noise.generateNormalDistribution()
-            normal_seed = self.noise.getSeed()/self.floatMax
+        if lcg:
+            init_seed = self.rng.getSeed()/self.rng.floatMax
+            self.rng.generateNormalDistribution(self.random_numbers)
+            normal_seed = self.rng.getSeed()/self.rng.floatMax
             assert2DListNotAlmostEqual(self, normal_seed.tolist(), init_seed.tolist(), tol, "test_seed_diff, normal vs init_seed")
             
-            self.noise.generateUniformDistribution()
-            uniform_seed = self.noise.getSeed()/self.floatMax
+            self.rng.generateUniformDistribution(self.random_numbers)
+            uniform_seed = self.rng.getSeed()/self.floatMax
             assert2DListNotAlmostEqual(self, uniform_seed.tolist(), init_seed.tolist(), tol, "test_seed_diff, uniform vs init_seed")
             assert2DListNotAlmostEqual(self, uniform_seed.tolist(), normal_seed.tolist(), tol, "test_seed_diff, uniform vs normal_seed")
         else:
-            self.assertIsNone(self.noise.seed)
-            self.assertIsNone(self.noise.host_seed)
-            self.failUnlessRaises(AssertionError, self.noise.getSeed)
-            self.failUnlessRaises(AssertionError, self.noise.resetSeed)
+            self.assertIsNone(self.rng.seed)
+            self.assertIsNone(self.rng.host_seed)
+            self.failUnlessRaises(AssertionError, self.rng.getSeed)
+            self.failUnlessRaises(AssertionError, self.rng.resetSeed)
            
-        
-    def test_empty_reduction_buffer(self):
-        self.create_large_noise()
-        
-        buffer_host = self.large_noise.getReductionBuffer()
-        self.assertEqual(buffer_host.shape, (1,3))
-        self.assertEqual(buffer_host[0,0], 0.0)
-        self.assertEqual(buffer_host[0,1], 0.0)
-        self.assertEqual(buffer_host[0,2], 0.0)
-        
-    def test_reduction(self):
-        self.create_large_noise()
-        
-        self.large_noise.generateNormalDistribution()
-        obtained_random_numbers = self.large_noise.getRandomNumbers()
-        gamma_from_numpy = np.linalg.norm(obtained_random_numbers)**2
-        
-        gamma = self.large_noise.getRandomNorm()
-
-        # Checking relative difference 
-        self.assertAlmostEqual((gamma_from_numpy-gamma)/gamma_from_numpy, 0.0, places=5)
-
-        
+    def test_seed_diff_lcg(self):
+        self.seed_diff(lcg=True)
+    
+    def test_seed_diff_curand(self):
+        self.seed_diff(lcg=False)
