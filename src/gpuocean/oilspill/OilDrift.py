@@ -14,22 +14,14 @@ class OilDrift:
     At the same time, it should be mentioned that there are a lot of functions there that are never used...
     """
 
-    def __init__(self, gpu_ctx, drifter_positions, diffusion=True, rng_type=1,
+    def __init__(self, gpu_ctx, drifter_positions, horisontal_diffusivity=1.0,
                  block_width=32, rng_block_height=32):
-        supported_rng_types = [1, # CPU generation with numpy with upload
-                               2, # GPU generation using pycuda XORWOW
-                               3, # GPU generation using GPU Ocean LCG (separate kernel)
-                               4, # GPU generation using GPU Ocean LCG (device functions writing to random buffer)  
-                               5, # GPU generation using GPU Ocean LCG (device functions using random values directly)  
-                               ] 
-        assert(rng_type in supported_rng_types),  "invalid rng_type " + str(rng_type) + ", choose between "+str(supported_rng_types)
-        self.rng_type = rng_type
 
 
         assert(drifter_positions.shape[1] == 3), "expecting drifter_positions to be of shape (N, 3)"
         self.num_drifters = drifter_positions.shape[0]
 
-        self.diffusion = diffusion
+        self.horisontal_diffusivity = np.float32(horisontal_diffusivity)
 
         # GPU stuff
         self.gpu_ctx = gpu_ctx
@@ -45,40 +37,17 @@ class OilDrift:
         self.local_size = (self.block_width, self.block_height, 1)
         self.global_size = (int(np.ceil((self.num_drifters + 1)/float(self.block_width))), 1)
         
-
         # Allocate GPU memory and intialize using the 2D Array utility function, which is a wrapper around pycuda.gpuarray
         # Data size parameters are given by the signature (_, nx, ny, ghost_cells_x, ghost_cells_y, _)
         self.drifter_positions_device = Common.CUDAArray2D(self.gpu_stream, 
                                                            3, self.num_drifters, 0, 0,
                                                            drifter_positions)
-
-
-        # Allocate GPU memory for random numbers.
-        # 5 rands per drifter, initialize to zero
-        self.random_numbers_device = Common.CUDAArray2D(self.gpu_stream, 
-                                                        5, self.num_drifters, 0, 0,
-                                                        np.zeros((self.num_drifters, 5), dtype=np.float32))
         
-        # Initialize random number generators from pycuda
-        self.rng = None
-        self.rng_pycuda = None
-        if self.rng_type > 2:
-            self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
-                                                    5, self.num_drifters, 
-                                                    use_lcg=True,
-                                                    block_width=4, block_height=rng_block_height)
-        else:
-            # Ensure that we have the seed pointer, although we don't use it...
-            self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
-                                                   1, 1, use_lcg=True)
-        if self.rng_type == 2:
-            # Make rng_pycuda for that purpose
-            self.rng_pycuda = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
-                                                    5, self.num_drifters, 
-                                                    use_lcg=False,
-                                                    block_width=4, block_height=rng_block_height)
-
-            # Hack to ensure that we can still run deterministic
+        # Initialize random number generators - require one seed per drifter
+        self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
+                                               1, self.num_drifters, 
+                                               use_lcg=True,
+                                               block_width=4, block_height=rng_block_height)
         
         # Compile cuda file found in this repository
         # To do that, we need to provide the absolute path along with the corresponding flag
@@ -91,7 +60,7 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiPii")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPif")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
 
@@ -102,10 +71,8 @@ class OilDrift:
     def cleanUp(self):
         if self.rng is not None:
             self.rng.cleanUp()
-        if self.rng_pycuda is not None:
-            self.rng_pycuda.cleanUp()
-        if self.random_numbers_device is not None:
-            self.random_numbers_device.release()
+        if self.drifter_positions_device is not None:
+            self.drifter_positions_device.release()
         self.gpu_ctx = None
         
 
@@ -122,17 +89,6 @@ class OilDrift:
     def drift(self, sim, dt):
         # Call the kernel to simulate the drifters for dt seconds using the ocean state available in the sim
         # Note: Only pointers to GPU memory can be given to the cuda kernel function
-
-        # Transfer new random numbers to the GPU if we have diffusion
-        # assuming normal distribution for now...
-        if self.diffusion:
-            if self.rng_type == 1:
-                random_numbers_host = np.random.randn(self.num_drifters, 5).astype(np.float32)
-                self.random_numbers_device.upload(self.gpu_stream, random_numbers_host)
-            elif self.rng_type == 2:
-                self.rng_pycuda.generateNormalDistribution(self.random_numbers_device)
-            elif self.rng_type == 3:
-                self.rng.generateNormalDistribution(self.random_numbers_device)
 
         # Disclaimer:The gpu arrays for the simulator has does not have the correct names for historical reasons...
         # The values for eta are called h
@@ -151,10 +107,9 @@ class OilDrift:
                                                np.int32(self.num_drifters),
                                                self.drifter_positions_device.data.gpudata,
                                                self.drifter_positions_device.pitch,
-                                               self.random_numbers_device.data.gpudata,
-                                               self.random_numbers_device.pitch,
                                                self.rng.seed.data.gpudata, self.rng.seed.pitch,
-                                               np.int32(self.rng_type) )
+                                               self.horisontal_diffusivity
+                                               )
         
     def is_submerged(self):
         # Return True if the oil drifter is submerged

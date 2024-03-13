@@ -50,9 +50,8 @@ __global__ void superSimpleDrift(
 
         const int num_drifters,
         float* drifters_positions, const int drifters_pitch,
-        float* random_numbers, const int rand_pitch,
         unsigned long long* seed_ptr, int seed_pitch, 
-        const int rng_type)
+        const float horisontal_diffusivity)
     {
         // Each thread will be responsible for one drifter only 
         // Local index of thread within block (only needed in one dim)
@@ -64,6 +63,25 @@ __global__ void superSimpleDrift(
 
         // We might have launched more threads than we have drifters
         if (ti < num_drifters ) {
+
+            // Generate 5 random numbers sampled from N(0, 1) 
+            float rand_numbers [5];
+            { 
+                // Read seed
+                unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
+                unsigned long long seed = seed_row[0];
+                
+                for (int i = 0; i < 3; i++) {
+                    float2 rand_n = rand_normal(&seed);
+                    rand_numbers[i*2] = rand_n.x;
+                    if (i < 2) {
+                        rand_numbers[i*2+1] = rand_n.y;
+                    }
+                }
+                
+                // Write seed back to global memory
+                seed_row[0] = seed;
+            }
 
             // Obtain pointer to our drifter:
             float* drifter = (float*) ((char*) drifters_positions + drifters_pitch*ti);
@@ -89,53 +107,13 @@ __global__ void superSimpleDrift(
             drifter_pos_x += u*dt;
             drifter_pos_y += v*dt;
             
-            if (rng_type < 5) {
-                // Diffusion in x and y
-                float* rand_drifter = (float*)((char*) random_numbers + rand_pitch*ti);
-                if (rng_type == 4) {
-                    unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
-                    unsigned long long seed = seed_row[0];
-                    
-                    // Generating 5 normal distributed random numbers
-                    for (int i = 0; i < 3; i++) {
-                        float2 rand_n = rand_normal(&seed);
-                        rand_drifter[i*2] = rand_n.x;
-                        if (i < 2) {
-                            rand_drifter[i*2+1]= rand_n.y;
-                        }
-                    }
-                    
-                    // Write seed back to global memory
-                    seed_row[0] = seed;
-                }
-                drifter_pos_x += rand_drifter[0]*sqrt(dt);
-                drifter_pos_y += rand_drifter[1]*sqrt(dt);
-            }
-            else if(rng_type == 5) {
-                // Avoid touching the random_numbers array
-                unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
-                unsigned long long seed = seed_row[0];
-                
-                // Generating 5 normal distributed random numbers
-                float rand_numbers [5];
-                for (int i = 0; i < 3; i++) {
-                    float2 rand_n = rand_normal(&seed);
-                    rand_numbers[i*2] = rand_n.x;
-                    if (i < 2) {
-                        rand_numbers[i*2+1] = rand_n.y;
-                    }
-                }
-                
-                // Write seed back to global memory
-                seed_row[0] = seed;
-                
-                drifter_pos_x += rand_numbers[0]*sqrt(dt);
-                drifter_pos_y += rand_numbers[1]*sqrt(dt);
-            }
-
+            // Add horizontal diffusion
+            drifter_pos_x += horisontal_diffusivity*rand_numbers[0]*sqrt(dt);
+            drifter_pos_y += horisontal_diffusivity*rand_numbers[1]*sqrt(dt);
+           
             // Assuming periodic boundary conditions
             drifter_pos_x -= floor(drifter_pos_x / (nx*dx))*(nx*dx);
-            drifter_pos_y -= floor(drifter_pos_y / (ny*dy))*(ny*dy) + 0.1;
+            drifter_pos_y -= floor(drifter_pos_y / (ny*dy))*(ny*dy);
 
             // Write to global memory
             drifter[0] = drifter_pos_x;
