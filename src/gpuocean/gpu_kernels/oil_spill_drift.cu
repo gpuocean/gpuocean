@@ -88,28 +88,50 @@ __global__ void superSimpleDrift(
             // Move drifter with a simple forward Euler
             drifter_pos_x += u*dt;
             drifter_pos_y += v*dt;
-
-            // Diffusion in x and y
-            float* rand_drifter = (float*)((char*) random_numbers + rand_pitch*ti);
-            if (rng_type == 4) {
+            
+            if (rng_type < 5) {
+                // Diffusion in x and y
+                float* rand_drifter = (float*)((char*) random_numbers + rand_pitch*ti);
+                if (rng_type == 4) {
+                    unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
+                    unsigned long long seed = seed_row[0];
+                    
+                    // Generating 5 normal distributed random numbers
+                    for (int i = 0; i < 3; i++) {
+                        float2 rand_n = rand_normal(&seed);
+                        rand_drifter[i*2] = rand_n.x;
+                        if (i < 2) {
+                            rand_drifter[i*2+1]= rand_n.y;
+                        }
+                    }
+                    
+                    // Write seed back to global memory
+                    seed_row[0] = seed;
+                }
+                drifter_pos_x += rand_drifter[0]*sqrt(dt);
+                drifter_pos_y += rand_drifter[1]*sqrt(dt);
+            }
+            else if(rng_type == 5) {
+                // Avoid touching the random_numbers array
                 unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
                 unsigned long long seed = seed_row[0];
                 
                 // Generating 5 normal distributed random numbers
+                float rand_numbers [5];
                 for (int i = 0; i < 3; i++) {
-                    float2 const rand_u = ansic_lcg(&seed);
-                    float2 rand_n = boxMuller(rand_u);
-                    rand_drifter[i*2] = rand_n.x;
+                    float2 rand_n = rand_normal(&seed);
+                    rand_numbers[i*2] = rand_n.x;
                     if (i < 2) {
-                        rand_drifter[i*2+1]= rand_n.y;
+                        rand_numbers[i*2+1] = rand_n.y;
                     }
                 }
                 
                 // Write seed back to global memory
                 seed_row[0] = seed;
+                
+                drifter_pos_x += rand_numbers[0]*sqrt(dt);
+                drifter_pos_y += rand_numbers[1]*sqrt(dt);
             }
-            drifter_pos_x += rand_drifter[0]*sqrt(dt);
-            drifter_pos_y += rand_drifter[1]*sqrt(dt);
 
             // Assuming periodic boundary conditions
             drifter_pos_x -= floor(drifter_pos_x / (nx*dx))*(nx*dx);

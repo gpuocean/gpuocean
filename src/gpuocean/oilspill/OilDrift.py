@@ -19,7 +19,8 @@ class OilDrift:
         supported_rng_types = [1, # CPU generation with numpy with upload
                                2, # GPU generation using pycuda XORWOW
                                3, # GPU generation using GPU Ocean LCG (separate kernel)
-                               4, # GPU generation using GPU Ocean LCG (device functions)  
+                               4, # GPU generation using GPU Ocean LCG (device functions writing to random buffer)  
+                               5, # GPU generation using GPU Ocean LCG (device functions using random values directly)  
                                ] 
         assert(rng_type in supported_rng_types),  "invalid rng_type " + str(rng_type) + ", choose between "+str(supported_rng_types)
         self.rng_type = rng_type
