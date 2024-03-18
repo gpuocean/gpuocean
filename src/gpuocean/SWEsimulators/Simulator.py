@@ -115,10 +115,10 @@ class Simulator(object):
         t0_index = max(0, np.searchsorted(self.atmospheric_pressure.t, self.t)-1)
         t1_index = min(t_max_index, np.searchsorted(self.atmospheric_pressure.t, self.t))
         self.atmospheric_pressure_current_arr = Common.CUDAArray2D(self.gpu_stream,
-                                504, 404, 0, 0,
+                                atmospheric_pressure.P[t0_index].shape[1], atmospheric_pressure.P[t0_index].shape[0], 0, 0,
                                 atmospheric_pressure.P[t0_index])
         self.atmospheric_pressure_next_arr = Common.CUDAArray2D(self.gpu_stream,
-                                504, 404, 0, 0,
+                                atmospheric_pressure.P[t1_index].shape[1], atmospheric_pressure.P[t1_index].shape[0], 0, 0,
                                 atmospheric_pressure.P[t1_index])
         if A is None:
             self.A = 'NA'  # Eddy viscocity coefficient

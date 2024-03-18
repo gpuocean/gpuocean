@@ -803,9 +803,8 @@ __device__ float bilinear_interpolation(const float* data,  int data_nx, int dat
     norm_y = __saturatef(norm_y);
 
     // Scale normalised coordinates up to the source dimensions
-    const float x = norm_x * (data_nx-1);
-    const float y = norm_y * (data_ny-1);
-    
+    const float x = norm_x*data_nx;
+    const float y = norm_y*data_ny;
     // Calculate the base indices (the lower left corner)
     const int x0 = floorf(x);
     const int y0 = floorf(y);
@@ -821,8 +820,8 @@ __device__ float bilinear_interpolation(const float* data,  int data_nx, int dat
     const float d11 = data[min(y0+1, data_ny-1)*data_nx + min(x0+1, data_nx-1)];
 
     // original formula
-    /*
     float result = (1.0f - dx)*(1.0f - dy)*d00 + dx*(1.0f - dy)*d01 + (1.0f - dx)*dy*d10 + dx*dy*d11;
+    /*
     
     // optimised with fma
     // Precompute terms to simplify expressions and potentially increase FMA usage
@@ -836,9 +835,9 @@ __device__ float bilinear_interpolation(const float* data,  int data_nx, int dat
     */
 
 
+/*
     // Reduce number of multiplications by grouping dx,dy
     const float result = d00 + dx*(d01-d00) + dy*(d10-d00) + dx*dy*(d00+d11-d01-d10);
-/*    
 
     // optimised with fma
     // fmaf ( float  x, float  y, float  z ) 
