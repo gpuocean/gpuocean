@@ -111,6 +111,15 @@ class Simulator(object):
         self.atmospheric_pressure_textures = {}
         self.atmospheric_pressure_timestamps = {}
 
+        t_max_index = len(self.atmospheric_pressure.t)-1
+        t0_index = max(0, np.searchsorted(self.atmospheric_pressure.t, self.t)-1)
+        t1_index = min(t_max_index, np.searchsorted(self.atmospheric_pressure.t, self.t))
+        self.atmospheric_pressure_current_arr = Common.CUDAArray2D(self.gpu_stream,
+                                atmospheric_pressure.P[t0_index].shape[1], atmospheric_pressure.P[t0_index].shape[0], 0, 0,
+                                atmospheric_pressure.P[t0_index])
+        self.atmospheric_pressure_next_arr = Common.CUDAArray2D(self.gpu_stream,
+                                atmospheric_pressure.P[t1_index].shape[1], atmospheric_pressure.P[t1_index].shape[0], 0, 0,
+                                atmospheric_pressure.P[t1_index])
         if A is None:
             self.A = 'NA'  # Eddy viscocity coefficient
         else:
@@ -291,6 +300,7 @@ class Simulator(object):
             self.gpu_ctx.synchronize()
             self.logger.debug("Updating T0")
             setTexture(P0_texref, self.atmospheric_pressure.P[t0_index])
+            self.atmospheric_pressure_current_arr.upload(self.gpu_stream, self.atmospheric_pressure.P[t0_index])
             kernel_function.param_set_texref(P0_texref)
             self.gpu_ctx.synchronize()
 
@@ -299,6 +309,7 @@ class Simulator(object):
             self.gpu_ctx.synchronize()
             self.logger.debug("Updating T1")
             setTexture(P1_texref, self.atmospheric_pressure.P[t1_index])
+            self.atmospheric_pressure_next_arr.upload(self.gpu_stream, self.atmospheric_pressure.P[t1_index])
             kernel_function.param_set_texref(P1_texref)
             self.gpu_ctx.synchronize()
                 
