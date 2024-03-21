@@ -47,7 +47,6 @@ __device__ float rise_velocity(
         const float g) {
     // Calculate the rise velocity of a droplet in m/s.
 
-    //float const water_visocity = 1.358e-6; // viscosity of water (m2/s) at 10 grd c
     float const g_delro = g * (water_density - oil_density) / water_density;
     float const w1 = pow(droplet_diameter, 2) * g_delro / (18. * water_viscosity);
     float const w2 = copysignf(w1, g_delro);
