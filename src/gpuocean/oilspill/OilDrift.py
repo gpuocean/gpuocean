@@ -14,9 +14,8 @@ class OilDrift:
     At the same time, it should be mentioned that there are a lot of functions there that are never used...
     """
 
-    def __init__(self, gpu_ctx, drifter_positions, horisontal_diffusivity=1.0,
+    def __init__(self, gpu_ctx, drifter_positions, droplet_diameter, oil_density, water_density, water_viscosity, g, horisontal_diffusivity=1.0,
                  block_width=32, rng_block_height=32):
-
 
         assert(drifter_positions.shape[1] == 3), "expecting drifter_positions to be of shape (N, 3)"
         self.num_drifters = drifter_positions.shape[0]
@@ -42,13 +41,20 @@ class OilDrift:
         self.drifter_positions_device = Common.CUDAArray2D(self.gpu_stream, 
                                                            3, self.num_drifters, 0, 0,
                                                            drifter_positions)
-        
         # Initialize random number generators - require one seed per drifter
         self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
                                                1, self.num_drifters, 
                                                use_lcg=True,
                                                block_width=4, block_height=rng_block_height)
         
+
+
+        self.droplet_diameter = droplet_diameter
+        self.oil_density = oil_density
+        self.water_density = water_density
+        self.water_viscosity = water_viscosity
+        self.g = g
+
         # Compile cuda file found in this repository
         # To do that, we need to provide the absolute path along with the corresponding flag
         self.kernel_filename = os.path.join("..", "gpu_kernels", "super_simple_drift_kernel.cu")
@@ -60,7 +66,7 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPif")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiffffff")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
 
@@ -108,8 +114,9 @@ class OilDrift:
                                                self.drifter_positions_device.data.gpudata,
                                                self.drifter_positions_device.pitch,
                                                self.rng.seed.data.gpudata, self.rng.seed.pitch,
-                                               self.horisontal_diffusivity
-                                               )
+                                               self.horisontal_diffusivity,
+                                               self.droplet_diameter, self.oil_density, self.water_density,
+                                               self.water_viscosity, self.g)
         
     def is_submerged(self):
         # Return True if the oil drifter is submerged

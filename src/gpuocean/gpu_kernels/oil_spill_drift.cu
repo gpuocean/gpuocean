@@ -38,6 +38,23 @@ __device__ float waterVelocity(
     return velocity;
 }
 
+__device__ float rise_velocity(
+        float droplet_depth,
+        const float droplet_diameter,
+        const float water_density,
+        const float oil_density,
+        const float water_viscosity,
+        const float g) {
+    // Calculate the rise velocity of a droplet in m/s.
+
+    float const g_delro = g * (water_density - oil_density) / water_density;
+    float const w1 = pow(droplet_diameter, 2) * g_delro / (18. * water_viscosity);
+    float const w2 = copysignf(w1, g_delro);
+    float const rise_velocity = w1 * w2 / (w1 + w2); // in m/s
+    
+    return rise_velocity;
+}
+
 extern "C" {
 __global__ void superSimpleDrift(
         const int nx, const int ny,
@@ -51,7 +68,10 @@ __global__ void superSimpleDrift(
         const int num_drifters,
         float* drifters_positions, const int drifters_pitch,
         unsigned long long* seed_ptr, int seed_pitch, 
-        const float horisontal_diffusivity)
+        const float horisontal_diffusivity,
+        const float droplet_diameter,
+        const float oil_density, const float water_density,
+        const float water_viscosity, const float g)
     {
         // Each thread will be responsible for one drifter only 
         // Local index of thread within block (only needed in one dim)
@@ -87,7 +107,8 @@ __global__ void superSimpleDrift(
             float* drifter = (float*) ((char*) drifters_positions + drifters_pitch*ti);
             float drifter_pos_x = drifter[0];
             float drifter_pos_y = drifter[1];
-
+            float drifter_depth = drifter[2];
+            
             // Find indices for the cell this thread's particle is in
             // Note that we compensate for 2 ghost cells in each direction 
             int const cell_id_x = (int)(floor(drifter_pos_x/dx) + 2);
@@ -115,9 +136,17 @@ __global__ void superSimpleDrift(
             drifter_pos_x -= floor(drifter_pos_x / (nx*dx))*(nx*dx);
             drifter_pos_y -= floor(drifter_pos_y / (ny*dy))*(ny*dy);
 
+            // Move drifter vertically.
+            float const rise_vel = rise_velocity(drifter_depth, droplet_diameter, water_density, oil_density, water_viscosity, g);
+
+            // Update drifter depth
+            drifter_depth += rise_vel;
+            drifter_depth = min(drifter_depth, 0.0);
+
             // Write to global memory
             drifter[0] = drifter_pos_x;
             drifter[1] = drifter_pos_y;
+            drifter[2] = drifter_depth;
         }
     }
 } // extern "C"
