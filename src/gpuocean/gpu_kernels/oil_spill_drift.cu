@@ -57,6 +57,42 @@ __device__ float water_velocity_no_interpolation(
                           cell_id_x, cell_id_y);
 }
 
+__device__ float water_velocity_bilinear_interpolation(
+        const float* eta_ptr, const int eta_pitch,
+        const float* momentum_ptr, const int momentum_pitch,
+        const float* Hm_ptr, const int Hm_pitch,
+        const float drifter_pos_x, const float drifter_pos_y, 
+        const float dx, const float dy) {
+    
+    // Find indices for the cell this thread's particle is in
+    // Note that we compensate for 2 ghost cells in each direction 
+    const int cell_id_x = (int)(floor(drifter_pos_x/dx) + 2);
+    const int cell_id_y = (int)(floor(drifter_pos_y/dy) + 2);
+
+    // Find neighbouring cells and relative position between cell centers
+    float const frac_x = drifter_pos_x / dx - floor(drifter_pos_x / dx);
+    float const frac_y = drifter_pos_y / dy - floor(drifter_pos_y / dy);
+    
+    const int cell_id_x0 = frac_x < 0.5f ? cell_id_x - 1 : cell_id_x;
+    const float x_factor = frac_x < 0.5f ? frac_x + 0.5f : frac_x - 0.5f; 
+    const int cell_id_x1 = cell_id_x0 + 1;
+
+    const int cell_id_y0 = frac_y < 0.5f ? cell_id_y - 1 : cell_id_y;
+    const float y_factor = frac_y < 0.5f ? frac_y + 0.5f : frac_y - 0.5f; 
+    const int cell_id_y1 = cell_id_y0 + 1;
+        
+    float const vel_x0y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y0);
+    float const vel_x1y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y0);
+    float const vel_x0y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y1);
+    float const vel_x1y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y1);
+    
+    float const vel_y0 = (1-x_factor)*vel_x0y0 + x_factor * vel_x1y0; 
+    float const vel_y1 = (1-x_factor)*vel_x0y1 + x_factor * vel_x1y1; 
+
+    // Read and compute water velocity within cell
+    return (1-y_factor)*vel_y0 + y_factor*vel_y1;
+}
+
 __device__ float rise_velocity(
         float droplet_depth,
         const float droplet_diameter,
@@ -134,12 +170,12 @@ __global__ void superSimpleDrift(
             float drifter_depth = drifter[2];
             
             // Read and compute water velocity within cell
-            const float u = water_velocity_no_interpolation(eta_ptr, eta_pitch,
+            const float u = water_velocity_bilinear_interpolation(eta_ptr, eta_pitch,
                                                             hu_ptr, hu_pitch,
                                                             Hm_ptr, Hm_pitch, 
                                                             drifter_pos_x, drifter_pos_y,
                                                             dx, dy);
-            const float v = water_velocity_no_interpolation(eta_ptr, eta_pitch,
+            const float v = water_velocity_bilinear_interpolation(eta_ptr, eta_pitch,
                                                             hv_ptr, hv_pitch,
                                                             Hm_ptr, Hm_pitch, 
                                                             drifter_pos_x, drifter_pos_y,
