@@ -21,21 +21,76 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "random_number_generators.cu"
 
-__device__ float waterVelocity(
-        float* eta_ptr, const int eta_pitch,
-        float* momentum_ptr, const int momentum_pitch,
-        float* Hm_ptr, const int Hm_pitch,
+__device__ float water_velocity(
+        const float* eta_ptr, const int eta_pitch,
+        const float* momentum_ptr, const int momentum_pitch,
+        const float* Hm_ptr, const int Hm_pitch,
         const int cell_id_x, const int cell_id_y) {
     
     // Read the water velocity from global memory
-    float* const eta_row_y = (float*) ((char*) eta_ptr + eta_pitch*cell_id_y);
-    float* const Hm_row_y = (float*) ((char*) Hm_ptr + Hm_pitch*cell_id_y);
-    float const h = Hm_row_y[cell_id_x] + eta_row_y[cell_id_x];
+    const float* eta_row_y = (float*) ((char*) eta_ptr + eta_pitch*cell_id_y);
+    const float* Hm_row_y = (float*) ((char*) Hm_ptr + Hm_pitch*cell_id_y);
+    const float h = Hm_row_y[cell_id_x] + eta_row_y[cell_id_x];
 
-    float* const momentum_row = (float*) ((char*) momentum_ptr + momentum_pitch*cell_id_y);
-    float const velocity = momentum_row[cell_id_x]/h;
+    const float* momentum_row = (float*) ((char*) momentum_ptr + momentum_pitch*cell_id_y);
+    const float velocity = momentum_row[cell_id_x]/h;
     
     return velocity;
+}
+
+__device__ float water_velocity_no_interpolation(
+        const float* eta_ptr, const int eta_pitch,
+        const float* momentum_ptr, const int momentum_pitch,
+        const float* Hm_ptr, const int Hm_pitch,
+        const float drifter_pos_x, const float drifter_pos_y, 
+        const float dx, const float dy) {
+    
+    // Find indices for the cell this thread's particle is in
+    // Note that we compensate for 2 ghost cells in each direction 
+    const int cell_id_x = (int)(floor(drifter_pos_x/dx) + 2);
+    const int cell_id_y = (int)(floor(drifter_pos_y/dy) + 2);
+    
+    // Read and compute water velocity within cell
+    return water_velocity(eta_ptr, eta_pitch,
+                          momentum_ptr, momentum_pitch,
+                          Hm_ptr, Hm_pitch, 
+                          cell_id_x, cell_id_y);
+}
+
+__device__ float water_velocity_bilinear_interpolation(
+        const float* eta_ptr, const int eta_pitch,
+        const float* momentum_ptr, const int momentum_pitch,
+        const float* Hm_ptr, const int Hm_pitch,
+        const float drifter_pos_x, const float drifter_pos_y, 
+        const float dx, const float dy) {
+    
+    // Find indices for the cell this thread's particle is in
+    // Note that we compensate for 2 ghost cells in each direction 
+    const int cell_id_x = (int)(floor(drifter_pos_x/dx) + 2);
+    const int cell_id_y = (int)(floor(drifter_pos_y/dy) + 2);
+
+    // Find neighbouring cells and relative position between cell centers
+    float const frac_x = drifter_pos_x / dx - floor(drifter_pos_x / dx);
+    float const frac_y = drifter_pos_y / dy - floor(drifter_pos_y / dy);
+    
+    const int cell_id_x0 = frac_x < 0.5f ? cell_id_x - 1 : cell_id_x;
+    const float x_factor = frac_x < 0.5f ? frac_x + 0.5f : frac_x - 0.5f; 
+    const int cell_id_x1 = cell_id_x0 + 1;
+
+    const int cell_id_y0 = frac_y < 0.5f ? cell_id_y - 1 : cell_id_y;
+    const float y_factor = frac_y < 0.5f ? frac_y + 0.5f : frac_y - 0.5f; 
+    const int cell_id_y1 = cell_id_y0 + 1;
+        
+    float const vel_x0y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y0);
+    float const vel_x1y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y0);
+    float const vel_x0y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y1);
+    float const vel_x1y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y1);
+    
+    float const vel_y0 = (1-x_factor)*vel_x0y0 + x_factor * vel_x1y0; 
+    float const vel_y1 = (1-x_factor)*vel_x0y1 + x_factor * vel_x1y1; 
+
+    // Read and compute water velocity within cell
+    return (1-y_factor)*vel_y0 + y_factor*vel_y1;
 }
 
 __device__ float rise_velocity(
@@ -47,13 +102,33 @@ __device__ float rise_velocity(
         const float g) {
     // Calculate the rise velocity of a droplet in m/s.
 
-    float const g_delro = g * (water_density - oil_density) / water_density;
-    float const w1 = pow(droplet_diameter, 2) * g_delro / (18. * water_viscosity);
-    float const w2 = copysignf(w1, g_delro);
-    float const rise_velocity = w1 * w2 / (w1 + w2); // in m/s
+    const float g_delro = g * (water_density - oil_density) / water_density;
+    const float w1 = pow(droplet_diameter, 2) * g_delro / (18. * water_viscosity);
+    const float w2 = copysignf(w1, g_delro);
+    const float rise_velocity = w1 * w2 / (w1 + w2); // in m/s
     
     return rise_velocity;
 }
+
+__device__ void fill_randn(
+        float* rand_numbers, const int n, 
+        unsigned long long* seed_ptr, const int seed_pitch,
+        const int ti) { 
+    // Read seed
+    unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
+    unsigned long long seed = seed_row[0];
+    
+    for (int i = 0; i < 3; i++) {
+        float2 rand_n = rand_normal(&seed);
+        rand_numbers[i*2] = rand_n.x;
+        if (i < (int)(floor(n/2.0))) {
+            rand_numbers[i*2+1] = rand_n.y;
+        }
+    }
+    // Write seed back to global memory
+    seed_row[0] = seed;
+}
+
 
 extern "C" {
 __global__ void superSimpleDrift(
@@ -86,22 +161,7 @@ __global__ void superSimpleDrift(
 
             // Generate 5 random numbers sampled from N(0, 1) 
             float rand_numbers [5];
-            { 
-                // Read seed
-                unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
-                unsigned long long seed = seed_row[0];
-                
-                for (int i = 0; i < 3; i++) {
-                    float2 rand_n = rand_normal(&seed);
-                    rand_numbers[i*2] = rand_n.x;
-                    if (i < 2) {
-                        rand_numbers[i*2+1] = rand_n.y;
-                    }
-                }
-                
-                // Write seed back to global memory
-                seed_row[0] = seed;
-            }
+            fill_randn(rand_numbers, 5, seed_ptr, seed_pitch, ti);
 
             // Obtain pointer to our drifter:
             float* drifter = (float*) ((char*) drifters_positions + drifters_pitch*ti);
@@ -109,20 +169,17 @@ __global__ void superSimpleDrift(
             float drifter_pos_y = drifter[1];
             float drifter_depth = drifter[2];
             
-            // Find indices for the cell this thread's particle is in
-            // Note that we compensate for 2 ghost cells in each direction 
-            int const cell_id_x = (int)(floor(drifter_pos_x/dx) + 2);
-            int const cell_id_y = (int)(floor(drifter_pos_y/dy) + 2);
-            
             // Read and compute water velocity within cell
-            float const u = waterVelocity(eta_ptr, eta_pitch,
-                                          hu_ptr, hu_pitch,
-                                          Hm_ptr, Hm_pitch, 
-                                          cell_id_x, cell_id_y);
-            float const v = waterVelocity(eta_ptr, eta_pitch,
-                                          hv_ptr, hv_pitch,
-                                          Hm_ptr, Hm_pitch, 
-                                          cell_id_x, cell_id_y);
+            const float u = water_velocity_bilinear_interpolation(eta_ptr, eta_pitch,
+                                                            hu_ptr, hu_pitch,
+                                                            Hm_ptr, Hm_pitch, 
+                                                            drifter_pos_x, drifter_pos_y,
+                                                            dx, dy);
+            const float v = water_velocity_bilinear_interpolation(eta_ptr, eta_pitch,
+                                                            hv_ptr, hv_pitch,
+                                                            Hm_ptr, Hm_pitch, 
+                                                            drifter_pos_x, drifter_pos_y,
+                                                            dx, dy);
         
             // Move drifter with a simple forward Euler
             drifter_pos_x += u*dt;
@@ -137,7 +194,7 @@ __global__ void superSimpleDrift(
             drifter_pos_y -= floor(drifter_pos_y / (ny*dy))*(ny*dy);
 
             // Move drifter vertically.
-            float const rise_vel = rise_velocity(drifter_depth, droplet_diameter, water_density, oil_density, water_viscosity, g);
+            const float rise_vel = rise_velocity(drifter_depth, droplet_diameter, water_density, oil_density, water_viscosity, g);
 
             // Update drifter depth
             drifter_depth += rise_vel;
