@@ -19,7 +19,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-
+#include "random_number_generators.cu"
 
 __device__ float waterVelocity(
         float* eta_ptr, const int eta_pitch,
@@ -67,7 +67,8 @@ __global__ void superSimpleDrift(
 
         const int num_drifters,
         float* drifters_positions, const int drifters_pitch,
-        float* random_numbers, const int rand_pitch,
+        unsigned long long* seed_ptr, int seed_pitch, 
+        const float horisontal_diffusivity,
         const float droplet_diameter,
         const float oil_density, const float water_density,
         const float water_viscosity, const float g)
@@ -82,6 +83,25 @@ __global__ void superSimpleDrift(
 
         // We might have launched more threads than we have drifters
         if (ti < num_drifters ) {
+
+            // Generate 5 random numbers sampled from N(0, 1) 
+            float rand_numbers [5];
+            { 
+                // Read seed
+                unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
+                unsigned long long seed = seed_row[0];
+                
+                for (int i = 0; i < 3; i++) {
+                    float2 rand_n = rand_normal(&seed);
+                    rand_numbers[i*2] = rand_n.x;
+                    if (i < 2) {
+                        rand_numbers[i*2+1] = rand_n.y;
+                    }
+                }
+                
+                // Write seed back to global memory
+                seed_row[0] = seed;
+            }
 
             // Obtain pointer to our drifter:
             float* drifter = (float*) ((char*) drifters_positions + drifters_pitch*ti);
@@ -107,15 +127,14 @@ __global__ void superSimpleDrift(
             // Move drifter with a simple forward Euler
             drifter_pos_x += u*dt;
             drifter_pos_y += v*dt;
-
-            // Diffusion in x and y
-            float* rand_drifter = (float*)((char*) random_numbers + rand_pitch*ti);
-            drifter_pos_x += rand_drifter[0]*sqrt(dt);
-            drifter_pos_y += rand_drifter[1]*sqrt(dt);
-
+            
+            // Add horizontal diffusion
+            drifter_pos_x += horisontal_diffusivity*rand_numbers[0]*sqrt(dt);
+            drifter_pos_y += horisontal_diffusivity*rand_numbers[1]*sqrt(dt);
+           
             // Assuming periodic boundary conditions
             drifter_pos_x -= floor(drifter_pos_x / (nx*dx))*(nx*dx);
-            drifter_pos_y -= floor(drifter_pos_y / (ny*dy))*(ny*dy) + 0.1;
+            drifter_pos_y -= floor(drifter_pos_y / (ny*dy))*(ny*dy);
 
             // Move drifter vertically.
             float const rise_vel = rise_velocity(drifter_depth, droplet_diameter, water_density, oil_density, water_viscosity, g);

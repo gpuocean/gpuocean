@@ -4,7 +4,7 @@ import numpy as np
 
 import pycuda.driver as cuda
 
-from gpuocean.utils import Common
+from gpuocean.utils import Common, RandomNumbers
 
 class OilDrift:
     """
@@ -14,12 +14,13 @@ class OilDrift:
     At the same time, it should be mentioned that there are a lot of functions there that are never used...
     """
 
-    def __init__(self, gpu_ctx, drifter_positions, droplet_diameter, oil_density, water_density, water_viscosity, g, diffusion=True):
+    def __init__(self, gpu_ctx, drifter_positions, droplet_diameter, oil_density, water_density, water_viscosity, g, horisontal_diffusivity=1.0,
+                 block_width=32, rng_block_height=32):
 
         assert(drifter_positions.shape[1] == 3), "expecting drifter_positions to be of shape (N, 3)"
         self.num_drifters = drifter_positions.shape[0]
 
-        self.diffusion = diffusion
+        self.horisontal_diffusivity = np.float32(horisontal_diffusivity)
 
         # GPU stuff
         self.gpu_ctx = gpu_ctx
@@ -29,25 +30,24 @@ class OilDrift:
         # Here, we assume that each thread is responsible for moving one drifter
         # Local size refers to the number of threads in each block (organized in 3D)
         # global size refers to the number of blocks that will be run on the GPU (can be organized in 2D or 3D)
-        self.block_width = 32 
+        self.block_width = block_width 
         self.block_height = 1
 
         self.local_size = (self.block_width, self.block_height, 1)
         self.global_size = (int(np.ceil((self.num_drifters + 1)/float(self.block_width))), 1)
         
-
         # Allocate GPU memory and intialize using the 2D Array utility function, which is a wrapper around pycuda.gpuarray
         # Data size parameters are given by the signature (_, nx, ny, ghost_cells_x, ghost_cells_y, _)
         self.drifter_positions_device = Common.CUDAArray2D(self.gpu_stream, 
                                                            3, self.num_drifters, 0, 0,
                                                            drifter_positions)
+        # Initialize random number generators - require one seed per drifter
+        self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
+                                               1, self.num_drifters, 
+                                               use_lcg=True,
+                                               block_width=4, block_height=rng_block_height)
+        
 
-
-        # Allocate GPU memory for random numbers.
-        # 5 rands per drifter, initialize to zero
-        self.random_numbers_device = Common.CUDAArray2D(self.gpu_stream, 
-                                                        5, self.num_drifters, 0, 0,
-                                                        np.zeros((self.num_drifters, 5), dtype=np.float32))
 
         self.droplet_diameter = droplet_diameter
         self.oil_density = oil_density
@@ -66,9 +66,21 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPifffff")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiffffff")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
+
+    # Destructor and memory deallocation
+    def __del__(self):
+        self.cleanUp()
+     
+    def cleanUp(self):
+        if self.rng is not None:
+            self.rng.cleanUp()
+        if self.drifter_positions_device is not None:
+            self.drifter_positions_device.release()
+        self.gpu_ctx = None
+        
 
 
     def getDrifterPositions(self):
@@ -83,12 +95,6 @@ class OilDrift:
     def drift(self, sim, dt):
         # Call the kernel to simulate the drifters for dt seconds using the ocean state available in the sim
         # Note: Only pointers to GPU memory can be given to the cuda kernel function
-
-        # Transfer new random numbers to the GPU if we have diffusion
-        # assuming normal distribution for now...
-        if self.diffusion:
-            random_numbers_host = np.random.randn(self.num_drifters, 5).astype(np.float32)
-            self.random_numbers_device.upload(self.gpu_stream, random_numbers_host)
 
         # Disclaimer:The gpu arrays for the simulator has does not have the correct names for historical reasons...
         # The values for eta are called h
@@ -107,8 +113,8 @@ class OilDrift:
                                                np.int32(self.num_drifters),
                                                self.drifter_positions_device.data.gpudata,
                                                self.drifter_positions_device.pitch,
-                                               self.random_numbers_device.data.gpudata,
-                                               self.random_numbers_device.pitch,
+                                               self.rng.seed.data.gpudata, self.rng.seed.pitch,
+                                               self.horisontal_diffusivity,
                                                self.droplet_diameter, self.oil_density, self.water_density,
                                                self.water_viscosity, self.g)
         
