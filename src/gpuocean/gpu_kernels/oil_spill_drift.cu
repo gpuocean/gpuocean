@@ -94,7 +94,6 @@ __device__ float water_velocity_bilinear_interpolation(
 }
 
 __device__ float rise_velocity(
-        float droplet_depth,
         const float droplet_diameter,
         const float water_density,
         const float oil_density,
@@ -110,6 +109,56 @@ __device__ float rise_velocity(
     return rise_velocity;
 }
 
+__device__ float is_submerged(float* drifter) {
+    return drifter[2] < 0.0;
+}
+
+__device__ float euler_maruyama_scheme(
+    const float droplet_depth,
+    const float dt,
+    const float ksi,
+    const float vertical_diffusivity) {
+    // Euler-Maruyama scheme assuming constant diffusivity. Return vertical displacement due to diffusivity.
+
+    // Scaled random number with std=dt and mean=0
+    const float r = 1.0 / 3.0; // For uniform random diff. process in [-1,1]
+    const float dWz = ksi * sqrt(1.0/r * dt);
+
+    return dWz * sqrt(2 * vertical_diffusivity);
+}
+
+__device__ float vertical_transport(
+        float& droplet_depth,
+        const float droplet_diameter,
+        const float water_density,
+        const float oil_density,
+        const float water_viscosity,
+        const float g,
+        const float dt,
+        const float ksi,
+        const float water_depth,
+        const float vertical_diffusivity) {
+    // Move the drifter vertically (advection + diffusion)
+
+    // Calculate the rise velocity due to buoyancy
+    const float rise_vel = rise_velocity(droplet_diameter, water_density, oil_density, water_viscosity, g);
+    
+    // Vertical advection step in m
+    const float advection_step = rise_vel * dt;
+
+    // vertical diffusion step (m)
+    const float diffusion_step = euler_maruyama_scheme(droplet_depth, dt, ksi, vertical_diffusivity);
+
+    const float transport_step = diffusion_step + advection_step;
+    
+    droplet_depth = -abs(droplet_depth + transport_step); // Reflect off surface
+    droplet_depth = max(2 * water_depth - droplet_depth, droplet_depth); // Reflect off bottom
+    if (droplet_depth > 0.0) {
+        droplet_depth = water_depth * 0.5;
+    }
+}
+
+
 __device__ void fill_randn(
         float* rand_numbers, const int n, 
         unsigned long long* seed_ptr, const int seed_pitch,
@@ -119,7 +168,7 @@ __device__ void fill_randn(
     unsigned long long seed = seed_row[0];
     
     for (int i = 0; i < 3; i++) {
-        float2 rand_n = rand_normal(&seed);
+        float2 rand_n = rand_uniform(&seed);
         rand_numbers[i*2] = rand_n.x;
         if (i < (int)(floor(n/2.0))) {
             rand_numbers[i*2+1] = rand_n.y;
@@ -143,10 +192,12 @@ __global__ void superSimpleDrift(
         const int num_drifters,
         float* drifters_positions, const int drifters_pitch,
         unsigned long long* seed_ptr, int seed_pitch, 
-        const float horisontal_diffusivity,
+        const float horizontal_diffusivity,
+        const float vertical_diffusivity,
         const float droplet_diameter,
         const float oil_density, const float water_density,
-        const float water_viscosity, const float g)
+        const float water_viscosity, const float g,
+        const float water_depth)
     {
         // Each thread will be responsible for one drifter only 
         // Local index of thread within block (only needed in one dim)
@@ -163,6 +214,9 @@ __global__ void superSimpleDrift(
             float rand_numbers [5];
             fill_randn(rand_numbers, 5, seed_ptr, seed_pitch, ti);
 
+            // Random number for vertical diffusion (transform to [-1, 1])
+            const float ksi_z = 2 * rand_numbers[0] - 1;
+            
             // Obtain pointer to our drifter:
             float* drifter = (float*) ((char*) drifters_positions + drifters_pitch*ti);
             float drifter_pos_x = drifter[0];
@@ -186,19 +240,20 @@ __global__ void superSimpleDrift(
             drifter_pos_y += v*dt;
             
             // Add horizontal diffusion
-            drifter_pos_x += horisontal_diffusivity*rand_numbers[0]*sqrt(dt);
-            drifter_pos_y += horisontal_diffusivity*rand_numbers[1]*sqrt(dt);
+            drifter_pos_x += horizontal_diffusivity*rand_numbers[0]*sqrt(dt);
+            drifter_pos_y += horizontal_diffusivity*rand_numbers[1]*sqrt(dt);
            
             // Assuming periodic boundary conditions
             drifter_pos_x -= floor(drifter_pos_x / (nx*dx))*(nx*dx);
             drifter_pos_y -= floor(drifter_pos_y / (ny*dy))*(ny*dy);
 
             // Move drifter vertically.
-            const float rise_vel = rise_velocity(drifter_depth, droplet_diameter, water_density, oil_density, water_viscosity, g);
+            if (is_submerged(drifter)) {
+                vertical_transport(drifter_depth, droplet_diameter, water_density,
+                                   oil_density, water_viscosity, g, dt, ksi_z, water_depth,
+                                   vertical_diffusivity);
+            }
 
-            // Update drifter depth
-            drifter_depth += rise_vel;
-            drifter_depth = min(drifter_depth, 0.0);
 
             // Write to global memory
             drifter[0] = drifter_pos_x;
