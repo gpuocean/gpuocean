@@ -205,9 +205,6 @@ __global__ void superSimpleDrift(
             // Generate 5 random numbers sampled from N(0, 1) 
             float rand_numbers [5];
             fill_randn(rand_numbers, 5, seed_ptr, seed_pitch, ti);
-
-            // Random number for vertical diffusion (normal distribution with mean 0 and variance dt)
-            const float ksi_z = rand_numbers[0] * sqrt(dt);
             
             // Obtain pointer to our drifter:
             float* drifter = (float*) ((char*) drifters_positions + drifters_pitch*ti);
@@ -246,6 +243,9 @@ __global__ void superSimpleDrift(
                 const int cell_id_y = (int)(floor(drifter_pos_y/dy) + 2);
                 const float* Hm_row = (float*) ((char*) Hm_ptr + Hm_pitch*cell_id_y);
                 const float water_depth = Hm_row[cell_id_x];
+
+                // Random number for vertical diffusion (normal distribution with mean 0 and variance dt)
+                const float ksi_z = rand_numbers[2] * sqrt(dt);
 
                 vertical_transport(drifter_depth, droplet_diameter, water_density,
                                    oil_density, water_viscosity, g, dt, ksi_z, water_depth,
