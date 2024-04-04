@@ -14,13 +14,16 @@ class OilDrift:
     At the same time, it should be mentioned that there are a lot of functions there that are never used...
     """
 
-    def __init__(self, gpu_ctx, drifter_positions, droplet_diameter, oil_density, water_density, water_viscosity, g, horisontal_diffusivity=1.0,
+    def __init__(self, gpu_ctx, drifter_positions, droplet_diameter, oil_density=0.8, water_density=1.025,
+                 water_viscosity=1.358e-6, g=9.81,
+                 horizontal_diffusivity=1.0, vertical_diffusivity=1.0,
                  block_width=32, rng_block_height=32):
 
         assert(drifter_positions.shape[1] == 3), "expecting drifter_positions to be of shape (N, 3)"
         self.num_drifters = drifter_positions.shape[0]
 
-        self.horisontal_diffusivity = np.float32(horisontal_diffusivity)
+        self.horizontal_diffusivity = np.float32(horizontal_diffusivity)
+        self.vertical_diffusivity = np.float32(vertical_diffusivity)
 
         # GPU stuff
         self.gpu_ctx = gpu_ctx
@@ -49,7 +52,7 @@ class OilDrift:
         
 
 
-        self.droplet_diameter = droplet_diameter
+        self.droplet_diameter = np.float32(droplet_diameter)
         self.oil_density = oil_density
         self.water_density = water_density
         self.water_viscosity = water_viscosity
@@ -66,7 +69,7 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiffffff")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPifffffff")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
 
@@ -114,10 +117,10 @@ class OilDrift:
                                                self.drifter_positions_device.data.gpudata,
                                                self.drifter_positions_device.pitch,
                                                self.rng.seed.data.gpudata, self.rng.seed.pitch,
-                                               self.horisontal_diffusivity,
+                                               self.horizontal_diffusivity, self.vertical_diffusivity,
                                                self.droplet_diameter, self.oil_density, self.water_density,
                                                self.water_viscosity, self.g)
-        
+
     def is_submerged(self):
         # Return True if the oil drifter is submerged
         return self.getDrifterPositions()[:,2] < 0
