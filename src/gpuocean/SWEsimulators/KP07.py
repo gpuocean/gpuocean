@@ -244,7 +244,7 @@ class KP07(Simulator.Simulator):
 
         boundaryConditions = sim_reader.getBC()
 
-        H = sim_reader.getH();
+        H = sim_reader.getH()
         
         # get last timestep (including simulation time of last timestep)
         eta0, hu0, hv0, time0 = sim_reader.getLastTimeStep()
@@ -288,6 +288,7 @@ class KP07(Simulator.Simulator):
         for i in range(0, n):        
             local_dt = np.float32(min(self.dt, t_end-i*self.dt))
             
+
             wind_stress_t = np.float32(self.update_wind_stress(self.kp07_kernel, self.swe_2D))
             
             if (local_dt <= 0.0):
@@ -375,8 +376,13 @@ class KP07(Simulator.Simulator):
         return self.t
     
     
-    
-
-    def downloadBathymetry(self):
-        return self.bathymetry.download(self.gpu_stream)
-
+    def downloadBathymetry(self, interior_domain_only=False):
+        Bi, Bm = self.bathymetry.download(self.gpu_stream)
+        
+        if interior_domain_only:
+            Bi = Bi[self.interior_domain_indices[2]:self.interior_domain_indices[0]+1,  
+               self.interior_domain_indices[3]:self.interior_domain_indices[1]+1] 
+            Bm = Bm[self.interior_domain_indices[2]:self.interior_domain_indices[0],  
+               self.interior_domain_indices[3]:self.interior_domain_indices[1]]
+               
+        return [Bi, Bm]

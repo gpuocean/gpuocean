@@ -38,6 +38,7 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
                  initialization_cov_drifters=None, \
                  domain_size_x=1.0, domain_size_y=1.0, \
                  gpu_stream=None, \
+                 initialize=False, \
                  wind = WindStress.WindStress(), \
                  wind_drift_factor = 0.0,\
                  block_width = 64):
@@ -89,7 +90,15 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
                             1)
         
         # Initialize drifters:
-        self.uniformly_distribute_drifters(initialization_cov_drifters=initialization_cov_drifters)
+        if initialize:
+            self.uniformly_distribute_drifters(initialization_cov_drifters=initialization_cov_drifters)
+       
+        #print "local_size: ", self.local_size
+        #print "global_size: ", self.global_size
+        #print "numDrifters + obs: ", self.numDrifters + 1
+        # remember: shape = (y, x)
+         
+   
         
             
     def copy(self):

@@ -30,15 +30,17 @@ import xmlrunner
 # $ sudo easy_install unittest-xml-reporting
 
 #import testUtils
+from stochastic.RandomNumbers_test import RandomNumbersTest
 from stochastic.OceanStateNoise_test import OceanStateNoiseTest
 from stochastic.OceanStateNoise_LCG_test import OceanStateNoiseLCGTest
-from stochastic.RandomNumbers_test import RandomNumbersTest
-from stochastic.RandomNumbers_LCG_test import RandomNumbersLCGTest
+from stochastic.RandThroughOceanNoise_test import RandThroughOceanNoiseTest
+from stochastic.RandThroughOceanNoise_LCG_test import RandThroughOceanNoiseLCGTest
 
 def printSupportedTests():
     print ("Supported tests:")
-    print ("0: All, 1: RandomNumbers, 2: OceanStateNoise, " +
-           "3: RandomNumbersLCGTest, 4: OceanStateNoiseLCGTest")
+    print ("0: All, 1: RandomNumbers, " +
+           "2: RandThroughOceanNoiseTest, 3: OceanStateNoise, " +
+           "4: RandThroughOceanNoiseLCGTest, 5: OceanStateNoiseLCGTest")
 
 
 if (len(sys.argv) < 2):
@@ -61,17 +63,20 @@ if (jenkins):
 # Define the tests that will be part of our test suite:
 test_classes_to_run = None
 if tests == 0:
-    test_classes_to_run = [RandomNumbersTest, 
+    test_classes_to_run = [RandomNumbersTest,
+                           RandThroughOceanNoiseTest, 
                            OceanStateNoiseTest,
-                           RandomNumbersLCGTest,
+                           RandThroughOceanNoiseLCGTest,
                            OceanStateNoiseLCGTest]
 elif tests == 1:
     test_classes_to_run = [RandomNumbersTest]
 elif tests == 2:
-    test_classes_to_run = [OceanStateNoiseTest]
+    test_classes_to_run = [RandThroughOceanNoiseTest]
 elif tests == 3:
-    test_classes_to_run = [RandomNumbersLCGTest]
+    test_classes_to_run = [OceanStateNoiseTest]
 elif tests == 4:
+    test_classes_to_run = [RandThroughOceanNoiseLCGTest]
+elif tests == 5:
     test_classes_to_run = [OceanStateNoiseLCGTest]
 else:
     print ("Error: " + str(tests) + " is not a supported test number...")

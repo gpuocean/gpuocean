@@ -1,85 +1,49 @@
-[![Build Status](https://travis-ci.org/metno/gpu-ocean.svg?branch=master)](https://travis-ci.org/metno/gpu-ocean)
-[![Coverage Status](https://coveralls.io/repos/github/metno/gpu-ocean/badge.svg?branch=master)](https://coveralls.io/github/metno/gpu-ocean?branch=master)
 
-# gpuocean
-GPU Ocean codebase.
+<img src="logo/gpuocean-logo.png" width=500>
 
-# Installation
+ 
+**A GPU-accelerated simulation framework for running large ensembles of simplified ocean models for real-world domains.**
 
-## Requirements
-In order to run this code, you need to have access to a CUDA enabled GPU, with CUDA toolkit and appropriate drivers installed.
+Operational ocean forecasting models are computationally expensive and are therefore often run as a single deterministic simulation at given intervals. This means that they often lack information about forecast uncertainties, which are significant given that there are relative few observations of the ocean compared to its sheer size. Information on uncertainty is, however, vital for various applications, including search-and-rescue operations at sea.
 
-## Preparation steps on Windows
+### What is GPU Ocean?
+GPU Ocean is a simulation framework designed to explore the short-term uncertainty in forecasted ocean currents. It achieves this by running ensembles of simplified ocean models nested within operational ocean forecasts. These simplified models efficiently solve barotropic dynamics described by the shallow-water equations using GPUs.
 
-If you are on Windows, you also need to have installed Visual Studios and add the path to its bin folder in PATH. This is so that pycuda can find a C++ compiler. The following steps are an example how to yield those steps:
+### Key Features:
 
--   Install [NVIDIA CUDA Toolbox](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html) 
--   Install [Visual Studio 2019 (Community version)](https://visualstudio.microsoft.com/vs/community/)
--   Add a C++ compiler to the PATH variable of Windows
-    1.  Find folder which contains compiler (check `C:\Program Files\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.27.29110\bin\Hostx64\x64`)
-    2.  Open control panel "Edit the system environment variables"
-    3.  Click on "Environment variables"
-    4.  Select "Path" from the user variables and choose edit
-    5.  Add the folder from above as new path
+* **Efficient simulation:** GPU Ocean utilizes GPU acceleration and state-of-the-art finite-volume methods to solve shallow-water equations efficiently.
+* **Model nesting:**  Easily import initialization data, terrain information, forcing, and boundary conditions from NetCDF files containing operational 3D ocean forecasts.
+* **Drift trajectory prediction:** Conduct online drift trajectory simulations for drifting objects within the ocean models, directly assessing uncertainty in drift trajectories based on the uncertainty in the ocean currents.
+* **Data assimilation**: GPU Ocean includes tailored data-assimilation methods for sparse in-situ observations.
+* **Python with CUDA performance**: Rapid prototyping and easy orchestration, pre-, and post-processing using Python while getting the computational performance of CUDA.
+* **Parallel processing:** MPI support for running even larger ensembles on multiple GPUs. 
 
-## Set-up
-We recommend that you set up your python environment using the package manager Conda as follows:
-- Install [miniconda](https://conda.io/miniconda.html) or [miniforge](https://github.com/conda-forge/miniforge).
-    - If you choose to install Miniconda (a minimal subset of Anaconda), you must take care to not violate the [commercial license of Anaconda](https://www.anaconda.com/blog/sustaining-our-stewardship-of-the-open-source-data-science-community) introduced in Sep 2020. Miniconda is not bound by this licence, but downloading packages through the default channel pointing to anaconda seems to be. All commands in this instruction use the community-driven channel `conda-forge`, but to be sure to not violate the anaconda licence you can remove the default channel by
-    ```
-    conda config --remove channels defaults
-    ```
-    Or install [miniforge](https://github.com/conda-forge/miniforge) instead, which "holds a minimal installer for Conda specific to conda-forge."
-- Start with installing jupyter notebook and the conda extensions that allows jupyter notebooks to select conda environments as kernels (for better convenience, it is necessary to install those in the base environment). To do so, open a terminal (or Anaconda prompt if on Windows) and type
-    ```
-    conda install -c conda-forge nb_conda_kernels jupyter
-    ```
-- Create a new conda environment according to the environment file in this repository
-    ```
-    conda env create -f conda_environment.yml
-    ```
-- Activate the new environment
-    ```
-    conda activate gpuocean
-    ```
-- Install pycuda (but none of its dependencies) using pip:
-    ```
-    pip3 install --trusted-host files.pythonhosted.org --no-deps -U pycuda==2021.1
-    ```
-- Set the `PYTHONPATH` to find the source code:
-    ```
-    conda-develop /path/to/gpuocean/src
-    ```
-- Installing latex for plotting
-    ```
-    sudo apt-get install texlive-latex-base texlive-latex-extra texlive-fonts-recommended dvipng cm-super
-    ```
 
-## Debugging 
+GPU Ocean aims to be a powerful tool to complement ocean current forecasts through estimating and accounting for forecast uncertainties. By combining local observations and advanced data assimilation methods, users can make more informed decisions based on the latest oceanic data.
 
-When using VSC, the following `launch.json` content maybe helpful:
-```
-{
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {"name":"Python: Current File","type":"python","request":"launch","program":"${file}","console":"integratedTerminal","justMyCode":true},
-        {
-            "name": "Python: Current File",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "cwd": "${fileDirname}",
-            "python": "which python"
-        }
-    ]
-}
-```
+## Installation
+See [here](https://github.com/gpuocean/gpuocean/wiki/Installation).
 
-You should now be able to start a jupyter notebook server, open one of our notebooks, select the conda environment 'gpuocean' as kernel, and run the code. 
+## Academic publications using GPU Ocean
+* F. Beiser, H. Holm, J. Eidsvik (2024) **Comparison of Ensemble-Based Data Assimilation Methods for Sparse Oceanographic Data**,  *Quarterly Journal of the Royal Meteorological Society*, 150(759), 1068–1095. DOI: [10.1002/qj.4637](https://doi.org/10.1002/qj.4637) [Preprint: [arXiv:2302.07197](https://arxiv.org/abs/2302.07197)]. 
+* H. Holm, F. Beiser (2023) **Reducing Numerical Artifacts by Sacrificing Well-Balance for Rotating Shallow-Water Flow**. In: Franck, E., Fuhrmann, J., Michel-Dansac, V., Navoret, L. (eds) *Finite Volumes for Complex Applications X — Volume 2, Hyperbolic and Related Problems*. FVCA 2023. Springer Proceedings in Mathematics & Statistics, vol 433. Springer, Cham. DOI: [10.1007/978-3-031-40860-1_19](https://doi.org/10.1007/978-3-031-40860-1_19)
+*	A. Brodtkorb, H. Holm (2021) **Coastal Ocean Forecasting on the GPU using a Two-Dimensional Finite Volume Scheme**. *Tellus A: Dynamic Meteorology and Oceanography*, 73:1, 1-22, DOI: [10.1080/16000870.2021.1876341](https://doi.org/10.1080/16000870.2021.1876341) [Preprint: [arXiv:1912.02457](https://arxiv.org/abs/1912.02457)]
+*	H. Holm, A. Brodtkorb, M. Sætra (2020) **Data Assimilation for Ocean Drift Trajectories Using Massive Ensembles and GPUs**. In: Klöfkorn, R., Keilegavlen, E., Radu, F.A., Fuhrmann, J. (eds) *Finite Volumes for Complex Applications IX - Methods, Theoretical Aspects, Examples*. FVCA 2020. Springer Proceedings in Mathematics & Statistics, vol 323. Springer, Cham. DOI: [10.1007/978-3-030-43651-3_68](https://doi.org/10.1007/978-3-030-43651-3_68)
+*	H. Holm, M. Sætra, P. van Leeuwen (2020) **Massively parallel implicit-equal weights particle filter for ocean drift trajectory forecasting**. *Journal of Computational Physics: X*, volume 6, 100053. DOI: [10.1016/j.jcpx.2020.100053](https://doi.org/10.1016/j.jcpx.2020.100053) [Preprint: [arXiv:1910.01031](https://arxiv.org/abs/1910.01031)]
+* H. Holm, A. Brodtkorb, K. Christensen, G. Broström, M. Sætra (2020) **Evaluation of selected finite-difference and finite-volume approaches to rotational shallow-water flow**. *Communications in Computational Physics*, volume 27, pp. 1234-1274. DOI: [10.4208/cicp.OA-2019-0033](https://doi.org/10.4208/cicp.OA-2019-0033)
+* H. Holm, A. Brodtkorb, M. Sætra (2020) **GPU Computing with Python: Performance, Energy Efficiency and Usability**. *Computation*, volume 8, number 1:4 (Special issue on Energy-Efficient Computing on Parallel Architectures). DOI: [10.3390/computation8010004](https://doi.org/10.3390/computation8010004). [Preprint: [arXiv:1912.02607](https://arxiv.org/abs/1912.02607)]
+*	H. Holm, A. Brodtkorb, M. Sætra (2020) **Performance and energy efficiency of CUDA and OpenCL for GPU computing using Python**. *Advances in Parallel Computing*, volume 36, pp. 593-604. DOI: [10.3233/APC200089](https://doi.org/10.3233/APC200089)
 
-Have fun!
+
+**Preprints**
+* F. Beiser, H. Holm, K. Lye, J. Eidsvik (2024) **Multi-level Data Assimilation for Simplified Ocean Models**, preprint in *Nonlinear Processes in Geophysics* [npg-2023-27](https://doi.org/10.5194/npg-2023-27)
+
+
+
+## Development and funding
+GPU Ocean is developed through a collaboration between the Norwegian Meteorological Institute and the Applied Computational Science research group at SINTEF Digital. We are greatful for the support from the Norwegian Research Council under grant numbers 250935 (GPU Ocean) and 310515 (Havvarsel).
+
+![image](https://github.com/gpuocean/gpuocean/assets/5363644/34bcbdfa-96d3-4c27-987d-36c9f2007ca3)  <html>&nbsp;&nbsp;&nbsp;</html>    ![image](https://github.com/gpuocean/gpuocean/assets/5363644/267d4675-5a87-4cf6-aa46-a1809b134fe2)
+
+
+

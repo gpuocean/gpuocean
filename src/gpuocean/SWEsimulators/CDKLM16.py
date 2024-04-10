@@ -61,6 +61,7 @@ class CDKLM16(Simulator.Simulator):
                  coriolis_beta=0.0, \
                  max_wind_direction_perturbation = 0, \
                  wind=WindStress.WindStress(), \
+                 wind_stress_factor=1.0, \
                  atmospheric_pressure=AtmosphericPressure.AtmosphericPressure(), \
                  boundary_conditions=Common.BoundaryConditions(), \
                  boundary_conditions_data=Common.BoundaryConditionsData(), \
@@ -104,6 +105,7 @@ class CDKLM16(Simulator.Simulator):
         coriolis_beta: Coriolis linear factor -> f = f + beta*(y-y_0)
         max_wind_direction_perturbation: Large-scale model error emulation by per-time-step perturbation of wind direction by +/- max_wind_direction_perturbation (degrees)
         wind: Wind stress parameters
+        wind_stress_factor: artificial scaling of the wind stress acting on the water column. Won't affect drifters.
         atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
         small_scale_perturbation [deprecated]: Boolean value for applying a stochastic model error
@@ -189,6 +191,7 @@ class CDKLM16(Simulator.Simulator):
                          'GRAV': "{:.12f}f".format(self.g),
                          'FRIC': "{:.12f}f".format(self.r),
                          'RHO_O': "{:.12f}f".format(rho_o),
+                         'WIND_STRESS_FACTOR': "{:.12f}f".format(wind_stress_factor), 
                          'ONE_DIMENSIONAL': int(0),
                          'FLUX_BALANCER': "{:.12f}f".format(flux_balancer)
         }
@@ -584,7 +587,7 @@ class CDKLM16(Simulator.Simulator):
             self.num_iterations += 1
             
         if self.write_netcdf and write_now:
-            self.sim_writer.writeTimestep(self)
+            self.writeState()
             
         return self.t
     
@@ -669,6 +672,24 @@ class CDKLM16(Simulator.Simulator):
 
     def drifterStep(self, dt):
         # Evolve drifters
+        if self.hasCrossProductDrifter:
+            for d in range(len(self.CrossProductDrifter)):
+                if self.CPsims[d] is not None:
+                    self.CrossProductDrifter[d].drift(self.CPsims[d].gpu_data.h0, \
+                                        self.CPsims[d].gpu_data.hu0, \
+                                        self.CPsims[d].gpu_data.hv0, \
+                                        self.CPsims[d].bathymetry.Bm, \
+                                        self.nx, self.ny, self.t, self.dx, self.dy, \
+                                        dt, \
+                                        np.int32(2), np.int32(2)) 
+                self.CrossProductDrifter[d].drift(self.gpu_data.h0, self.gpu_data.hu0, \
+                                    self.gpu_data.hv0, \
+                                    self.bathymetry.Bm, \
+                                    self.nx, self.ny, self.t, self.dx, self.dy, \
+                                    dt, \
+                                    np.int32(2), np.int32(2))
+            self.CPdrifter_t += dt
+        
         if self.hasDrifters:
             self.drifters.drift(self.gpu_data.h0, self.gpu_data.hu0, \
                                 self.gpu_data.hv0, \

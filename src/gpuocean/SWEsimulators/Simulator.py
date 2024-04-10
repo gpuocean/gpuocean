@@ -131,6 +131,9 @@ class Simulator(object):
         # Model error object
         self.model_error = None
         
+        self.hasCrossProductDrifter = False
+        self.CrossProductDrifter = None
+        
         # NetCDF related parameters
         self.write_netcdf = write_netcdf
         self.ignore_ghostcells = ignore_ghostcells
@@ -359,6 +362,18 @@ class Simulator(object):
         self.hasDrifters = True
         self.drifters.setGPUStream(self.gpu_stream)
         self.drifter_t = 0.0
+
+    def attachCrossProductDrifters(self, drifter_list, sim_list):
+        """
+        Attach drifters that are affected by this sim (self), but also others from sim_list.
+        """
+        assert len(drifter_list) == len(sim_list), "Same number of drifter objects and partner simulations needed!"
+        self.hasCrossProductDrifter = True
+        self.CrossProductDrifter = drifter_list
+        for d in self.CrossProductDrifter:
+            d.setGPUStream(self.gpu_stream)
+        self.CPsims = sim_list
+        self.CPdrifter_t = 0.0
     
     def download(self, interior_domain_only=False):
         """

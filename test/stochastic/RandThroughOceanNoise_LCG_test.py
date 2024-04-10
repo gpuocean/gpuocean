@@ -8,10 +8,10 @@ import pycuda.driver as cuda
 from testUtils import *
 
 from gpuocean.utils import Common
-from stochastic.RandomNumbers_test import RandomNumbersTest
+from stochastic.RandThroughOceanNoise_test import RandThroughOceanNoiseTest
 
 
-class RandomNumbersLCGTest(RandomNumbersTest):
+class RandThroughOceanNoiseLCGTest(RandThroughOceanNoiseTest):
     """
     Executing all the same tests as RandomNumbersTest, but
     using the LCG algorithm for random numbers.

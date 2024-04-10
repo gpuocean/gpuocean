@@ -15,6 +15,7 @@ cuda_cache/
 *.nc
 *.log
 *.bz2
+*.pickle
 
 # Ignored folders from the build
 /CMakeCache.txt

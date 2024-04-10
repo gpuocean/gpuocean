@@ -3,7 +3,7 @@
 """
 This software is part of GPU Ocean. 
 
-Copyright (C) 2023 SINTEF Digital
+Copyright (C) 2023, 2024 SINTEF Digital
 Copyright (C) 2023 Norwegian Meteorological Institute
 
 This python class aids in plotting results from the numerical 
@@ -419,6 +419,8 @@ def add_ensemble_drifter_on_background(ax, ensemble_obs, drifter_id=0,
         for path in paths:
             ax.plot(path[:,0], path[:,1], c=color,**kwargs)
 
+def add_drifter_positions_on_background(ax, drifter_pos, color="black", **kwargs):
+    ax.scatter(drifter_pos[:,0]/1000.0, drifter_pos[:,1]/1000.0, c=color, **kwargs)
 
 ##################################################3
 # UTILS TO GET DRIFTER DOMAIN

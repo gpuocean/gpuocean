@@ -75,22 +75,22 @@ class SimNetCDFWriter:
         else:
             self.super_dir_name = os.getcwd()
         
-        self.dir_name = "netcdf_" + self.timestamp_short + "/"
-        
-        self.dir_name = os.path.join(self.super_dir_name, self.dir_name)
-        
         if not filename:
-            self.output_file_name = self.dir_name + self.simulator_short + "_" + self.timestamp + ".nc"
-        elif str.find(filename, '/') == -1:
-            self.output_file_name = self.dir_name + self.simulator_short + "_" + filename + ".nc"
+            self.dir_name = "netcdf_" + self.timestamp_short
+            self.dir_name = os.path.join(self.super_dir_name, self.dir_name)
+            self.output_file_name = os.path.join(self.dir_name, self.simulator_short + "_" + self.timestamp + ".nc")
+        elif os.path.split(filename)[0] == "":
+            self.dir_name = "netcdf_" + self.timestamp_short
+            self.dir_name = os.path.join(self.super_dir_name, self.dir_name)
+            self.output_file_name = os.path.join(self.dir_name, self.simulator_short + "_" + filename + ".nc")
         else:
             # Input file name is given as 'folder/file' 
             self.output_file_name = filename + ".nc"
-            self.dir_name = filename.rsplit('/', 1)[0]
+            self.dir_name = os.path.dirname(filename)
             
         # Avoid filenames such as "file.nc.nc"
         self.output_file_name = self.output_file_name.replace('.nc.nc', '.nc')
-            
+        
         self.current_directory =os.getcwd()
         self.textPos = -1
         
