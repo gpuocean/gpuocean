@@ -108,12 +108,8 @@ class CDKLM16(Simulator.Simulator):
         wind_stress_factor: artificial scaling of the wind stress acting on the water column. Won't affect drifters.
         atmospheric_pressure: Object with values for atmospheric pressure
         boundary_conditions: Boundary condition object
-        small_scale_perturbation [deprecated]: Boolean value for applying a stochastic model error
-        small_scale_perturbation_amplitude [deprecated]: Amplitude (q0 coefficient) for model error
-        small_scale_perturbation_interpolation_factor [deprecated]: Width factor for correlation in model error
         model_time_step: The size of a data assimilation model step (default same as dt)
         reportGeostrophicEquilibrium: Calculate the Geostrophic Equilibrium variables for each superstep
-        use_lcg [deprecated]: Use LCG as the random number generator. Default is False, which means using curand.
         write_netcdf: Write the results after each superstep to a netCDF file
         comm: MPI communicator
         local_particle_id: Local (for each MPI process) particle id
