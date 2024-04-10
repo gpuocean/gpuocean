@@ -3,7 +3,7 @@
 """
 This software is a part of GPU Ocean.
 
-Copyright (C) 2018  SINTEF Digital
+Copyright (C) 2023  SINTEF Digital
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

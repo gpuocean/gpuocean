@@ -3,7 +3,7 @@
 """
 This software is a part of GPU Ocean.
 
-Copyright (C) 2018  SINTEF Digital
+Copyright (C) 2018, 2023, 2024  SINTEF Digital
 
 This python class implements a DrifterCollection living on the CPU.
 

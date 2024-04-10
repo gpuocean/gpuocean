@@ -3,7 +3,7 @@
 """
 This software is a part of GPU Ocean.
 
-Copyright (C) 2018  SINTEF Digital
+Copyright (C) 2022, 2023  SINTEF Digital
 
 This python class implements a Multi-level ensemble.
 
@@ -40,8 +40,8 @@ class MultiLevelOceanEnsemble:
         # 
         # The assumed structure is a list with the same length as number of levels!
         # The 0-level directly contains a list of the CDKLM16 ensemble members, 
-        # While the subsequent level contain TWO equally long lists with the sim-partners 
-        # Where the first list is the + and the second list is the - partner with a coarser resolution 
+        # while the subsequent level contain TWO equally long lists with the sim-partners 
+        # where the first list is the + and the second list is the - partner with a coarser resolution 
         
         assert len(ML_ensemble) > 1, "Single level ensembles are not valid"
         for l_idx in range(1, len(ML_ensemble)):
