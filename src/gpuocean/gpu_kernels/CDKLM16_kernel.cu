@@ -907,7 +907,11 @@ __global__ void cdklm_swe_2D(
                 const float hv_cor = up.x*hu_east_cor + up.y*hv_north_cor;
 
                 // Atmospheric pressure
+#if USE_DIRECT_LOOKUP
+                const float2 atm_p_central_diff = atmospheric_pressure_central_diff_lookup(atmospheric_pressure_current_arr, atmospheric_pressure_next_arr, atmospheric_pressure_t_,  ti, tj, ATMOS_PRES_NX);
+#else
                 const float2 atm_p_central_diff = atmospheric_pressure_central_diff(atmospheric_pressure_current_arr, atmospheric_pressure_next_arr, atmospheric_pressure_t_,  ti+0.5, tj+0.5, NX+4, NY+4, ATMOS_PRES_NX, ATMOS_PRES_NY);
+#endif
                 const float atm_pressure_x = -atm_p_central_diff.x*h/(2.0f*DX*RHO_O);
                 const float atm_pressure_y = -atm_p_central_diff.y*h/(2.0f*DY*RHO_O);
 
