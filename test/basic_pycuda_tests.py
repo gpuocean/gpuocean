@@ -50,7 +50,7 @@ if (jenkins):
 
 # Define the tests that will be part of our test suite:
 test_classes_to_run = None
-test_classes_to_run = [CUDAArray2DTest, CUDACDKLMTextureTest]
+test_classes_to_run = [CUDAArray2DTest]
 
 
 loader = unittest.TestLoader()

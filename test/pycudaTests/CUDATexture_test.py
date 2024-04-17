@@ -58,7 +58,10 @@ class CUDACDKLMTextureTest(unittest.TestCase):
             'DY': "{:.12f}f".format(100),
             'GRAV': "{:.12f}f".format(10.0),
             'FRIC': "{:.12f}f".format(0.0),
-            'RHO_O': "{:.12f}f".format(1025.0)
+            'RHO_O': "{:.12f}f".format(1025.0),
+            'FLUX_BALANCER': "0.0f",
+            'ONE_DIMENSIONAL': "0",
+            'WIND_STRESS_FACTOR': "0.0f"
             }
 
         self.kernel = self.gpu_ctx.get_kernel("CDKLM16_kernel.cu", 
