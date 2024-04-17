@@ -194,25 +194,7 @@ class OceanStateNoise(object):
         
         self.makePerpendicularKernel = self.kernels.get_function("makePerpendicular")
         self.makePerpendicularKernel.prepare("iiPiPiP")
-        
-        
-        self.uniformDistributionKernel = self.kernels.get_function("uniformDistribution")
-        self.uniformDistributionKernel.prepare("iiiPiPi")
-        
-        self.normalDistributionKernel = None
-        if self.use_lcg:
-            self.normalDistributionKernel = self.kernels.get_function("normalDistribution")
-            self.normalDistributionKernel.prepare("iiiPiPi")
-        
-                
-        self.uniformDistributionKernel = self.kernels.get_function("uniformDistribution")
-        self.uniformDistributionKernel.prepare("iiiPiPi")
-        
-        self.normalDistributionKernel = None
-        if self.use_lcg:
-            self.normalDistributionKernel = self.kernels.get_function("normalDistribution")
-            self.normalDistributionKernel.prepare("iiiPiPi")
-        
+                        
         self.soarKernel = self.kernels.get_function("SOAR")
         self.soarKernel.prepare("iifffffiiPiPii")
         
