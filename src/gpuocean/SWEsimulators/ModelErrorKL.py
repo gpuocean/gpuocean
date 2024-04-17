@@ -39,8 +39,9 @@ class ModelErrorKL(object):
     """
     Generating random perturbations for a ocean state.
    
-    Perturbation for the surface field, dEta, is produced with a covariance structure according to a SOAR function,
-    while dHu and dHv are found by the geostrophic balance to avoid shock solutions.
+    Perturbation for the surface field, dEta, is produced with a covariance structure 
+    according to a Karhunen-Loeve expansion, while dHu and dHv are found by the
+    geostrophic balance to avoid shock solutions.
     """
     
     def __init__(self, gpu_ctx, gpu_stream,

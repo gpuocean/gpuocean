@@ -40,10 +40,11 @@ class MLDrifterCollection(CPUDrifterCollection.CPUDrifterCollection):
         Creates a collection of drifters suitable for multi-level (ML) ensembles.
 
         Most relevant parameters
-        numDrifters: number of drifters represented in the collection
+        numDrifters: number of unique drifters represented in the collection
         ensemble_size: number of realization per drifter. 
         boundaryConditions: BoundaryConditions object, relevant during drift
         domain_size_{x,y}: size of computational domain in meters
+        use_biased_walk: Flag to use biased walk (True by default) or random walk (False) 
         """
         
         # Call parent constructor
