@@ -34,7 +34,7 @@ import warnings
 import pycuda.driver as cuda
 
 from gpuocean.SWEsimulators import CDKLM16
-from gpuocean.utils import Common, WindStress
+from gpuocean.utils import Common, WindStress, OceanographicUtilities
 from gpuocean.drifters import GPUDrifterCollection
 from gpuocean.dataassimilation import DataAssimilationUtils as dautils
 
@@ -158,6 +158,37 @@ class BaseOceanStateEnsemble(object):
                         
             return observedParticles
         
+    def estimate(self, func, **kwargs):
+        """
+        General monte-carlo estimator for some statistic given as func, performed on the standard state [eta, hu, hv]
+        func - function that calculates a statistics, e.g. np.mean or np.var
+        returns [func(eta), func(hu), func(hv)] with shape (3, ny, nx)
+        """
+        ensemble_state = []
+        for e in range(self.getNumParticles()):
+            eta, hu, hv = self.downloadParticleOceanState(e)
+            ensemble_state.append(np.array([eta, hu, hv])) 
+        ensemble_state = np.moveaxis(ensemble_state, 0, -1)
+        ensemble_estimate = func(ensemble_state, axis=-1, **kwargs)
+        return ensemble_estimate
+    
+    def estimateVelocity(self, func, desingularise=0.00001, **kwargs):
+        """
+        General monte-carlo estimator for some statistic given as func, performed on the ocean currects [u, v]
+        func - function that calculates a statistics, e.g. np.mean or np.var
+        returns [func(u), func(v)] with shape (2, ny, nx)
+        """
+        ensemble_state = []
+        for e in range(self.getNumParticles()):
+            eta, hu, hv = self.downloadParticleOceanState(e)
+            _, H_m = self.particles[0].downloadBathymetry(interior_domain_only=True)
+            u = OceanographicUtilities.desingularise(eta + H_m, hu, desingularise)
+            v = OceanographicUtilities.desingularise(eta + H_m, hv, desingularise)
+            ensemble_state.append(np.array([u, v])) 
+        ensemble_state = np.moveaxis(ensemble_state, 0, -1)
+        ensemble_estimate = func(ensemble_state, axis=-1, **kwargs)
+        return ensemble_estimate
+
     @abc.abstractmethod
     def observeTrueDrifters(self):
         """

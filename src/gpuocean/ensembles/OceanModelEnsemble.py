@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
 import logging
+import gc
 
 from gpuocean.SWEsimulators import CDKLM16
 from gpuocean.drifters import GPUDrifterCollection
@@ -35,7 +36,7 @@ class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
     Class which holds a set of simulators on a single node, possibly with drifters attached
     """
     
-    def __init__(self, gpu_ctx, sim_args, data_args, numParticles,
+    def __init__(self, gpu_ctx, sim_args, data_args, model_error_args, numParticles,
                  observation_variance = 0.01**2, 
                  initialization_variance_factor_ocean_field = 0.0,
                  super_dir_name=None, netcdf_filename=None,
@@ -75,6 +76,11 @@ class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
         for i in range(numParticles):
             self.particles[i] = CDKLM16.CDKLM16(self.gpu_ctx, **self.sim_args, **data_args, local_particle_id=i, 
                                                 super_dir_name=super_dir_name, netcdf_filename=netcdf_filename)
+            if 'small_scale_perturbation_amplitude' in model_error_args:
+                self.particles[i].setSOARModelError(**model_error_args)
+            elif 'kl_scaling' in model_error_args:
+                self.particles[i].setKLModelError(**model_error_args)
+                
             self.particleInfos[i] = ParticleInfo.ParticleInfo()
                     
             if self.initialization_variance_factor_ocean_field != 0.0:
@@ -107,7 +113,8 @@ class OceanModelEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
     def cleanUp(self):
         for oceanState in self.particles:
             if oceanState is not None:
-                oceanState.cleanUp()
+                oceanState.cleanUp(do_gc=False)
+        gc.collect()
     
     
     

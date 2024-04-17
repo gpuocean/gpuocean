@@ -3,7 +3,7 @@
 """
 This software is a part of GPU Ocean.
 
-Copyright (C) 2018  SINTEF Digital
+Copyright (C) 2018, 2023  SINTEF Digital
 
 This python class implements a DrifterCollection living on the GPU.
 
@@ -56,10 +56,6 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
         self.wind = wind
         self.wind_drift_factor = np.float32(wind_drift_factor)
         
-        
-        # TODO: Where should the cl_queue come from?
-        # For sure, the drifter and the ocean simulator should use 
-        # the same queue...
         self.gpu_stream = gpu_stream
         if self.gpu_stream is None:
             self.gpu_stream = cuda.Stream()
@@ -97,12 +93,6 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
         if initialize:
             self.uniformly_distribute_drifters(initialization_cov_drifters=initialization_cov_drifters)
        
-        #print "local_size: ", self.local_size
-        #print "global_size: ", self.global_size
-        #print "numDrifters + obs: ", self.numDrifters + 1
-        # remember: shape = (y, x)
-         
-   
         
             
     def copy(self):

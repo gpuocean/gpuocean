@@ -78,7 +78,7 @@ def plotState(eta, hu, hv, h,
     if not eta_max:
         eta_max = np.max(np.abs(eta))
     if not huv_max:
-        huv_max = max(np.max(np.abs(hv)), np.max(np.abs(hv)))
+        huv_max = max(np.max(np.abs(hu)), np.max(np.abs(hv)))
     
     V_max = 6 * huv_max / np.max(h)
     R_min = -V_max/2000

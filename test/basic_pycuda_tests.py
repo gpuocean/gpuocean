@@ -31,6 +31,7 @@ import xmlrunner
 
 #import testUtils
 from pycudaTests.CUDAArray2D_test import CUDAArray2DTest
+from pycudaTests.CUDATexture_test import CUDACDKLMTextureTest
 
 if (len(sys.argv) < 1):
     print("Usage:")

@@ -97,18 +97,21 @@ class OceanStateNoise(object):
         # Check that the interpolation factor plays well with the grid size:
         assert ( interpolation_factor > 0 and interpolation_factor % 2 == 1), 'interpolation_factor must be a positive odd integer'
         
-        assert (nx % interpolation_factor == 0), 'nx must be divisible by the interpolation factor'
-        assert (ny % interpolation_factor == 0), 'ny must be divisible by the interpolation factor'
+        self.periodicNorthSouth = np.int32(boundaryConditions.isPeriodicNorthSouth())
+        if self.periodicNorthSouth:
+            assert (ny % interpolation_factor == 0), 'ny must be divisible by the interpolation factor'
+        self.periodicEastWest = np.int32(boundaryConditions.isPeriodicEastWest())
+        if self.periodicNorthSouth:
+            assert (nx % interpolation_factor == 0), 'nx must be divisible by the interpolation factor'
+        
         self.interpolation_factor = np.int32(interpolation_factor)
         
         # The size of the coarse grid 
-        self.coarse_nx = np.int32(nx/self.interpolation_factor)
-        self.coarse_ny = np.int32(ny/self.interpolation_factor)
+        self.coarse_nx = np.int32(np.ceil(nx/self.interpolation_factor))
+        self.coarse_ny = np.int32(np.ceil(ny/self.interpolation_factor))
         self.coarse_dx = np.float32(dx*self.interpolation_factor)
         self.coarse_dy = np.float32(dy*self.interpolation_factor)
         
-        self.periodicNorthSouth = np.int32(boundaryConditions.isPeriodicNorthSouth())
-        self.periodicEastWest = np.int32(boundaryConditions.isPeriodicEastWest())
         
         # Size of random field and seed
         # The SOAR function is a stencil which requires cutoff number of grid cells,
@@ -170,7 +173,9 @@ class OceanStateNoise(object):
        
         # Generate kernels
         self.kernels = gpu_ctx.get_kernel("ocean_noise.cu", \
-                                          defines={'block_width': block_width, 'block_height': block_height},
+                                          defines={'block_width': block_width, 'block_height': block_height, 
+                                                   'kl_rand_nx': 1, 'kl_rand_ny': 1 # Not used for this class
+                                                },
                                           compile_args={
                                               'options': ["--use_fast_math",
                                                           "--maxrregcount=32"]
@@ -189,25 +194,7 @@ class OceanStateNoise(object):
         
         self.makePerpendicularKernel = self.kernels.get_function("makePerpendicular")
         self.makePerpendicularKernel.prepare("iiPiPiP")
-        
-        
-        self.uniformDistributionKernel = self.kernels.get_function("uniformDistribution")
-        self.uniformDistributionKernel.prepare("iiiPiPi")
-        
-        self.normalDistributionKernel = None
-        if self.use_lcg:
-            self.normalDistributionKernel = self.kernels.get_function("normalDistribution")
-            self.normalDistributionKernel.prepare("iiiPiPi")
-        
-                
-        self.uniformDistributionKernel = self.kernels.get_function("uniformDistribution")
-        self.uniformDistributionKernel.prepare("iiiPiPi")
-        
-        self.normalDistributionKernel = None
-        if self.use_lcg:
-            self.normalDistributionKernel = self.kernels.get_function("normalDistribution")
-            self.normalDistributionKernel.prepare("iiiPiPi")
-        
+                        
         self.soarKernel = self.kernels.get_function("SOAR")
         self.soarKernel.prepare("iifffffiiPiPii")
         
@@ -286,7 +273,7 @@ class OceanStateNoise(object):
     def __del__(self):
         self.cleanUp()
      
-    def cleanUp(self):
+    def cleanUp(self, do_gc=True):
         if self.rng is not None:
             self.rng.cleanUp()
         if self.random_numbers is not None:
@@ -296,7 +283,8 @@ class OceanStateNoise(object):
         if self.reduction_buffer is not None:
             self.reduction_buffer.release()
         self.gpu_ctx = None
-        gc.collect()
+        if do_gc:
+            gc.collect()
         
     @classmethod
     def fromsim(cls, sim, soar_q0=None, soar_L=None, interpolation_factor=1, use_lcg=False, xorwow_seed=None,

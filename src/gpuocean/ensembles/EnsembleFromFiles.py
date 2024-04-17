@@ -28,6 +28,7 @@ from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
 import time
+import gc
 import abc
 import warnings 
 import os, sys, datetime
@@ -230,7 +231,8 @@ class EnsembleFromFiles(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
     def cleanUp(self):
         for particle in self.particles:
             if particle is not None:
-                particle.cleanUp()
+                particle.cleanUp(do_gc=False)
+        gc.collect()
         
                
     def configureObservations(self, drifterSet="all", observationInterval=1, buoy_area='all'):

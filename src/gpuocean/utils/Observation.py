@@ -229,6 +229,29 @@ class Observation:
                                       self.buoy_obs_errors_key: buoy_obs_errors, self.drifter_obs_errors_key: drifter_obs_errors}
     
 
+    def add_observation_from_mldrifters(self, t, mldrifters, ensemble_member):
+        """
+        Extracts the drifter positions from the mldrifters for the given ensemble_member and stores 
+        them to the data frame for the given time t. 
+        """
+        # The timestamp is rounded to nearest integer, so that it is possible to compare to 
+        # other simulation times.
+        rounded_sim_t = round(t)
+        index = self.get_num_observations()
+        
+        if not index == 0:
+            assert(self.obs_df[self.obs_df[self.time_key]==rounded_sim_t].time.count() == 0), \
+                "Observation for time " + str(rounded_sim_t) + " already exists in DataFrame"
+        
+        buoy_positions = None
+        buoy_observations = None
+        buoy_obs_errors = None
+        
+        pos = mldrifters.getDrifterPositionsForEnsembleMember(ensemble_member)
+        drifter_obs_errors = np.random.normal(size=pos.shape)
+        self.obs_df.loc[index] = {self.time_key: rounded_sim_t, self.drifter_positions_key: pos,
+                                  self.buoy_observations_key: buoy_observations, self.buoy_positions_key: buoy_positions,
+                                  self.buoy_obs_errors_key: buoy_obs_errors, self.drifter_obs_errors_key: drifter_obs_errors}
 
     
     #########################
