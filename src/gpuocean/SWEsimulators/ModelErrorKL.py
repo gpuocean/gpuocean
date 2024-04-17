@@ -33,7 +33,7 @@ from pycuda.curandom import XORWOWRandomNumberGenerator
 
 import gc
 
-from gpuocean.utils import Common, config
+from gpuocean.utils import Common, RandomNumbers, config
 
 class ModelErrorKL(object):
     """
@@ -82,8 +82,6 @@ class ModelErrorKL(object):
         
         # Make sure that all variables initialized within ifs are defined
         self.random_numbers = None
-        self.rng = None
-        self.seed = None
         self.host_seed = None
 
         self.gpu_ctx = gpu_ctx
@@ -123,28 +121,20 @@ class ModelErrorKL(object):
         self.rand_nx = np.int32(self.N_basis_x)
         self.rand_ny = np.int32(self.N_basis_y*2)
 
+        self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream, 
+                                               self.rand_nx, self.rand_ny, 
+                                               use_lcg=self.use_lcg, xorwow_seed=xorwow_seed,
+                                               block_width=block_width, block_height=block_height)
+        
         # Since normal distributed numbers are generated in pairs, we need to store half the number of
         # of seed values compared to the number of random numbers.
         self.seed_ny = np.int32(self.rand_ny)
         self.seed_nx = np.int32(np.ceil(self.rand_nx/2))
 
         # Generate seed:
-        self.floatMax = 2147483648.0
+        self.floatMax = self.rng.floatMax
         if self.use_lcg:
-            self.host_seed = self.random_state.rand(self.seed_ny, self.seed_nx)*self.floatMax
-            self.host_seed = self.host_seed.astype(np.uint64, order='C')
-        
-        if not self.use_lcg:
-            if xorwow_seed is not None:
-                def set_seeder(N, seed):
-                    seedarr = pycuda.gpuarray.ones_like(pycuda.gpuarray.zeros(N, dtype=np.int32), dtype=np.int32) * seed
-                    return seedarr
-
-                self.rng = XORWOWRandomNumberGenerator( lambda N: set_seeder(N,xorwow_seed))
-            else:
-                self.rng = XORWOWRandomNumberGenerator()
-        else:
-            self.seed = Common.CUDAArray2D(gpu_stream, self.seed_nx, self.seed_ny, 0, 0, self.host_seed, double_precision=True, integers=True)
+            self.host_sedd = self.rng.host_seed
         
         # Variable for storing the basis functions used for sampling on the CPU
         # Should only be initialized if it is used.
@@ -167,11 +157,6 @@ class ModelErrorKL(object):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         # Generate kernels
-        
-        self.normalDistributionKernel = None
-        if self.use_lcg:
-            self.normalDistributionKernel = self.kernels.get_function("normalDistribution")
-            self.normalDistributionKernel.prepare("iiiPiPi")
         
         self.klSamplingKernelEta = self.kernels.get_function("kl_sample_eta")
         self.klSamplingKernelEta.prepare("iiiiiiiiffffffPiPi")
@@ -239,9 +224,7 @@ class ModelErrorKL(object):
      
     def cleanUp(self, do_gc=True):
         if self.rng is not None:
-            self.rng = None
-        if self.seed is not None:
-            self.seed.release()
+            self.rng.cleanUp()
         if self.random_numbers is not None:
             self.random_numbers.release()
         self.gpu_ctx = None
@@ -270,31 +253,16 @@ class ModelErrorKL(object):
                    block_width=block_width, block_height=block_height)
 
     def getSeed(self):
-        assert(self.use_lcg), "getSeed is only valid if LCG is used as pseudo-random generator."
-        
-        return self.seed.download(self.gpu_stream)
+        return self.rng.getSeed()
     
     def resetSeed(self):
-        assert(self.use_lcg), "resetSeed is only valid if LCG is used as pseudo-random generator."
-
-        # Generate seed:
-        self.floatMax = 2147483648.0
-        self.host_seed = self.random_state.rand(self.seed_ny, self.seed_nx)*self.floatMax
-        self.host_seed = self.host_seed.astype(np.uint64, order='C')
-        self.seed.upload(self.gpu_stream, self.host_seed)
+        self.rng.resetSeed()
 
     def getRandomNumbers(self):
         return self.random_numbers.download(self.gpu_stream)
     
     def generateNormalDistribution(self):
-        if not self.use_lcg:
-            self.rng.fill_normal(self.random_numbers.data, stream=self.gpu_stream)
-        else:
-            self.normalDistributionKernel.prepared_async_call(self.global_size_random_numbers, self.local_size, self.gpu_stream,
-                                                              self.seed_nx, self.seed_ny,
-                                                              self.rand_nx,
-                                                              self.seed.data.gpudata, self.seed.pitch,
-                                                              self.random_numbers.data.gpudata, self.random_numbers.pitch)
+        self.rng.generateNormalDistribution(self.random_numbers)
     
     def setRandomNumbers(self, random_numbers):
         assert(random_numbers.shape == self.random_numbers_host.shape), "Wrong shape of random numbers: "+str(random_numbers.shape) + " vs " + str(self.random_numbers_host.shape)
