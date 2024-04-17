@@ -217,7 +217,7 @@ class OceanStateNoise(object):
         self.soarKernel.prepare("iifffffiiPiPii")
         
         self.geostrophicBalanceKernel = self.kernels.get_function("geostrophicBalance")
-        self.geostrophicBalanceKernel.prepare("iiffiiffffffffPiPiPiPiPif")
+        self.geostrophicBalanceKernel.prepare("iiffiiffffPiPiPiPiPif")
         
         self.bicubicInterpolationKernel = self.kernels.get_function("bicubicInterpolation")
         self.bicubicInterpolationKernel.prepare("iiiiffiiiiffiiffffPiPiPiPiPif")
@@ -461,7 +461,6 @@ class OceanStateNoise(object):
 
                                                               np.float32(g), np.float32(f),
                                                               np.float32(beta), np.float32(y0_reference_cell),
-                                                              np.float32(0.0), np.float32(1.0), np.float32(0.0), np.float32(1.0),
 
                                                               self.coarse_buffer.data.gpudata, self.coarse_buffer.pitch,
                                                               eta.data.gpudata, eta.pitch,
