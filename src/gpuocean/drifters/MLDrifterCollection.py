@@ -35,7 +35,7 @@ class MLDrifterCollection(CPUDrifterCollection.CPUDrifterCollection):
                  boundaryConditions=Common.BoundaryConditions(), 
                  initialization_cov_drifters=None,
                  domain_size_x=1.0, domain_size_y=1.0,
-                 fixed_random_walk_direction=True):
+                 use_biased_walk=True):
         """
         Creates a collection of drifters suitable for multi-level (ML) ensembles.
 
@@ -73,12 +73,12 @@ class MLDrifterCollection(CPUDrifterCollection.CPUDrifterCollection):
         # If true, we assign random directions for each drifter to walk, and this direction will
         # be scaled by the variance field used in the random walk. If false, the random direction will
         # be random for each drift step.
-        self.fixed_random_walk_direction = fixed_random_walk_direction
-        self.rw_contribution_x = None
-        self.rw_contribution_y = None
-        if self.fixed_random_walk_direction:
-            self.rw_contribution_x = np.random.normal(loc=0, scale=1, size=(self.numDrifters+1))
-            self.rw_contribution_y = np.random.normal(loc=0, scale=1, size=(self.numDrifters+1))
+        self.use_biased_walk = use_biased_walk
+        self.biased_walk_x = None
+        self.biased_walk_y = None
+        if self.use_biased_walk:
+            self.biased_walk_x = np.random.normal(loc=0, scale=1, size=(self.numDrifters+1))
+            self.biased_walk_y = np.random.normal(loc=0, scale=1, size=(self.numDrifters+1))
            
     
     # Mappings between drifters and ensemble members
@@ -166,9 +166,9 @@ class MLDrifterCollection(CPUDrifterCollection.CPUDrifterCollection):
         return exp_field
     
     def _randomWalk(self, x, y, u, v, u_var_val, v_var_val, dt, i, sensitivity):
-        if self.fixed_random_walk_direction:
-            x = x + sensitivity*(u*dt + self.rw_contribution_x[i]*np.sqrt(u_var_val)*dt)
-            y = y + sensitivity*(v*dt + self.rw_contribution_y[i]*np.sqrt(v_var_val)*dt)
+        if self.use_biased_walk:
+            x = x + sensitivity*(u*dt + self.biased_walk_x[i]*np.sqrt(u_var_val)*dt)
+            y = y + sensitivity*(v*dt + self.biased_walk_y[i]*np.sqrt(v_var_val)*dt)
         else:
             x = x + sensitivity*(u*dt + np.random.normal(loc=0, scale=np.sqrt(u_var_val)*dt))
             y = y + sensitivity*(v*dt + np.random.normal(loc=0, scale=np.sqrt(v_var_val)*dt))
