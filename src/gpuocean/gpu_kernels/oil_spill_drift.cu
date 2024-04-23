@@ -38,6 +38,15 @@ __device__ float water_velocity(
     return velocity;
 }
 
+
+__device__ float array_lookup_2d(
+        const float* data_ptr, const int data_pitch,
+        const int cell_id_x, const int cell_id_y) {
+
+    const float* data_row = (float*)((char*) data_ptr + data_pitch*cell_id_y);
+    return data_row[cell_id_x];
+}
+
 __device__ float water_velocity_no_interpolation(
         const float* eta_ptr, const int eta_pitch,
         const float* momentum_ptr, const int momentum_pitch,
@@ -62,7 +71,8 @@ __device__ float water_velocity_bilinear_interpolation(
         const float* momentum_ptr, const int momentum_pitch,
         const float* Hm_ptr, const int Hm_pitch,
         const float drifter_pos_x, const float drifter_pos_y, 
-        const float dx, const float dy) {
+        const float dx, const float dy,
+        const bool momentum_is_wind) {
     
     // Find indices for the cell this thread's particle is in
     // Note that we compensate for 2 ghost cells in each direction 
@@ -80,14 +90,26 @@ __device__ float water_velocity_bilinear_interpolation(
     const int cell_id_y0 = frac_y < 0.5f ? cell_id_y - 1 : cell_id_y;
     const float y_factor = frac_y < 0.5f ? frac_y + 0.5f : frac_y - 0.5f; 
     const int cell_id_y1 = cell_id_y0 + 1;
-        
-    float const vel_x0y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y0);
-    float const vel_x1y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y0);
-    float const vel_x0y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y1);
-    float const vel_x1y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y1);
     
-    float const vel_y0 = (1-x_factor)*vel_x0y0 + x_factor * vel_x1y0; 
-    float const vel_y1 = (1-x_factor)*vel_x0y1 + x_factor * vel_x1y1; 
+    float vel_x0y0; 
+    float vel_x1y0; 
+    float vel_x0y1; 
+    float vel_x1y1; 
+
+    if (momentum_is_wind) {
+        vel_x0y0 = array_lookup_2d(momentum_ptr, momentum_pitch, cell_id_x0, cell_id_y0);
+        vel_x1y0 = array_lookup_2d(momentum_ptr, momentum_pitch, cell_id_x1, cell_id_y0);
+        vel_x0y1 = array_lookup_2d(momentum_ptr, momentum_pitch, cell_id_x0, cell_id_y1);
+        vel_x1y1 = array_lookup_2d(momentum_ptr, momentum_pitch, cell_id_x1, cell_id_y1);
+    }
+    else {
+        vel_x0y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y0);
+        vel_x1y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y0);
+        vel_x0y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y1);
+        vel_x1y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y1);
+    }    
+    const float vel_y0 = (1-x_factor)*vel_x0y0 + x_factor * vel_x1y0; 
+    const float vel_y1 = (1-x_factor)*vel_x0y1 + x_factor * vel_x1y1; 
 
     // Read and compute water velocity within cell
     return (1-y_factor)*vel_y0 + y_factor*vel_y1;
@@ -109,8 +131,8 @@ __device__ float rise_velocity(
     return rise_velocity;
 }
 
-__device__ float is_submerged(float* drifter) {
-    return drifter[2] < 0.0;
+__device__ float is_submerged(const float drifter_depth) {
+    return drifter_depth < 0.0;
 }
 
 __device__ float euler_maruyama_scheme(
@@ -189,7 +211,11 @@ __global__ void superSimpleDrift(
         const float vertical_diffusivity,
         const float droplet_diameter,
         const float oil_density, const float water_density,
-        const float water_viscosity, const float g)
+        const float water_viscosity, const float g,
+        float* wind_u_ptr, const int wind_u_pitch,
+        float* wind_v_ptr, const int wind_v_pitch,
+        const float windage
+)
     {
         // Each thread will be responsible for one drifter only 
         // Local index of thread within block (only needed in one dim)
@@ -217,16 +243,34 @@ __global__ void superSimpleDrift(
                                                             hu_ptr, hu_pitch,
                                                             Hm_ptr, Hm_pitch, 
                                                             drifter_pos_x, drifter_pos_y,
-                                                            dx, dy);
+                                                            dx, dy, false);
             const float v = water_velocity_bilinear_interpolation(eta_ptr, eta_pitch,
                                                             hv_ptr, hv_pitch,
                                                             Hm_ptr, Hm_pitch, 
                                                             drifter_pos_x, drifter_pos_y,
-                                                            dx, dy);
-        
+                                                            dx, dy, false);
+
             // Move drifter with a simple forward Euler
             drifter_pos_x += u*dt;
             drifter_pos_y += v*dt;
+
+            // Influence from wind
+            if (!is_submerged(drifter_depth)) {
+                const float wind_u = water_velocity_bilinear_interpolation(nullptr, 0,
+                                                            wind_u_ptr, wind_u_pitch,
+                                                            nullptr, 0, 
+                                                            drifter_pos_x, drifter_pos_y,
+                                                            dx, dy, true);
+                const float wind_v = water_velocity_bilinear_interpolation(nullptr, 0,
+                                                            wind_v_ptr, wind_v_pitch,
+                                                            nullptr, 0, 
+                                                            drifter_pos_x, drifter_pos_y,
+                                                            dx, dy, true);
+
+                drifter_pos_x += windage*wind_u*dt;
+                drifter_pos_y += windage*wind_v*dt;
+            }
+            
             
             // Add horizontal diffusion
             drifter_pos_x += horizontal_diffusivity*rand_numbers[0]*sqrt(dt);
@@ -237,7 +281,7 @@ __global__ void superSimpleDrift(
             drifter_pos_y -= floor(drifter_pos_y / (ny*dy))*(ny*dy);
 
             // Move drifter vertically.
-            if (is_submerged(drifter)) {
+            if (is_submerged(drifter_depth)) {
                 // Find the local water depth
                 const int cell_id_x = (int)(floor(drifter_pos_x/dx) + 2);
                 const int cell_id_y = (int)(floor(drifter_pos_y/dy) + 2);

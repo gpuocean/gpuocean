@@ -1,10 +1,12 @@
 
 import os
 import numpy as np
+import warnings
+
 
 import pycuda.driver as cuda
 
-from gpuocean.utils import Common, RandomNumbers
+from gpuocean.utils import Common, RandomNumbers, WindStress
 
 class OilDrift:
     """
@@ -16,7 +18,8 @@ class OilDrift:
 
     def __init__(self, gpu_ctx, drifter_positions, droplet_diameter, oil_density=0.8, water_density=1.025,
                  water_viscosity=1.358e-6, g=9.81,
-                 horizontal_diffusivity=1.0, vertical_diffusivity=1.0,
+                 horizontal_diffusivity=1.0, vertical_diffusivity=1.0, 
+                 wind=WindStress.WindStress(), windage = 0.03,
                  block_width=32, rng_block_height=32):
 
         assert(drifter_positions.shape[1] == 3), "expecting drifter_positions to be of shape (N, 3)"
@@ -53,10 +56,10 @@ class OilDrift:
 
 
         self.droplet_diameter = np.float32(droplet_diameter)
-        self.oil_density = oil_density
-        self.water_density = water_density
-        self.water_viscosity = water_viscosity
-        self.g = g
+        self.oil_density = np.float32(oil_density)
+        self.water_density = np.float32(water_density)
+        self.water_viscosity = np.float32(water_viscosity)
+        self.g = np.float32(g)
 
         # Compile cuda file found in this repository
         # To do that, we need to provide the absolute path along with the corresponding flag
@@ -69,9 +72,19 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPifffffff")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPifffffffPiPif")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
+
+        # Wind:
+        # TODO: Wind should be read from the ocean simulator object, but we are currently changing how wind is 
+        # stored on the GPU. Therefore, we use this temporary solution with given restrictions... 
+        if(len(wind.t) > 1):
+            warnings.warn("Currently only supporting wind that is constant in time.\nUsing wind from the first timestep only")
+       
+        self.wind_u = Common.CUDAArray2D(self.gpu_stream, wind.wind_u[0].shape[1], wind.wind_u[0].shape[0], 0, 0, wind.wind_u[0])
+        self.wind_v = Common.CUDAArray2D(self.gpu_stream, wind.wind_v[0].shape[1], wind.wind_v[0].shape[0], 0, 0, wind.wind_v[0])
+        self.windage = np.float32(windage)
 
     # Destructor and memory deallocation
     def __del__(self):
@@ -106,6 +119,9 @@ class OilDrift:
         # Furthermore, the simulator has two buffers for each variable (e.g., hu0 and hu1), 
         # where the *0 is the one you should use, and *1 is used as a temporary storage during two-stage Runge Kutta for the finite volume method
 
+        # TODO: Fix wind check - it is currently a temporary solution awaiting new pull request to GPU Ocean
+        self._check_wind(sim)
+
         # The first three parameters to the kernel is always the subdivision of work (globale size and local size), and the gpu stream that will execute the kernel
         self.superSimpleDriftKernel.prepared_async_call(self.global_size, self.local_size, self.gpu_stream,
                                                sim.nx, sim.ny, sim.dx, sim.dy, np.float32(dt),
@@ -119,7 +135,10 @@ class OilDrift:
                                                self.rng.seed.data.gpudata, self.rng.seed.pitch,
                                                self.horizontal_diffusivity, self.vertical_diffusivity,
                                                self.droplet_diameter, self.oil_density, self.water_density,
-                                               self.water_viscosity, self.g)
+                                               self.water_viscosity, self.g,
+                                               self.wind_u.data.gpudata, self.wind_u.pitch,
+                                               self.wind_v.data.gpudata, self.wind_v.pitch,
+                                               self.windage)
 
     def is_submerged(self):
         # Return True if the oil drifter is submerged
@@ -129,5 +148,19 @@ class OilDrift:
         # Return True if the oil drifter is stranded
         return self.getDrifterPositions()[:,2] == 999
             
+
+    def _check_wind(self, sim):
+        if (self.wind_u.nx_halo == 1):
+            # Assuming then that the wind object is the default one with no wind.
+            # Extend the zero-wind to the same grid resolution as the simulator
+            wind_u = np.zeros((sim.ny+4, sim.nx+4), dtype=np.float32, order='C')
+            wind_v = np.zeros((sim.ny+4, sim.nx+4), dtype=np.float32, order='C')
             
+            self.wind_u = Common.CUDAArray2D(self.gpu_stream, sim.nx, sim.ny, 2, 2, wind_u)
+            self.wind_v = Common.CUDAArray2D(self.gpu_stream, sim.nx, sim.ny, 2, 2, wind_v)
+
+        assert(self.wind_u.nx_halo == sim.gpu_data.h0.nx_halo)
+        assert(self.wind_u.ny_halo == sim.gpu_data.h0.ny_halo)
+        assert(self.wind_v.nx_halo == sim.gpu_data.h0.nx_halo)
+        assert(self.wind_v.ny_halo == sim.gpu_data.h0.ny_halo)
         
