@@ -20,7 +20,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "random_number_generators.cu"
-#include "math_constants.h"
 
 __device__ float water_velocity(
         const float* eta_ptr, const int eta_pitch,
