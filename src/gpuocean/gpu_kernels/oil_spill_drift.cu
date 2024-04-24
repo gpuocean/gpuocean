@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "random_number_generators.cu"
+#include "math_constants.h"
 
 __device__ float water_velocity(
         const float* eta_ptr, const int eta_pitch,
@@ -123,11 +124,14 @@ __device__ float rise_velocity(
         const float g) {
     // Calculate the rise velocity of a droplet in m/s.
 
-    const float g_delro = g * (water_density - oil_density) / water_density;
-    const float w1 = pow(droplet_diameter, 2) * g_delro / (18. * water_viscosity);
-    const float w2 = copysignf(w1, g_delro);
-    const float rise_velocity = w1 * w2 / (w1 + w2); // in m/s
-    
+    float rise_velocity = 0.0f;
+    if (droplet_diameter > 0.0f) {
+        const float g_delro = g * (water_density - oil_density) / water_density;
+        const float w1 = pow(droplet_diameter, 2) * g_delro / (18. * water_viscosity);
+        const float w2 = copysignf(w1, g_delro);
+        rise_velocity = w1 * w2 / (w1 + w2); // in m/s
+    }
+
     return rise_velocity;
 }
 
@@ -143,7 +147,7 @@ __device__ float euler_maruyama_scheme(
     return ksi * sqrt(2 * vertical_diffusivity);
 }
 
-__device__ float vertical_transport(
+__device__ void vertical_transport(
         float& droplet_depth,
         const float droplet_diameter,
         const float water_density,
@@ -173,6 +177,77 @@ __device__ float vertical_transport(
     droplet_depth += advection_step;
 }
 
+__device__ float white_cap_coverage(const float wind_speed) {
+    // White cap coverage for a wind speed (measured at 10m height).
+    // This model is valid for wind speeds < 23.1 m/s
+    if (wind_speed < 3.7) {
+        return 0.0f;
+    }
+    if (wind_speed < 10.187 ) {
+        return 3.18 * 10e-3 * pow(wind_speed - 3.7, 3);
+    } else {
+        return 4.82 * 10e-4 * pow(wind_speed + 1.98, 3);
+    }
+}
+
+
+__device__ float mean_wave_period(const float wind_speed, const float g) {
+    const float period = 0.812 * 3.14 * wind_speed / g;
+    return period;
+}
+
+__device__ float entrainment_rate(const float wind_speed, const float g) {
+    float rate = 0.0f;
+    const float wave_period = mean_wave_period(wind_speed, g);
+
+    if (wave_period > 0.0) {
+        const float white_cap_cov = white_cap_coverage(wind_speed);
+        rate = white_cap_cov / wave_period;
+    }
+
+    return rate;
+}
+
+__device__ float entrainment_probability(const float wind_speed, const float g, const float dt) {
+    const float rate = entrainment_rate(wind_speed, g);
+    return 1 - exp(-rate * dt);
+}
+
+__device__ float significant_wave_height(const float wind_speed, const float fetch, const float g) {
+    // Calculate the significant wave height (m)
+    // Based on the JONSWAP model and associated empirical relations.
+    // See Carter (1982) for details.
+    // windspeed: windspeed (m/s)
+    // fetch: fetch (m)
+
+    float wave_height = 0.0f;
+
+    // Avoid division by 0
+    if (wind_speed > 0.0f) {
+        // Constants for the JONSWAP model:
+        const float h_max   = 0.243f;   // Nondimensional height maximum.
+        const float h_const = 0.0016f;  // Nondimensional height constant.
+
+        // Calculate wave height
+        const float h_nodim = h_const * sqrt(g * fetch / pow(wind_speed, 2));
+        wave_height = min(h_max, h_nodim) * pow(wind_speed, 2) / g;
+    }
+
+    return wave_height;
+}
+
+__device__ void entrain(float &drifter_depth, const float wind_speed, const float g, const float dt, const float2 random_numbers) {
+    // Entrainment of particles by waves.
+    const float random_number_1 = random_numbers.x;
+    const float random_number_2 = random_numbers.y;
+    if (random_number_1 < entrainment_probability(wind_speed, g, dt)) {
+        const float Hw = significant_wave_height(wind_speed, 100000, g);
+        const float low = Hw * (1.5-0.35);
+        const float high = Hw * (1.5+0.35);
+        // Postition the enatrained particle at a random depth in the range [-Hw * (1.5-0.35), -Hw * (1.5+0.35)]
+        drifter_depth = -(random_number_2 * (high - low) + low);
+    }
+}
 
 __device__ void fill_randn(
         float* rand_numbers, const int n, 
@@ -253,24 +328,6 @@ __global__ void superSimpleDrift(
             // Move drifter with a simple forward Euler
             drifter_pos_x += u*dt;
             drifter_pos_y += v*dt;
-
-            // Influence from wind
-            if (!is_submerged(drifter_depth)) {
-                const float wind_u = water_velocity_bilinear_interpolation(nullptr, 0,
-                                                            wind_u_ptr, wind_u_pitch,
-                                                            nullptr, 0, 
-                                                            drifter_pos_x, drifter_pos_y,
-                                                            dx, dy, true);
-                const float wind_v = water_velocity_bilinear_interpolation(nullptr, 0,
-                                                            wind_v_ptr, wind_v_pitch,
-                                                            nullptr, 0, 
-                                                            drifter_pos_x, drifter_pos_y,
-                                                            dx, dy, true);
-
-                drifter_pos_x += windage*wind_u*dt;
-                drifter_pos_y += windage*wind_v*dt;
-            }
-            
             
             // Add horizontal diffusion
             drifter_pos_x += horizontal_diffusivity*rand_numbers[0]*sqrt(dt);
@@ -295,7 +352,35 @@ __global__ void superSimpleDrift(
                                    oil_density, water_viscosity, g, dt, ksi_z, water_depth,
                                    vertical_diffusivity);
             }
+            
+            // Influence from wind for surface drifters
+            if (!is_submerged(drifter_depth)) {
+                const float wind_u = water_velocity_bilinear_interpolation(nullptr, 0,
+                                                            wind_u_ptr, wind_u_pitch,
+                                                            nullptr, 0, 
+                                                            drifter_pos_x, drifter_pos_y,
+                                                            dx, dy, true);
+                const float wind_v = water_velocity_bilinear_interpolation(nullptr, 0,
+                                                            wind_v_ptr, wind_v_pitch,
+                                                            nullptr, 0, 
+                                                            drifter_pos_x, drifter_pos_y,
+                                                            dx, dy, true);
 
+                // Advection
+                drifter_pos_x += windage*wind_u*dt;
+                drifter_pos_y += windage*wind_v*dt;
+            
+                // Create 2 random numbers from a uniform distribution
+                unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
+                unsigned long long seed = seed_row[0];
+                const float2 rand_n = rand_uniform(&seed);
+                // Write seed back to global memory
+                seed_row[0] = seed;
+
+                // Entrainment of surface drifter
+                const float wind_speed = sqrt(pow(wind_u, 2) + pow(wind_v, 2));
+                entrain(drifter_depth, wind_speed, g, dt, rand_n);
+            }
 
             // Write to global memory
             drifter[0] = drifter_pos_x;

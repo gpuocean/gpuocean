@@ -97,8 +97,6 @@ class OilDrift:
             self.drifter_positions_device.release()
         self.gpu_ctx = None
         
-
-
     def getDrifterPositions(self):
         # Download the positions from the gpu (device) to the host (cpu)
         return self.drifter_positions_device.download(self.gpu_stream)
