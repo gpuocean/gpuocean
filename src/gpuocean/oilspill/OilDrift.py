@@ -5,6 +5,7 @@ import warnings
 
 
 import pycuda.driver as cuda
+import pycuda.gpuarray
 
 from gpuocean.utils import Common, RandomNumbers, WindStress
 
@@ -16,8 +17,9 @@ class OilDrift:
     At the same time, it should be mentioned that there are a lot of functions there that are never used...
     """
 
-    def __init__(self, gpu_ctx, drifter_positions, droplet_diameter, oil_density=0.8, water_density=1.025,
-                 water_viscosity=1.358e-6, g=9.81,
+    def __init__(self, gpu_ctx, drifter_positions, initial_droplet_diameter, oil_density=992, water_density=1025,
+                 oil_viscosity=1.51, water_kinematic_viscosity=1.358e-6, oil_water_ift=0.013, oil_film_thickness=1e-4,
+                 g=9.81,
                  horizontal_diffusivity=1.0, vertical_diffusivity=1.0, 
                  wind=WindStress.WindStress(), windage = 0.03,
                  block_width=32, rng_block_height=32):
@@ -54,12 +56,15 @@ class OilDrift:
                                                block_width=4, block_height=rng_block_height)
         
 
-
-        self.droplet_diameter = np.float32(droplet_diameter)
+        #self.droplet_diameter_data = pycuda.gpuarray.to_gpu_async((np.ones(self.num_drifters, dtype=np.float32) * initial_droplet_diameter), stream=self.gpu_stream)
+        self.droplet_diameters_device = Common.CUDAArray2D(self.gpu_stream, 1, self.num_drifters, 0, 0, np.ones((self.num_drifters,1)) * initial_droplet_diameter)
         self.oil_density = np.float32(oil_density)
+        self.oil_viscosity = np.float32(oil_viscosity)
         self.water_density = np.float32(water_density)
-        self.water_viscosity = np.float32(water_viscosity)
+        self.water_viscosity = np.float32(water_kinematic_viscosity)
         self.g = np.float32(g)
+        self.oil_film_thickness = np.float32(oil_film_thickness)
+        self.oil_water_ift = np.float32(oil_water_ift)
 
         # Compile cuda file found in this repository
         # To do that, we need to provide the absolute path along with the corresponding flag
@@ -72,7 +77,7 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPifffffffPiPif")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiffPifffffffPiPif")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
 
@@ -95,6 +100,8 @@ class OilDrift:
             self.rng.cleanUp()
         if self.drifter_positions_device is not None:
             self.drifter_positions_device.release()
+        if self.droplet_diameters_device is not None:
+            self.droplet_diameters_device.release()
         self.gpu_ctx = None
         
     def getDrifterPositions(self):
@@ -105,6 +112,10 @@ class OilDrift:
         # Upload new positions from the cpu (host) to the device (gpu)
         assert(drifter_positions.shape == (self.num_drifters, 3)), "expecting drifter_positions of shape "+str((self.num_drifters, 3))+" but got "+str(drifter_positions.shape)
         self.drifter_positions_device.upload(self.gpu_stream, drifter_positions)
+
+    def getDropletDiameters(self):
+        # Download the positions from the gpu (device) to the host (cpu)
+        return self.droplet_diameters_device.download(self.gpu_stream)
 
     def drift(self, sim, dt):
         # Call the kernel to simulate the drifters for dt seconds using the ocean state available in the sim
@@ -119,7 +130,8 @@ class OilDrift:
 
         # TODO: Fix wind check - it is currently a temporary solution awaiting new pull request to GPU Ocean
         self._check_wind(sim)
-
+        #print(self.droplet_diameter_data)
+        #self.droplet_diameter_data = np.int32(self.num_drifters)
         # The first three parameters to the kernel is always the subdivision of work (globale size and local size), and the gpu stream that will execute the kernel
         self.superSimpleDriftKernel.prepared_async_call(self.global_size, self.local_size, self.gpu_stream,
                                                sim.nx, sim.ny, sim.dx, sim.dy, np.float32(dt),
@@ -132,8 +144,11 @@ class OilDrift:
                                                self.drifter_positions_device.pitch,
                                                self.rng.seed.data.gpudata, self.rng.seed.pitch,
                                                self.horizontal_diffusivity, self.vertical_diffusivity,
-                                               self.droplet_diameter, self.oil_density, self.water_density,
-                                               self.water_viscosity, self.g,
+                                               self.droplet_diameters_device.data.gpudata, self.droplet_diameters_device.pitch,
+                                               self.oil_density, self.water_density,
+                                               self.oil_viscosity, self.water_viscosity,
+                                               self.oil_film_thickness, self.oil_water_ift,
+                                               self.g,
                                                self.wind_u.data.gpudata, self.wind_u.pitch,
                                                self.wind_v.data.gpudata, self.wind_v.pitch,
                                                self.windage)
