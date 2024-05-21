@@ -273,8 +273,8 @@ __global__ void superSimpleDrift(
             
             
             // Add horizontal diffusion
-            drifter_pos_x += horizontal_diffusivity*rand_numbers[0]*sqrt(dt);
-            drifter_pos_y += horizontal_diffusivity*rand_numbers[1]*sqrt(dt);
+            drifter_pos_x += rand_numbers[0]*sqrt(2*horizontal_diffusivity*dt);
+            drifter_pos_y += rand_numbers[1]*sqrt(2*horizontal_diffusivity*dt);
            
             // Assuming periodic boundary conditions
             drifter_pos_x -= floor(drifter_pos_x / (nx*dx))*(nx*dx);
