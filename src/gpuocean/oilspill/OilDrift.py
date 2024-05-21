@@ -3,7 +3,6 @@ import os
 import numpy as np
 import warnings
 import sys
-sys.path.append('/home/tor/Projects/gpuocean/src/')
 
 
 import pycuda.driver as cuda
