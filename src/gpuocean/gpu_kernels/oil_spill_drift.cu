@@ -249,7 +249,7 @@ __device__ float weber_number(
     return 2 * g * wave_height * oil_density * oil_film_thickness / oil_water_ift;
 }
 
-__device__ float reynold_number(
+__device__ float reynolds_number(
         const float oil_density,
         const float oil_film_thickness,
         const float oil_viscosity,
@@ -274,7 +274,7 @@ __device__ float weber_natural_dispersion_d50(
     // wave_height: significant wave height [m]
     // g: acceleration of gravity [m/s**2]
     const float We = weber_number(oil_density, oil_film_thickness, oil_water_ift, wave_height, g);
-    const float Re = reynold_number(oil_density, oil_film_thickness, oil_viscosity, wave_height, g);
+    const float Re = reynolds_number(oil_density, oil_film_thickness, oil_viscosity, wave_height, g);
 
     const float A = 2.251f;
     const float B = 0.027f;
@@ -414,8 +414,8 @@ __global__ void superSimpleDrift(
             drifter_pos_y += v*dt;
             
             // Add horizontal diffusion
-            drifter_pos_x += horizontal_diffusivity*rand_numbers[0]*sqrt(dt);
-            drifter_pos_y += horizontal_diffusivity*rand_numbers[1]*sqrt(dt);
+            drifter_pos_x += rand_numbers[0]*sqrt(2*horizontal_diffusivity*dt);
+            drifter_pos_y += rand_numbers[1]*sqrt(2*horizontal_diffusivity*dt);
            
             // Assuming periodic boundary conditions
             drifter_pos_x -= floor(drifter_pos_x / (nx*dx))*(nx*dx);

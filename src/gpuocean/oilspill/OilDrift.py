@@ -2,6 +2,7 @@
 import os
 import numpy as np
 import warnings
+import sys
 
 
 import pycuda.driver as cuda
