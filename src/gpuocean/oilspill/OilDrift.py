@@ -118,6 +118,11 @@ class OilDrift:
         # Download the positions from the gpu (device) to the host (cpu)
         return self.droplet_diameters_device.download(self.gpu_stream)
 
+    def setDropletDiameters(self, droplet_diameters):
+        # Upload new positions from the cpu (host) to the device (gpu)
+        assert(droplet_diameters.shape == (self.num_drifters, 1)), "expecting droplet_diameters of shape "+str((self.num_drifters, 1))+" but got "+str(droplet_diameters.shape)
+        self.droplet_diameters_device.upload(self.gpu_stream, droplet_diameters)
+
     def drift(self, sim, dt):
         # Call the kernel to simulate the drifters for dt seconds using the ocean state available in the sim
         # Note: Only pointers to GPU memory can be given to the cuda kernel function
