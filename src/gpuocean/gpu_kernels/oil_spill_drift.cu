@@ -127,8 +127,8 @@ __device__ float rise_velocity(
     if (droplet_diameter > 0.0f) {
         const float g_delro = g * (water_density - oil_density) / water_density;
         if (abs(g_delro) > 0) {
-            const float w1 = pow(droplet_diameter, 2) * g_delro / (18. * water_viscosity);
-            float w2 = 1.054 * sqrt(droplet_diameter * abs(g_delro));
+            const float w1 = pow(droplet_diameter, 2) * g_delro / (18.0f * water_viscosity);
+            float w2 = 1.054f * sqrt(droplet_diameter * abs(g_delro));
             w2 = copysignf(w2, g_delro);
             rise_velocity = w1 * w2 / (w1 + w2); // in m/s
         }
@@ -138,7 +138,7 @@ __device__ float rise_velocity(
 }
 
 __device__ float is_submerged(const float drifter_depth) {
-    return drifter_depth < 0.0;
+    return drifter_depth < 0.0f;
 }
 
 __device__ float euler_maruyama_scheme(
@@ -167,7 +167,7 @@ __device__ void vertical_transport(
 
     droplet_depth = -abs(droplet_depth + diffusion_step); // Reflect off surface
     droplet_depth = min(2 * water_depth - droplet_depth, droplet_depth); // Reflect off bottom
-    if (droplet_depth > 0.0) {
+    if (droplet_depth > 0.0f) {
         droplet_depth = water_depth * 0.5f;
     }
 
@@ -181,20 +181,20 @@ __device__ void vertical_transport(
 __device__ float white_cap_coverage(const float wind_speed) {
     // White cap coverage (fraction) for a wind speed (measured at 10m height).
     // This model is valid for wind speeds < 23.1 m/s
-    if (wind_speed < 3.7) {
+    if (wind_speed < 3.7f) {
         return 0.0f;
     }
-    if (wind_speed < 10.187 ) {
-        return 3.18 * 10e-3 * pow(wind_speed - 3.7, 3);
+    if (wind_speed < 10.187f ) {
+        return 3.18f * 10e-3 * powf(wind_speed - 3.7f, 3);
     } else {
-        return 4.82 * 10e-4 * pow(wind_speed + 1.98, 3);
+        return 4.82f * 10e-4 * powf(wind_speed + 1.98f, 3);
     }
 }
 
 
 __device__ float mean_wave_period(const float wind_speed, const float g) {
     // Mean wave period calculate from the wind speed.
-    const float period = 0.812 * 3.14 * wind_speed / g;
+    const float period = 0.812f * 3.14f * wind_speed / g;
     return period;
 }
 
@@ -203,7 +203,7 @@ __device__ float entrainment_rate(const float wind_speed, const float g) {
     float rate = 0.0f;
     const float wave_period = mean_wave_period(wind_speed, g);
 
-    if (wave_period > 0.0) {
+    if (wave_period > 0.0f) {
         const float white_cap_cov = white_cap_coverage(wind_speed);
         rate = white_cap_cov / wave_period;
     }
@@ -273,8 +273,8 @@ __device__ float weber_natural_dispersion_d50(
     // oil_film_thickness: thickness of oil film on the surface [mm]
     // wave_height: significant wave height [m]
     // g: acceleration of gravity [m/s**2]
-    const float We = weber_number(oil_density,oil_film_thickness, oil_water_ift, wave_height, g);
-    const float Re = reynolds_number(oil_density,oil_film_thickness, oil_viscosity, wave_height, g);
+    const float We = weber_number(oil_density, oil_film_thickness, oil_water_ift, wave_height, g);
+    const float Re = reynolds_number(oil_density, oil_film_thickness, oil_viscosity, wave_height, g);
 
     const float A = 2.251f;
     const float B = 0.027f;
@@ -313,15 +313,15 @@ __device__ void entrain(
     const float random_number_2 = random_numbers_uniform.y;
     if (random_number_1 < entrainment_probability(wind_speed, g, dt)) {
         const float Hs = significant_wave_height(wind_speed, 100000, g);
-        const float low = Hs * (1.5-0.35);
-        const float high = Hs * (1.5+0.35);
+        const float low = Hs * (1.5f-0.35f);
+        const float high = Hs * (1.5f+0.35f);
         // Postition the entrained particle at a random depth in the range [-Hs * (1.5-0.35), -Hs * (1.5+0.35)]
         drifter_depth = -(random_number_2 * (high - low) + low);
         const float d50n = weber_natural_dispersion_d50(oil_density, oil_viscosity, oil_water_ift, oil_film_thickness, Hs, g);
 
         // From number size distribution to volume size distribution.
         const float sigma = 0.921034f;
-        const float d50v = exp(log(d50n) + 3.0*pow(sigma, 2));
+        const float d50v = exp(log(d50n) + 3.0f*pow(sigma, 2));
 
         // Log normal distribution
         d50 = exp(random_number_normal * sigma + log(d50v));
