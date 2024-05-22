@@ -249,7 +249,7 @@ __device__ float weber_number(
     return 2 * g * wave_height * oil_density * oil_film_thickness / oil_water_ift;
 }
 
-__device__ float reynold_number(
+__device__ float reynolds_number(
         const float oil_density,
         const float oil_film_thickness,
         const float oil_viscosity,
@@ -274,7 +274,7 @@ __device__ float weber_natural_dispersion_d50(
     // wave_height: significant wave height [m]
     // g: acceleration of gravity [m/s**2]
     const float We = weber_number(oil_density,oil_film_thickness, oil_water_ift, wave_height, g);
-    const float Re = reynold_number(oil_density,oil_film_thickness, oil_viscosity, wave_height, g);
+    const float Re = reynolds_number(oil_density,oil_film_thickness, oil_viscosity, wave_height, g);
 
     const float A = 2.251f;
     const float B = 0.027f;
