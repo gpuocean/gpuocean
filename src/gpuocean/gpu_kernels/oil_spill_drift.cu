@@ -165,10 +165,18 @@ __device__ void vertical_transport(
     // Vertical diffusion step (m)
     const float diffusion_step = euler_maruyama_scheme(ksi, vertical_diffusivity);
 
+    // Conventions:
+    // droplet_depth is 0 at the surface and negative downwards
+    // water_depth is a positive number
     droplet_depth = -abs(droplet_depth + diffusion_step); // Reflect off surface
-    droplet_depth = min(2 * water_depth - droplet_depth, droplet_depth); // Reflect off bottom
+    // Handling different sign conventions here
+    droplet_depth = max(-(2 * water_depth + droplet_depth), droplet_depth); // Reflect off bottom
+    // Handle droplets above surface after reflection
+    // by putting them in the middle of the water column
+    // (should only happen very rarely, and only in very shallow water)
     if (droplet_depth > 0.0f) {
-        droplet_depth = water_depth * 0.5f;
+	// minus sign due to different conventions
+        droplet_depth = -water_depth * 0.5f;
     }
 
     // Calculate the rise velocity due to buoyancy
