@@ -196,6 +196,10 @@ class CDKLM16(Simulator.Simulator):
                          'FLUX_BALANCER': "{:.12f}f".format(flux_balancer),
                          'ATMOS_PRES_NX': int(self.atmospheric_pressure.P[0].shape[1]),
                          'ATMOS_PRES_NY': int(self.atmospheric_pressure.P[0].shape[0]),
+                         'WIND_STRESS_X_NX': int(self.wind_stress.wind_u[0].shape[1]),
+                         'WIND_STRESS_X_NY': int(self.wind_stress.wind_u[0].shape[0]),
+                         'WIND_STRESS_Y_NX': int(self.wind_stress.wind_v[0].shape[1]),
+                         'WIND_STRESS_Y_NY': int(self.wind_stress.wind_v[0].shape[0]),
                          'USE_DIRECT_LOOKUP' : bool(use_direct_lookup)
         }
         
@@ -224,9 +228,9 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifPPffi")
-        self.update_wind_stress(self.kernel, self.cdklm_swe_2D)
-        self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D)
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifPPfPPPPfi")
+        self.update_wind_stress(self.kernel)
+        self.update_atmospheric_pressure(self.kernel)
         
 
         # CUDA functions for finding max time step size:
@@ -519,8 +523,8 @@ class CDKLM16(Simulator.Simulator):
                 self.updateDt()
             local_dt = np.float32(min(self.dt, np.float32(t_end - t_now)))
             
-            wind_stress_t = np.float32(self.update_wind_stress(self.kernel, self.cdklm_swe_2D))
-            atmospheric_pressure_t = np.float32(self.update_atmospheric_pressure(self.kernel, self.cdklm_swe_2D))
+            wind_stress_t = np.float32(self.update_wind_stress(self.kernel))
+            atmospheric_pressure_t = np.float32(self.update_atmospheric_pressure(self.kernel))
             self.bc_kernel.update_bc_values(self.gpu_stream, self.t)
 
             #self.bc_kernel.boundaryCondition(self.cl_queue, \
@@ -720,11 +724,15 @@ class CDKLM16(Simulator.Simulator):
                            hv_out.data.gpudata, hv_out.pitch, \
                            self.bathymetry.Bi.data.gpudata, self.bathymetry.Bi.pitch, \
                            self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
-                           self.bathymetry.mask_value,
-                           self.atmospheric_pressure_current_arr.data.gpudata,
-                           self.atmospheric_pressure_next_arr.data.gpudata,
-                           wind_stress_t, \
+                           self.bathymetry.mask_value, \
+                           self.atmospheric_pressure_current_arr.data.gpudata, \
+                           self.atmospheric_pressure_next_arr.data.gpudata, \
                            atmospheric_pressure_t, \
+                           self.wind_stress_x_current_arr.data.gpudata, \
+                           self.wind_stress_x_next_arr.data.gpudata, \
+                           self.wind_stress_y_current_arr.data.gpudata, \
+                           self.wind_stress_y_next_arr.data.gpudata, \
+                           wind_stress_t, \
                            boundary_conditions)
             
     

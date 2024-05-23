@@ -102,13 +102,27 @@ class Simulator(object):
         #Initialize time
         self.t = t
         self.num_iterations = 0
-        
         #Initialize wind stress parameters
-        self.wind_stress_textures = {}
         self.wind_stress_timestamps = {}
-        
-        # Initialize atmospheric pressure parameters
-        self.atmospheric_pressure_textures = {}
+
+        t_max_index = len(self.wind_stress.t)-1
+        t0_index = max(0, np.searchsorted(self.wind_stress.t, self.t)-1)
+        t1_index = min(t_max_index, np.searchsorted(self.wind_stress.t, self.t))
+        self.wind_stress_x_current_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind_stress.stress_u[t0_index].shape[1], self.wind_stress.stress_u[t0_index].shape[0], 0, 0,
+                                self.wind_stress.stress_u[t0_index])
+        self.wind_stress_y_current_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind_stress.stress_v[t0_index].shape[1], self.wind_stress.stress_v[t0_index].shape[0], 0, 0,
+                                self.wind_stress.stress_v[t0_index])
+        self.wind_stress_x_next_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind_stress.stress_u[t1_index].shape[1], self.wind_stress.stress_u[t1_index].shape[0], 0, 0,
+                                self.wind_stress.stress_u[t1_index])
+        self.wind_stress_y_next_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind_stress.stress_v[t1_index].shape[1], self.wind_stress.stress_v[t1_index].shape[0], 0, 0,
+                                self.wind_stress.stress_v[t1_index])
+
+
+        #Initialize atmospheric pressure parameters
         self.atmospheric_pressure_timestamps = {}
 
         t_max_index = len(self.atmospheric_pressure.t)-1
@@ -165,20 +179,19 @@ class Simulator(object):
     """
     Function which updates the wind stress textures
     @param kernel_module Module (from get_kernel in CUDAContext)
-    @param kernel_function Kernel function (from kernel_module.get_function)
     """
-    def update_wind_stress(self, kernel_module, kernel_function):
+    def update_wind_stress(self, kernel_module):
         #Key used to access the hashmaps
         key = str(kernel_module)
         self.logger.debug("Setting up wind stress for %s", key)
-        
+
         #Compute new t0 and t1
         t_max_index = len(self.wind_stress.t)-1
         t0_index = max(0, np.searchsorted(self.wind_stress.t, self.t)-1)
         t1_index = min(t_max_index, np.searchsorted(self.wind_stress.t, self.t))
         new_t0 = self.wind_stress.t[t0_index]
         new_t1 = self.wind_stress.t[t1_index]
-        
+
         #Find the old (and update)
         old_t0 = None
         old_t1 = None
@@ -186,73 +199,45 @@ class Simulator(object):
             old_t0 = self.wind_stress_timestamps[key][0]
             old_t1 = self.wind_stress_timestamps[key][1]
         self.wind_stress_timestamps[key] = [new_t0, new_t1]
-        
+
         #Log some debug info
         self.logger.debug("Times: %s", str(self.wind_stress.t))
         self.logger.debug("Time indices: [%d, %d]", t0_index, t1_index)
         self.logger.debug("Time: %s  New interval is [%s, %s], old was [%s, %s]", \
                     self.t, new_t0, new_t1, old_t0, old_t1)
-                
-        #Get texture references
-        if (key in self.wind_stress_textures):
-            X0_texref, X1_texref, Y0_texref, Y1_texref = self.wind_stress_textures[key];
-        else:
-            X0_texref = kernel_module.get_texref("windstress_X_current")
-            Y0_texref = kernel_module.get_texref("windstress_Y_current")
-            X1_texref = kernel_module.get_texref("windstress_X_next")
-            Y1_texref = kernel_module.get_texref("windstress_Y_next")
-        
-        #Helper function to upload data to the GPU as a texture
-        def setTexture(texref, numpy_array):       
-            #Upload data to GPU and bind to texture reference
-            texref.set_array(cuda.np_to_array(numpy_array, order="C"))
-            
-            # Set texture parameters
-            texref.set_filter_mode(cuda.filter_mode.LINEAR) #bilinear interpolation
-            texref.set_address_mode(0, cuda.address_mode.CLAMP) #no indexing outside domain
-            texref.set_address_mode(1, cuda.address_mode.CLAMP)
-            texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
-            
+
+
         #If time interval has changed, upload new data
         if (new_t0 != old_t0):
             self.gpu_stream.synchronize()
             self.gpu_ctx.synchronize()
-            self.logger.debug("Updating T0")
-            setTexture(X0_texref, self.wind_stress.stress_u[t0_index])
-            setTexture(Y0_texref, self.wind_stress.stress_v[t0_index])
-            kernel_function.param_set_texref(X0_texref)
-            kernel_function.param_set_texref(Y0_texref)
+            self.logger.debug("Updating current wind stress")
+            self.wind_stress_x_current_arr.upload(self.gpu_stream, self.wind_stress.stress_u[t0_index])
+            self.wind_stress_y_current_arr.upload(self.gpu_stream, self.wind_stress.stress_v[t0_index])
             self.gpu_ctx.synchronize()
 
         if (new_t1 != old_t1):
             self.gpu_stream.synchronize()
             self.gpu_ctx.synchronize()
-            self.logger.debug("Updating T1")
-            setTexture(X1_texref, self.wind_stress.stress_u[t1_index])
-            setTexture(Y1_texref, self.wind_stress.stress_v[t1_index])
-            kernel_function.param_set_texref(X1_texref)
-            kernel_function.param_set_texref(Y1_texref)
+            self.logger.debug("Updating next wind stress")
+            self.wind_stress_x_next_arr.upload(self.gpu_stream, self.wind_stress.stress_u[t1_index])
+            self.wind_stress_y_next_arr.upload(self.gpu_stream, self.wind_stress.stress_v[t1_index])
             self.gpu_ctx.synchronize()
-                
-        # Store texture references (they are deleted if collected by python garbage collector)
-        self.logger.debug("Textures: \n[%s, %s, %s, %s]", X0_texref, X1_texref, Y0_texref, Y1_texref)
-        self.wind_stress_textures[key] = [X0_texref, X1_texref, Y0_texref, Y1_texref]
-        
+
         # Compute the wind_stress_t linear interpolation coefficient
         wind_stress_t = 0.0
         elapsed_since_t0 = (self.t-new_t0)
         time_interval = max(1.0e-10, (new_t1-new_t0))
         wind_stress_t = max(0.0, min(1.0, elapsed_since_t0 / time_interval))
         self.logger.debug("Interpolation t is %f", wind_stress_t)
-        
+
         return wind_stress_t
-        
+
     """
-    Function which updates the atmospheric pressure textures
+    Function which updates the atmospheric pressure data arrays
     @param kernel_module Module (from get_kernel in CUDAContext)
-    @param kernel_function Kernel function (from kernel_module.get_function)
     """
-    def update_atmospheric_pressure(self, kernel_module, kernel_function):
+    def update_atmospheric_pressure(self, kernel_module):
         #Key used to access the hashmaps
         key = str(kernel_module)
         self.logger.debug("Setting up atmospheric pressure for %s", key)

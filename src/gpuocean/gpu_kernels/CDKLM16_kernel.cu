@@ -487,10 +487,16 @@ __global__ void cdklm_swe_2D(
         float land_value_,
 
         //External forcing parameters
+        //Atmospheric pressure
         const float* atmospheric_pressure_current_arr,
         const float* atmospheric_pressure_next_arr,
-        const float wind_stress_t_,
         const float atmospheric_pressure_t_,
+        //Windstress
+        const float* wind_stress_x_current_arr,
+        const float* wind_stress_x_next_arr,
+        const float* wind_stress_y_current_arr,
+        const float* wind_stress_y_next_arr,
+        const float wind_stress_t_,
 
         // Boundary conditions (1: wall, 2: periodic, 3: open boundary (flow relaxation scheme))
         // Note: these are packed north, east, south, west boolean bits into an int
@@ -870,8 +876,8 @@ __global__ void cdklm_swe_2D(
             // If not land
             if (R[0][j][i] != CDKLM_DRY_FLAG) {
                 // Wind
-                const float X = WIND_STRESS_FACTOR * windStressX(wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4);
-                const float Y = WIND_STRESS_FACTOR * windStressY(wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4);
+                const float X = WIND_STRESS_FACTOR * windStress(wind_stress_x_current_arr, wind_stress_x_next_arr, wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4, WIND_STRESS_X_NX, WIND_STRESS_X_NY);
+                const float Y = WIND_STRESS_FACTOR * windStress(wind_stress_y_current_arr, wind_stress_y_next_arr, wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4, WIND_STRESS_Y_NX, WIND_STRESS_Y_NY);
 
                 // Bottom topography source terms!
                 // -g*(eta + H)*(-1)*dH/dx   * dx
