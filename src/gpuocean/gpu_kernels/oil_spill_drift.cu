@@ -192,7 +192,7 @@ __device__ float white_cap_coverage(const float wind_speed) {
     if (wind_speed < 3.7f) {
         return 0.0f;
     }
-    if (wind_speed < 10.187f )
+    if (wind_speed < 10.187f ) {
         // Dividing by 100 to convert percent to fraction
         return 3.18f * 10e-3 * powf(wind_speed - 3.7f, 3) / 100;
     } else {
