@@ -23,6 +23,7 @@ class OilDrift:
                  g=9.81,
                  horizontal_diffusivity=1.0, vertical_diffusivity=1.0, 
                  wind=WindStress.WindStress(), windage = 0.03,
+                 use_relative_positions = True,
                  block_width=32, rng_block_height=32):
 
         assert(drifter_positions.shape[1] == 3), "expecting drifter_positions to be of shape (N, 3)"
