@@ -43,7 +43,7 @@ class RandomNumbers(object):
 
     def __init__(self, gpu_ctx, gpu_stream, nx, ny,
                  use_lcg=False,
-                 xorwow_seed=None, numpy_seed=None,
+                 seed=None, xorwow_seed=None, 
                  block_width=16, block_height=16):
         """
         Class for generating random numbers within GPU Ocean.
@@ -51,6 +51,10 @@ class RandomNumbers(object):
         (ny, nx): shape of the random number array that will be generated
         use_lcg: LCG is a linear algorithm for generating a serie of pseudo-random numbers
         angle: Angle of rotation from North to y-axis as a texture (cuda.Array) or numpy array
+        seed: Integer seed for the random number generators in this class. If we use LCG, this seed is
+            passed to numpy before generating one seeded seed per thread. If we use curand (XORWOW),
+            and xorwow_seed is None, we seed the XORWOW generator based on this seed.
+        xorwow_seed: Seed for the curand XORWOW random number generator, same value as 'seed' by default
         (block_width, block_height): The size of each GPU block
         """
         
@@ -58,7 +62,7 @@ class RandomNumbers(object):
         self.gpu_stream = gpu_stream
 
         # Set numpy random state
-        self.random_state = np.random.RandomState(seed=numpy_seed)
+        self.random_state = np.random.RandomState(seed=seed)
         
         # Make sure that all variables initialized within ifs are defined
         self.rng = None
@@ -81,6 +85,8 @@ class RandomNumbers(object):
             self.host_seed = self.host_seed.astype(np.uint64, order='C')
         
         if not self.use_lcg:
+            if xorwow_seed is None:
+                xorwow_seed = seed
             if xorwow_seed is not None:
                 def set_seeder(N, seed):
                     seedarr = pycuda.gpuarray.ones_like(pycuda.gpuarray.zeros(N, dtype=np.int32), dtype=np.int32) * seed
