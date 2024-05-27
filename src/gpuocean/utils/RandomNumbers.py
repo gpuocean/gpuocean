@@ -43,7 +43,7 @@ class RandomNumbers(object):
 
     def __init__(self, gpu_ctx, gpu_stream, nx, ny,
                  use_lcg=False,
-                 xorwow_seed=None,
+                 xorwow_seed=None, numpy_seed=None,
                  block_width=16, block_height=16):
         """
         Class for generating random numbers within GPU Ocean.
@@ -58,7 +58,7 @@ class RandomNumbers(object):
         self.gpu_stream = gpu_stream
 
         # Set numpy random state
-        self.random_state = np.random.RandomState()
+        self.random_state = np.random.RandomState(seed=numpy_seed)
         
         # Make sure that all variables initialized within ifs are defined
         self.rng = None
