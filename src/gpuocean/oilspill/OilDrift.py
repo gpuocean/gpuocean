@@ -23,7 +23,7 @@ class OilDrift:
                  g=9.81,
                  horizontal_diffusivity=1.0, vertical_diffusivity=1.0, 
                  wind=WindStress.WindStress(), windage = 0.03,
-                 use_relative_positions = True,
+                 use_relative_positions = True, seed = None,
                  block_width=32, rng_block_height=32):
 
         assert(drifter_positions.shape[1] == 3), "expecting drifter_positions to be of shape (N, 3)"
@@ -54,7 +54,7 @@ class OilDrift:
         # Initialize random number generators - require one seed per drifter
         self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
                                                1, self.num_drifters, 
-                                               use_lcg=True,
+                                               use_lcg=True, seed=seed,
                                                block_width=4, block_height=rng_block_height)
         
 
