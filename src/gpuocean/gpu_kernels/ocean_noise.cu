@@ -25,27 +25,29 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "interpolation.cu"
 #include "random_number_generators.cu"
 
-texture<float, cudaTextureType2D> coriolis_f_tex;
 texture<float, cudaTextureType2D> angle_tex;
 
 
 /**
-  * Returns the coriolis parameter f from the coriolis texture. 
+  * Returns the coriolis parameter f from the coriolis data array.
+  * @param coriolis_f_arr Array of coriolis force values to interpolate from
   * @param i Cell number along x-axis, starting from (0, 0) corresponding to first cell in domain after global ghost cells
   * @param j Cell number along y-axis
   * @param nx_ Number of cells in internal domain (excluding the four ghost cells)
   * @param ny_ Number of cells in internal domain (excluding the four ghost cells)
-  * The texture is assumed to also cover the ghost cells (same shape/extent as eta)
+  * @param data_nx Number of cells along x axis for the coriolis force array
+  * @param data_ny Number of cells along y axis for the coriolis force array
+  * The data array is assumed to also cover the ghost cells (same shape/extent as eta)
   */
 __device__
-inline float coriolisF(const int i, const int j, const int nx_, const int ny_) {
+inline float coriolisF(const float* coriolis_f_arr, const int i, const int j, const int nx_, const int ny_, int data_nx, int data_ny) {
     //nx+4 to account for ghost cells
     //+0.5f to go to center of texel
     const float s = (i+0.5f) / (nx_+4.0f); 
     const float t = (j+0.5f) / (ny_+4.0f);
     //FIXME: Should implement so that subsampling does not get border issues, see
     //https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#table-lookup
-    return tex2D(coriolis_f_tex, s, t);
+    return bilinear_interpolation(coriolis_f_arr, data_nx, data_ny, s, t);
 }
 
 
@@ -259,7 +261,10 @@ __global__ void geostrophicBalance(
 
         // physical parameters
         const float g_, const float f_, const float beta_, const float y0_reference_cell_,
-        
+
+        // coriolis data array
+        const float* coriolis_f_arr,
+
         // d_eta values (coarse grid) - size [nx + 4, ny + 4]
         float* coarse_ptr_, const int coarse_pitch_,
     
@@ -347,7 +352,7 @@ __global__ void geostrophicBalance(
         // FIXME: Read from correct texture always
         float coriolis = f_ + beta_ * ((ti+0.5f)*dx_*north.x + (tj+0.5f)*dy_*north.y);
         if (f_ == 0) {
-            coriolis = coriolisF(ti, tj, nx_, ny_);
+            coriolis = coriolisF(coriolis_f_arr, ti, tj, nx_, ny_, CORIOLIS_F_NX, CORIOLIS_F_NY);
         }
         
         
@@ -408,7 +413,10 @@ __global__ void bicubicInterpolation(
     
         // physical parameters
         const float g_, const float f_, const float beta_, const float y0_reference_cell_,
-        
+
+        // coriolis data array
+        const float* coriolis_f_arr,
+
         // d_eta values (coarse grid) - size [nx + 4, ny + 4]
         float* coarse_ptr_, const int coarse_pitch_,
     
@@ -614,7 +622,7 @@ __global__ void bicubicInterpolation(
         // FIXME: Read from correct texture always
         float coriolis = f_ + beta_ * ((ti+0.5f)*dx_*north.x + (tj+0.5f)*dy_*north.y);
         if (f_ == 0) {
-            coriolis = coriolisF(ti, tj, nx_, ny_);
+            coriolis = coriolisF(coriolis_f_arr, ti, tj, nx_, ny_, CORIOLIS_F_NX, CORIOLIS_F_NY);
         }
         
         // Slope of perturbation of eta
@@ -771,6 +779,9 @@ __global__ void kl_sample_ocean_state(
         // physical parameters
         const float g_, const float f_, const float beta_,
 
+        // coriolis data array
+        const float* coriolis_f_arr,
+
         // Parameters related to the KL basis functions
         const int basis_x_start_, const int basis_x_end_,
         const int basis_y_start_, const int basis_y_end_,
@@ -907,7 +918,7 @@ __global__ void kl_sample_ocean_state(
             // FIXME: Read from correct texture always
             float coriolis = f_ + beta_ * ((ti+0.5f)*dx_*north.x + (tj+0.5f)*dy_*north.y);
             if (f_ == 0) {
-                coriolis = coriolisF(ti, tj, nx_, ny_);
+                coriolis = coriolisF(coriolis_f_arr, ti, tj, nx_, ny_, CORIOLIS_F_NX, CORIOLIS_F_NY);
             }
             
             // Slope of perturbation of eta

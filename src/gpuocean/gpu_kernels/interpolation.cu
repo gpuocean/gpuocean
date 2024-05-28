@@ -159,11 +159,11 @@ __device__ float bilinear_interpolation(const float* data,  int data_nx, int dat
  * - The interpolated value at (norm_x, norm_y).
  */
 
-    // Clamp normalized coordinates to [0, 1]
-
+    // Matching indexing to tex2D normalised coordinates
     norm_x -= 0.5f / data_nx;
     norm_y -= 0.5f / data_ny;
 
+    // Clamp normalized coordinates to [0, 1]
     norm_x = __saturatef(norm_x);
     norm_y = __saturatef(norm_y);
 

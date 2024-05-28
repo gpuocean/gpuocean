@@ -178,6 +178,55 @@ class CDKLM16(Simulator.Simulator):
         #     self.interior_domain_indices[3]:self.interior_domain_indices[1] ]
         self.interior_domain_indices = np.array([-2,-2,2,2])
 
+        def subsample_texture(data, factor):
+            ny, nx = data.shape 
+            dx, dy = 1/nx, 1/ny
+            I = interp2d(np.linspace(0.5*dx, 1-0.5*dx, nx), 
+                         np.linspace(0.5*dy, 1-0.5*dy, ny), 
+                         data, kind='linear')
+
+            new_nx, new_ny = max(2, nx//factor), max(2, ny//factor)
+            new_dx, new_dy = 1/new_nx, 1/new_ny
+            x_new = np.linspace(0.5*new_dx, 1-0.5*new_dx, new_nx)
+            y_new = np.linspace(0.5*new_dy, 1-0.5*new_dy, new_ny)
+            return I(x_new, y_new)
+
+        # Create the CPU coriolis
+        if (latitude is not None):
+            if (self.f != 0.0):
+                raise RuntimeError("Cannot specify both latitude and f. Make your mind up.")
+            coriolis_f, _ = OceanographicUtilities.calcCoriolisParams(latitude)
+            coriolis_f = coriolis_f.astype(np.float32)
+        else:
+            if (self.coriolis_beta != 0.0):
+                if (angle.size != 1):
+                    raise RuntimeError("non-constant angle cannot be combined with beta plane model (makes no sense)")
+                #Generate coordinates for all cells, including ghost cells from center to center
+                # [-3/2dx, nx+3/2dx] for ghost_cells_x == 2
+                x = np.linspace((-self.ghost_cells_x+0.5)*self.dx, (self.nx+self.ghost_cells_x-0.5)*self.dx, self.nx+2*self.ghost_cells_x)
+                y = np.linspace((-self.ghost_cells_y+0.5)*self.dy, (self.ny+self.ghost_cells_y-0.5)*self.dy, self.ny+2*self.ghost_cells_x)
+                self.logger.info("Using latitude to create Coriolis f texture ({:f}x{:f} cells)".format(x.size, y.size))
+                x, y = np.meshgrid(x, y)
+                n = x*np.sin(angle[0, 0]) + y*np.cos(angle[0, 0]) #North vector
+                coriolis_f = self.f + self.coriolis_beta*n
+            else:
+                if (self.f.size == 1):
+                    coriolis_f = np.array([[self.f]], dtype=np.float32)
+                elif (self.f.shape == eta0.shape):
+                    coriolis_f = np.array(self.f, dtype=np.float32)
+                else:
+                    raise RuntimeError("The shape of f should match up with eta or be scalar.")
+
+        if (subsample_f and coriolis_f.size >= eta0.size):
+            self.logger.info("Subsampling coriolis texture by factor " + str(subsample_f))
+            self.logger.warning("This will give inaccurate coriolis along the border!")
+            coriolis_f = subsample_texture(coriolis_f, subsample_f)
+
+        #Initialize coriolis force GPU array
+        self.coriolis_f_arr = Common.CUDAArray2D(self.gpu_stream,
+                                coriolis_f.shape[1], coriolis_f.shape[0], 0, 0,
+                                coriolis_f)
+
         defines={'block_width': block_width, 'block_height': block_height,
                          'KPSIMULATOR_DESING_EPS': "{:.12f}f".format(desingularization_eps),
                          'KPSIMULATOR_FLUX_SLOPE_EPS': "{:.12f}f".format(flux_slope_eps),
@@ -194,6 +243,8 @@ class CDKLM16(Simulator.Simulator):
                          'WIND_STRESS_FACTOR': "{:.12f}f".format(wind_stress_factor), 
                          'ONE_DIMENSIONAL': int(0),
                          'FLUX_BALANCER': "{:.12f}f".format(flux_balancer),
+                         'CORIOLIS_F_NX': int(coriolis_f.shape[1]),
+                         'CORIOLIS_F_NY': int(coriolis_f.shape[0]),
                          'ATMOS_PRES_NX': int(self.atmospheric_pressure.P[0].shape[1]),
                          'ATMOS_PRES_NY': int(self.atmospheric_pressure.P[0].shape[0]),
                          'WIND_STRESS_X_NX': int(self.wind_stress.wind_u[0].shape[1]),
@@ -228,7 +279,7 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifPPfPPPPfi")
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifPPPfPPPPfi")
         self.update_wind_stress(self.kernel)
         self.update_atmospheric_pressure(self.kernel)
         
@@ -288,21 +339,6 @@ class CDKLM16(Simulator.Simulator):
                                                            boundary_conditions_data, \
         )
 
-
-        def subsample_texture(data, factor):
-            ny, nx = data.shape 
-            dx, dy = 1/nx, 1/ny
-            I = interp2d(np.linspace(0.5*dx, 1-0.5*dx, nx), 
-                         np.linspace(0.5*dy, 1-0.5*dy, ny), 
-                         data, kind='linear')
-            
-            new_nx, new_ny = max(2, nx//factor), max(2, ny//factor)
-            new_dx, new_dy = 1/new_nx, 1/new_ny
-            x_new = np.linspace(0.5*new_dx, 1-0.5*new_dx, new_nx)
-            y_new = np.linspace(0.5*new_dy, 1-0.5*new_dy, new_ny)
-            return I(x_new, y_new)
-                                            
-                                    
         # Texture for angle
         self.angle_texref = self.kernel.get_texref("angle_tex")
         if isinstance(angle, cuda.Array):
@@ -322,53 +358,7 @@ class CDKLM16(Simulator.Simulator):
         self.angle_texref.set_address_mode(0, cuda.address_mode.CLAMP) #no indexing outside domain
         self.angle_texref.set_address_mode(1, cuda.address_mode.CLAMP)
         self.angle_texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
-        
-        
-        
-        # Texture for coriolis f
-        self.coriolis_texref = self.kernel.get_texref("coriolis_f_tex")
-        
-        # Create the CPU coriolis
-        if (latitude is not None):
-            if (self.f != 0.0):
-                raise RuntimeError("Cannot specify both latitude and f. Make your mind up.")
-            coriolis_f, _ = OceanographicUtilities.calcCoriolisParams(latitude)
-            coriolis_f = coriolis_f.astype(np.float32)
-        else:
-            if (self.coriolis_beta != 0.0):
-                if (angle.size != 1):
-                    raise RuntimeError("non-constant angle cannot be combined with beta plane model (makes no sense)")
-                #Generate coordinates for all cells, including ghost cells from center to center
-                # [-3/2dx, nx+3/2dx] for ghost_cells_x == 2
-                x = np.linspace((-self.ghost_cells_x+0.5)*self.dx, (self.nx+self.ghost_cells_x-0.5)*self.dx, self.nx+2*self.ghost_cells_x)
-                y = np.linspace((-self.ghost_cells_y+0.5)*self.dy, (self.ny+self.ghost_cells_y-0.5)*self.dy, self.ny+2*self.ghost_cells_x)
-                self.logger.info("Using latitude to create Coriolis f texture ({:f}x{:f} cells)".format(x.size, y.size))
-                x, y = np.meshgrid(x, y)
-                n = x*np.sin(angle[0, 0]) + y*np.cos(angle[0, 0]) #North vector
-                coriolis_f = self.f + self.coriolis_beta*n
-            else:
-                if (self.f.size == 1):
-                    coriolis_f = np.array([[self.f]], dtype=np.float32)
-                elif (self.f.shape == eta0.shape):
-                    coriolis_f = np.array(self.f, dtype=np.float32)
-                else:
-                    raise RuntimeError("The shape of f should match up with eta or be scalar.")
-                
-        if (subsample_f and coriolis_f.size >= eta0.size):
-            self.logger.info("Subsampling coriolis texture by factor " + str(subsample_f))
-            self.logger.warning("This will give inaccurate coriolis along the border!")
-            coriolis_f = subsample_texture(coriolis_f, subsample_f)
-        
-        #Upload data to GPU and bind to texture reference
-        self.coriolis_texref.set_array(cuda.np_to_array(np.ascontiguousarray(coriolis_f, dtype=np.float32), order="C"))
-                    
-        # Set texture parameters
-        self.coriolis_texref.set_filter_mode(cuda.filter_mode.LINEAR) #bilinear interpolation
-        self.coriolis_texref.set_address_mode(0, cuda.address_mode.CLAMP) #no indexing outside domain
-        self.coriolis_texref.set_address_mode(1, cuda.address_mode.CLAMP)
-        self.coriolis_texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
-        
-        
+
         # Small scale perturbation:
         self.model_error = None
 
@@ -725,6 +715,7 @@ class CDKLM16(Simulator.Simulator):
                            self.bathymetry.Bi.data.gpudata, self.bathymetry.Bi.pitch, \
                            self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
                            self.bathymetry.mask_value, \
+                           self.coriolis_f_arr.data.gpudata, \
                            self.atmospheric_pressure_current_arr.data.gpudata, \
                            self.atmospheric_pressure_next_arr.data.gpudata, \
                            atmospheric_pressure_t, \

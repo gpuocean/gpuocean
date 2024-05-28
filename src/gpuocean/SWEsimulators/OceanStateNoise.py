@@ -171,17 +171,34 @@ class OceanStateNoise(object):
         self.reduction_buffer = None
         reduction_buffer_host = np.zeros((1,3), dtype=np.float32)
         self.reduction_buffer = Common.CUDAArray2D(self.gpu_stream, 3, 1, 0, 0, reduction_buffer_host)
-       
+
+        #Initialize coriolis force GPU array
+        if isinstance(coriolis_f, Common.CUDAArray2D):
+            # coriolis_f is already a gpu array set as referance
+            self.coriolis_f_arr = coriolis_f
+            CORIOLIS_F_NX = int(coriolis_f.nx)
+            CORIOLIS_F_NY = int(coriolis_f.ny)
+        else:
+            #Upload data to GPU
+            self.coriolis_f_arr = Common.CUDAArray2D(self.gpu_stream,
+                                                     coriolis_f.shape[1], coriolis_f.shape[0], 0, 0,
+                                                     coriolis_f)
+            CORIOLIS_F_NX = int(coriolis_f.shape[1])
+            CORIOLIS_F_NY = int(coriolis_f.shape[0])
+        # FIXME! Allow different versions of coriolis, similar to CDKLM
+
         # Generate kernels
         self.kernels = gpu_ctx.get_kernel("ocean_noise.cu", \
                                           defines={'block_width': block_width, 'block_height': block_height, 
-                                                   'kl_rand_nx': 1, 'kl_rand_ny': 1 # Not used for this class
+                                                   'kl_rand_nx': 1, 'kl_rand_ny': 1, # Not used for this class
+                                                   'CORIOLIS_F_NX': CORIOLIS_F_NX,
+                                                   'CORIOLIS_F_NY': CORIOLIS_F_NY,
                                                 },
                                           compile_args={
                                               'options': ["--use_fast_math",
                                                           "--maxrregcount=32"]
                                           })
-        
+
         self.reduction_kernels = self.gpu_ctx.get_kernel("reductions.cu", \
                                                          defines={})
         
@@ -200,10 +217,10 @@ class OceanStateNoise(object):
         self.soarKernel.prepare("iifffffiiPiPii")
         
         self.geostrophicBalanceKernel = self.kernels.get_function("geostrophicBalance")
-        self.geostrophicBalanceKernel.prepare("iiffiiffffPiPiPiPiPif")
+        self.geostrophicBalanceKernel.prepare("iiffiiffffPPiPiPiPiPif")
         
         self.bicubicInterpolationKernel = self.kernels.get_function("bicubicInterpolation")
-        self.bicubicInterpolationKernel.prepare("iiiiffiiiiffiiffffPiPiPiPiPif")
+        self.bicubicInterpolationKernel.prepare("iiiiffiiiiffiiffffPPiPiPiPiPif")
         
         #Compute kernel launch parameters
         self.local_size = (block_width, block_height, 1)
@@ -236,25 +253,7 @@ class OceanStateNoise(object):
                     int(np.ceil( (self.nx)/float(self.local_size[0]))), \
                     int(np.ceil( (self.ny)/float(self.local_size[1]))) \
                    )
-        
-        # Texture for coriolis field
-        self.coriolis_texref = self.kernels.get_texref("coriolis_f_tex")        
-        if isinstance(coriolis_f, cuda.Array):
-            # coriolis_f is already a texture, so we just set the reference
-            self.coriolis_texref.set_array(coriolis_f)
-        else:
-            #Upload data to GPU and bind to texture reference
-            self.coriolis_texref.set_array(cuda.np_to_array(np.ascontiguousarray(coriolis_f, dtype=np.float32), order="C"))
-          
-        # Set texture parameters
-        self.coriolis_texref.set_filter_mode(cuda.filter_mode.LINEAR) #bilinear interpolation
-        self.coriolis_texref.set_address_mode(0, cuda.address_mode.CLAMP) #no indexing outside domain
-        self.coriolis_texref.set_address_mode(1, cuda.address_mode.CLAMP)
-        self.coriolis_texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
-        # FIXME! Allow different versions of coriolis, similar to CDKLM
-        
-        
-        
+
         # Texture for angle towards north
         self.angle_texref = self.kernels.get_texref("angle_tex")        
         if isinstance(angle, cuda.Array):
@@ -299,7 +298,7 @@ class OceanStateNoise(object):
                    soar_q0=soar_q0, soar_L=soar_L,
                    interpolation_factor=interpolation_factor,
                    angle=sim.angle_texref.get_array(),
-                   coriolis_f=sim.coriolis_texref.get_array(),
+                   coriolis_f=sim.coriolis_f_arr,
                    use_lcg=use_lcg, xorwow_seed=xorwow_seed,
                    block_width=block_width, block_height=block_height)
 
@@ -429,6 +428,8 @@ class OceanStateNoise(object):
                                                                 np.float32(g), np.float32(f),
                                                                 np.float32(beta), np.float32(y0_reference_cell),
                                                                 
+                                                                self.coriolis_f_arr.data.gpudata,
+
                                                                 self.coarse_buffer.data.gpudata, self.coarse_buffer.pitch,
                                                                 eta.data.gpudata, eta.pitch,
                                                                 hu.data.gpudata, hu.pitch,
@@ -444,6 +445,8 @@ class OceanStateNoise(object):
 
                                                               np.float32(g), np.float32(f),
                                                               np.float32(beta), np.float32(y0_reference_cell),
+
+                                                              self.coriolis_f_arr.data.gpudata,
 
                                                               self.coarse_buffer.data.gpudata, self.coarse_buffer.pitch,
                                                               eta.data.gpudata, eta.pitch,
