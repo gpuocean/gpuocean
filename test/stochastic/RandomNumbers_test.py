@@ -42,6 +42,9 @@ class RandomNumbersTest(unittest.TestCase):
         
         self.rng = None
         self.random_numbers = None
+
+        self.rng2 = None
+        self.random_numbers2 = None
                 
         self.floatMax = 2147483648.0
 
@@ -52,18 +55,31 @@ class RandomNumbersTest(unittest.TestCase):
             del self.rng
         if self.random_numbers is not None:
             self.random_numbers.release()
+        if self.rng2 is not None:
+            self.rng2.cleanUp()
+            del self.rng2
+        if self.random_numbers2 is not None:
+            self.random_numbers2.release()
         if self.gpu_ctx is not None:
             self.assertEqual(sys.getrefcount(self.gpu_ctx), 2)
             self.gpu_ctx = None
    
         gc.collect()
             
-    def create_rng(self, lcg):
+    def create_rng(self, lcg, seed=None):
         self.rng = RandomNumbers.RandomNumbers(self.gpu_ctx, self.gpu_stream,
                                                self.nx, self.ny,
-                                               use_lcg=lcg)
+                                               use_lcg=lcg, seed=seed)
         self.random_numbers = Common.CUDAArray2D(self.gpu_stream, self.nx, self.ny, 0, 0,
                                                 np.zeros((self.ny, self.nx), dtype=np.float32))
+        
+    def create_rng2(self, lcg, seed):
+        self.rng2 = RandomNumbers.RandomNumbers(self.gpu_ctx, self.gpu_stream,
+                                               self.nx, self.ny,
+                                               use_lcg=lcg, seed=seed)
+        self.random_numbers2 = Common.CUDAArray2D(self.gpu_stream, self.nx, self.ny, 0, 0,
+                                                np.zeros((self.ny, self.nx), dtype=np.float32))
+
 
     #########################################################################
     ### Tests 
@@ -132,3 +148,32 @@ class RandomNumbersTest(unittest.TestCase):
     
     def test_seed_diff_curand(self):
         self.seed_diff(lcg=False)
+
+    def seeded_random_numbers(self, lcg):
+        self.create_rng(lcg=lcg, seed=30)
+        self.create_rng2(lcg=lcg, seed=30)
+        msg = 'curand'
+        if lcg:
+            msg = 'lcg'
+        for uniform in [False, True]:
+            for i in range(2):
+                if uniform:
+                    self.rng.generateUniformDistribution(self.random_numbers)
+                    self.rng2.generateUniformDistribution(self.random_numbers2)
+                    msg = msg + " uniform"
+                else:
+                    self.rng.generateNormalDistribution(self.random_numbers)
+                    self.rng2.generateNormalDistribution(self.random_numbers2)
+                    msg = msg + " normal"
+                random1 = self.random_numbers.download(self.gpu_stream)
+                random2 = self.random_numbers2.download(self.gpu_stream)
+                tol = 10
+                assert2DListAlmostEqual(self, random1.tolist(), random2.tolist(), tol, msg+" iteration "+str(i))
+
+    def test_seeded_random_numbers_lcg(self):
+        self.seeded_random_numbers(lcg=True)
+
+    def test_seeded_random_numbers_curand(self):
+        self.seeded_random_numbers(lcg=False)
+
+
