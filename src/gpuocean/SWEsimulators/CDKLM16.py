@@ -226,6 +226,18 @@ class CDKLM16(Simulator.Simulator):
         self.coriolis_f_arr = Common.CUDAArray2D(self.gpu_stream,
                                 coriolis_f.shape[1], coriolis_f.shape[0], 0, 0,
                                 coriolis_f)
+        
+        #Subsample angle
+        if (subsample_angle and angle.size >= eta0.size):
+            self.logger.info("Subsampling angle texture by factor " + str(subsample_angle))
+            self.logger.warning("This will give inaccurate angle along the border!")
+            angle = subsample_texture(angle, subsample_angle)
+                                    
+        #Initialize angle GPU array
+        self.angle_arr = Common.CUDAArray2D(self.gpu_stream,
+                                angle.shape[1], angle.shape[0], 0, 0,
+                                angle)
+
 
         defines={'block_width': block_width, 'block_height': block_height,
                          'KPSIMULATOR_DESING_EPS': "{:.12f}f".format(desingularization_eps),
@@ -245,6 +257,8 @@ class CDKLM16(Simulator.Simulator):
                          'FLUX_BALANCER': "{:.12f}f".format(flux_balancer),
                          'CORIOLIS_F_NX': int(coriolis_f.shape[1]),
                          'CORIOLIS_F_NY': int(coriolis_f.shape[0]),
+                         'ANGLE_NX': int(angle.shape[1]),
+                         'ANGLE_NY': int(angle.shape[0]),
                          'ATMOS_PRES_NX': int(self.atmospheric_pressure.P[0].shape[1]),
                          'ATMOS_PRES_NY': int(self.atmospheric_pressure.P[0].shape[0]),
                          'WIND_STRESS_X_NX': int(self.wind_stress.wind_u[0].shape[1]),
@@ -279,7 +293,7 @@ class CDKLM16(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.cdklm_swe_2D = self.kernel.get_function("cdklm_swe_2D")
-        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifPPPfPPPPfi")
+        self.cdklm_swe_2D.prepare("fiPiPiPiPiPiPiPiPifPPPPfPPPPfi")
         self.update_wind_stress(self.kernel)
         self.update_atmospheric_pressure(self.kernel)
         
@@ -338,26 +352,6 @@ class CDKLM16(Simulator.Simulator):
                                                            self.boundary_conditions, \
                                                            boundary_conditions_data, \
         )
-
-        # Texture for angle
-        self.angle_texref = self.kernel.get_texref("angle_tex")
-        if isinstance(angle, cuda.Array):
-            # angle is already a texture, so we just set the texture reference
-            self.angle_texref.set_array(angle)
-        else:
-            #Upload data to GPU and bind to texture reference
-            if (subsample_angle and angle.size >= eta0.size):
-                self.logger.info("Subsampling angle texture by factor " + str(subsample_angle))
-                self.logger.warning("This will give inaccurate angle along the border!")
-                angle = subsample_texture(angle, subsample_angle)
-                
-            self.angle_texref.set_array(cuda.np_to_array(np.ascontiguousarray(angle, dtype=np.float32), order="C"))
-                    
-        # Set texture parameters
-        self.angle_texref.set_filter_mode(cuda.filter_mode.LINEAR) #bilinear interpolation
-        self.angle_texref.set_address_mode(0, cuda.address_mode.CLAMP) #no indexing outside domain
-        self.angle_texref.set_address_mode(1, cuda.address_mode.CLAMP)
-        self.angle_texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
 
         # Small scale perturbation:
         self.model_error = None
@@ -716,6 +710,7 @@ class CDKLM16(Simulator.Simulator):
                            self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
                            self.bathymetry.mask_value, \
                            self.coriolis_f_arr.data.gpudata, \
+                           self.angle_arr.data.gpudata, \
                            self.atmospheric_pressure_current_arr.data.gpudata, \
                            self.atmospheric_pressure_next_arr.data.gpudata, \
                            atmospheric_pressure_t, \

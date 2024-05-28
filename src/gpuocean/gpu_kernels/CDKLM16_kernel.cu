@@ -43,6 +43,8 @@ texture<float, cudaTextureType2D> angle_tex;
   * @param coriolis_f_arr Array of coriolis force values to interpolate from
   * @param i Cell number along x-axis, starting from (0, 0) corresponding to first cell in domain after global ghost cells
   * @param j Cell number along y-axis
+  * @param data_nx Number of cells along x axis for the coriolis array
+  * @param data_ny Number of cells along y axis for the coriolis array
   * The texture is assumed to also cover the ghost cells (same shape/extent as eta)
   */
 __device__
@@ -60,16 +62,19 @@ inline float coriolisF(const float* coriolis_f_arr, const int i, const int j, in
 
 /**
   * Decompose the north vector to x and y coordinates
+  * @param angle_arr Array of angle values to interpolate from
   * @param i Cell number along x-axis, starting from (0, 0) corresponding to first cell in domain after global ghost cells
   * @param j Cell number along y-axis
+  * @param data_nx Number of cells along x axis for the angle array
+  * @param data_ny Number of cells along y axis for the angle array
   */
 __device__
-inline float2 getNorth(const int i, const int j) {
+inline float2 getNorth(const float* angle_arr, const int i, const int j, int data_nx, int data_ny) {
     //nx+4 to account for ghost cells
     //+0.5f to go to center of texel
     const float s = (i+0.5f) / (NX+4.0f);
     const float t = (j+0.5f) / (NY+4.0f);
-    const float angle = tex2D(angle_tex, s, t);
+    const float angle = bilinear_interpolation(angle_arr, data_nx, data_ny, s, t);
     //FIXME: Should implement so that subsampling does not get border issues, see
     //https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#table-lookup
     return make_float2(sinf(angle), cosf(angle));
@@ -492,6 +497,9 @@ __global__ void cdklm_swe_2D(
         //Coriolis
         const float* coriolis_f_arr,
 
+        //Angle data array
+        const float* angle_arr,
+
         //External forcing parameters
         //Atmospheric pressure
         const float* atmospheric_pressure_current_arr,
@@ -698,7 +706,7 @@ __global__ void cdklm_swe_2D(
             }
             
             // Get north vector for thread (bx + k, by +l)
-            const float2 local_north = getNorth(bx+k, by+l);
+            const float2 local_north = getNorth(angle_arr, bx+k, by+l, ANGLE_NX, ANGLE_NY);
             
             const float left_coriolis_f   = coriolisF(coriolis_f_arr, bx+k-1, by+l, CORIOLIS_F_NX, CORIOLIS_F_NY);
             const float center_coriolis_f = coriolisF(coriolis_f_arr, bx+k  , by+l, CORIOLIS_F_NX, CORIOLIS_F_NY);
@@ -735,7 +743,7 @@ __global__ void cdklm_swe_2D(
     // Get Coriolis terms needed for fluxes etc.
     const float coriolis_f_central = coriolisF(coriolis_f_arr, ti, tj, CORIOLIS_F_NX, CORIOLIS_F_NY);
     // North and east vector in xy-coordinate system
-    const float2 north = getNorth(ti, tj);
+    const float2 north = getNorth(angle_arr, ti, tj, ANGLE_NX, ANGLE_NY);
     const float2 east = make_float2(north.y, -north.x);
     
     { //Scope
@@ -804,7 +812,7 @@ __global__ void cdklm_swe_2D(
             }
             
             // Get north and east vectors for thread (bx + k, by +l)
-            const float2 local_north = getNorth(bx+k, by+l);
+            const float2 local_north = getNorth(angle_arr, bx+k, by+l, ANGLE_NX, ANGLE_NY);
             const float2 local_east = make_float2(local_north.y, -local_north.x);
             
             const float lower_coriolis_f  = coriolisF(coriolis_f_arr, bx+k, by+l-1, CORIOLIS_F_NX, CORIOLIS_F_NY);

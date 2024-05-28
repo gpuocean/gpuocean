@@ -187,12 +187,29 @@ class OceanStateNoise(object):
             CORIOLIS_F_NY = int(coriolis_f.shape[0])
         # FIXME! Allow different versions of coriolis, similar to CDKLM
 
+        #Initialize angle GPU array
+        #Texture for angle towards north
+        if isinstance(angle, Common.CUDAArray2D):
+            # coriolis_f is already a gpu array set as referance
+            self.angle_arr = angle
+            ANGLE_NX = int(angle.nx)
+            ANGLE_NY = int(angle.ny)
+        else:
+            #Upload data to GPU
+            self.angle_arr = Common.CUDAArray2D(self.gpu_stream,
+                                                     angle.shape[1], angle.shape[0], 0, 0,
+                                                     angle)
+            ANGLE_NX = int(angle.shape[1])
+            ANGLE_NY = int(angle.shape[0])
+
         # Generate kernels
         self.kernels = gpu_ctx.get_kernel("ocean_noise.cu", \
                                           defines={'block_width': block_width, 'block_height': block_height, 
                                                    'kl_rand_nx': 1, 'kl_rand_ny': 1, # Not used for this class
                                                    'CORIOLIS_F_NX': CORIOLIS_F_NX,
                                                    'CORIOLIS_F_NY': CORIOLIS_F_NY,
+                                                   'ANGLE_NX': ANGLE_NX,
+                                                   'ANGLE_NY': ANGLE_NY,
                                                 },
                                           compile_args={
                                               'options': ["--use_fast_math",
@@ -217,10 +234,10 @@ class OceanStateNoise(object):
         self.soarKernel.prepare("iifffffiiPiPii")
         
         self.geostrophicBalanceKernel = self.kernels.get_function("geostrophicBalance")
-        self.geostrophicBalanceKernel.prepare("iiffiiffffPPiPiPiPiPif")
+        self.geostrophicBalanceKernel.prepare("iiffiiffffPPPiPiPiPiPif")
         
         self.bicubicInterpolationKernel = self.kernels.get_function("bicubicInterpolation")
-        self.bicubicInterpolationKernel.prepare("iiiiffiiiiffiiffffPPiPiPiPiPif")
+        self.bicubicInterpolationKernel.prepare("iiiiffiiiiffiiffffPPPiPiPiPiPif")
         
         #Compute kernel launch parameters
         self.local_size = (block_width, block_height, 1)
@@ -253,22 +270,6 @@ class OceanStateNoise(object):
                     int(np.ceil( (self.nx)/float(self.local_size[0]))), \
                     int(np.ceil( (self.ny)/float(self.local_size[1]))) \
                    )
-
-        # Texture for angle towards north
-        self.angle_texref = self.kernels.get_texref("angle_tex")        
-        if isinstance(angle, cuda.Array):
-            # angle is already a texture, so we just set the reference
-            self.angle_texref.set_array(angle)
-        else:
-            #Upload data to GPU and bind to texture reference
-            self.angle_texref.set_array(cuda.np_to_array(np.ascontiguousarray(angle, dtype=np.float32), order="C"))
-          
-        # Set texture parameters
-        self.angle_texref.set_filter_mode(cuda.filter_mode.LINEAR) #bilinear interpolation
-        self.angle_texref.set_address_mode(0, cuda.address_mode.CLAMP) #no indexing outside domain
-        self.angle_texref.set_address_mode(1, cuda.address_mode.CLAMP)
-        self.angle_texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
-        
         
     def __del__(self):
         self.cleanUp()
@@ -297,7 +298,7 @@ class OceanStateNoise(object):
                    sim.boundary_conditions, staggered,
                    soar_q0=soar_q0, soar_L=soar_L,
                    interpolation_factor=interpolation_factor,
-                   angle=sim.angle_texref.get_array(),
+                   angle=sim.angle_arr,
                    coriolis_f=sim.coriolis_f_arr,
                    use_lcg=use_lcg, xorwow_seed=xorwow_seed,
                    block_width=block_width, block_height=block_height)
@@ -429,6 +430,7 @@ class OceanStateNoise(object):
                                                                 np.float32(beta), np.float32(y0_reference_cell),
                                                                 
                                                                 self.coriolis_f_arr.data.gpudata,
+                                                                self.angle_arr.data.gpudata,
 
                                                                 self.coarse_buffer.data.gpudata, self.coarse_buffer.pitch,
                                                                 eta.data.gpudata, eta.pitch,
@@ -447,6 +449,7 @@ class OceanStateNoise(object):
                                                               np.float32(beta), np.float32(y0_reference_cell),
 
                                                               self.coriolis_f_arr.data.gpudata,
+                                                              self.angle_arr.data.gpudata,
 
                                                               self.coarse_buffer.data.gpudata, self.coarse_buffer.pitch,
                                                               eta.data.gpudata, eta.pitch,

@@ -58,14 +58,16 @@ inline float coriolisF(const float* coriolis_f_arr, const int i, const int j, co
   * @param j Cell number along y-axis
   * @param nx_ Number of cells in internal domain (excluding the four ghost cells)
   * @param ny_ Number of cells in internal domain (excluding the four ghost cells)
+  * @param data_nx Number of cells along x axis for the angle array
+  * @param data_ny Number of cells along y axis for the angle array
   */
 __device__
-inline float2 getNorth(const int i, const int j, const int nx_, const int ny_) {
+inline float2 getNorth(const float* angle_arr, const int i, const int j, const int nx_, const int ny_, int data_nx, int data_ny) {
     //nx+4 to account for ghost cells
     //+0.5f to go to center of texel
     const float s = (i+0.5f) / (nx_+4.0f);
     const float t = (j+0.5f) / (ny_+4.0f);
-    const float angle = tex2D(angle_tex, s, t);
+    const float angle = bilinear_interpolation(angle_arr, s, t, data_nx, data_ny);
     //FIXME: Should implement so that subsampling does not get border issues, see
     //https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#table-lookup
     return make_float2(sinf(angle), cosf(angle));
@@ -265,6 +267,9 @@ __global__ void geostrophicBalance(
         // coriolis data array
         const float* coriolis_f_arr,
 
+        // angle data array
+        const float* angle_arr,
+
         // d_eta values (coarse grid) - size [nx + 4, ny + 4]
         float* coarse_ptr_, const int coarse_pitch_,
     
@@ -347,7 +352,7 @@ __global__ void geostrophicBalance(
         const int eta_ty = ty+1;
 
         // Get vector towards north.
-        const float2 north = getNorth(ti, tj, nx_, ny_);
+        const float2 north = getNorth(angle_arr, ti, tj, nx_, ny_, ANGLE_NX, ANGLE_NY);
         
         // FIXME: Read from correct texture always
         float coriolis = f_ + beta_ * ((ti+0.5f)*dx_*north.x + (tj+0.5f)*dy_*north.y);
@@ -416,6 +421,9 @@ __global__ void bicubicInterpolation(
 
         // coriolis data array
         const float* coriolis_f_arr,
+
+        // angle data array
+        const float* angle_arr,
 
         // d_eta values (coarse grid) - size [nx + 4, ny + 4]
         float* coarse_ptr_, const int coarse_pitch_,
@@ -617,7 +625,7 @@ __global__ void bicubicInterpolation(
         const int eta_ty = ty + 1;
         
         // Get vector towards north.
-        const float2 north = getNorth(ti, tj, nx_, ny_);
+        const float2 north = getNorth(angle_arr, ti, tj, nx_, ny_, ANGLE_NX, ANGLE_NY);
         
         // FIXME: Read from correct texture always
         float coriolis = f_ + beta_ * ((ti+0.5f)*dx_*north.x + (tj+0.5f)*dy_*north.y);
@@ -782,6 +790,9 @@ __global__ void kl_sample_ocean_state(
         // coriolis data array
         const float* coriolis_f_arr,
 
+        // angle data array
+        const float* angle_arr,
+
         // Parameters related to the KL basis functions
         const int basis_x_start_, const int basis_x_end_,
         const int basis_y_start_, const int basis_y_end_,
@@ -913,7 +924,7 @@ __global__ void kl_sample_ocean_state(
                                        Hi_shmem[ty+1][tx] + Hi_shmem[ty+1][tx+1]   );
 
             // Get vector towards north.
-            const float2 north = getNorth(ti, tj, nx_, ny_);
+            const float2 north = getNorth(angle_arr, ti, tj, nx_, ny_, ANGLE_NX, ANGLE_NY);
             
             // FIXME: Read from correct texture always
             float coriolis = f_ + beta_ * ((ti+0.5f)*dx_*north.x + (tj+0.5f)*dy_*north.y);
