@@ -115,6 +115,29 @@ __device__ float water_velocity_bilinear_interpolation(
     return (1-y_factor)*vel_y0 + y_factor*vel_y1;
 }
 
+__device__ void boundary_conditions(
+        float& rel_pos_x, float& rel_pos_y,
+        const float ref_pos_x, const float ref_pos_y,
+        const int nx, const int ny,
+        const float dx, const float dy) {
+    // Deal with domain-related boundary conditions 
+
+    const float abs_pos_x = rel_pos_x + ref_pos_x;
+    const float abs_pos_y = rel_pos_y + ref_pos_y;
+    // TODO: What do we do with "open" boundary conditions
+    // Assuming periodic boundary conditions
+    if (abs_pos_x < 0.0f) {
+        rel_pos_x += nx*dx;
+    } else if (abs_pos_x > nx*dx) {
+        rel_pos_x -= nx*dx;
+    }
+    if (abs_pos_y < 0.0f) {
+        rel_pos_y += ny*dy;
+    } else if (abs_pos_y > ny*dy) {
+        rel_pos_y -= ny*dy;
+    }
+}
+
 __device__ float rise_velocity(
         const float droplet_diameter,
         const float water_density,
@@ -369,7 +392,8 @@ __global__ void superSimpleDrift(
         float* Hm_ptr, const int Hm_pitch,
 
         const int num_drifters,
-        float* drifters_positions, const int drifters_pitch,
+        float* relative_positions, const int relative_positions_pitch,
+        const float* reference_positions, const int reference_positions_pitch,
         unsigned long long* seed_ptr, int seed_pitch, 
         const float horizontal_diffusivity,
         const float vertical_diffusivity,
@@ -398,12 +422,19 @@ __global__ void superSimpleDrift(
             float rand_numbers [5];
             fill_randn(rand_numbers, 5, seed_ptr, seed_pitch, ti);
             
-            // Obtain pointer to our drifter:
-            float* drifter = (float*) ((char*) drifters_positions + drifters_pitch*ti);
-            float drifter_pos_x = drifter[0];
-            float drifter_pos_y = drifter[1];
-            float drifter_depth = drifter[2];
+            // Obtain pointer to our Lagrangian drifter:
+            float* relative_position = (float*) ((char*) relative_positions + relative_positions_pitch*ti);
+            float rel_pos_x = relative_position[0];
+            float rel_pos_y = relative_position[1];
+            float drifter_depth = relative_position[2];
 
+            float* reference_position = (float*) ((char*) reference_positions + reference_positions_pitch*ti);
+            float ref_pos_x = reference_position[0];
+            float ref_pos_y = reference_position[1];
+            
+            float abs_pos_x = rel_pos_x + ref_pos_x;
+            float abs_pos_y = rel_pos_y + ref_pos_y;
+            
             // Pointer to droplet diameter
             float* droplet_diameter = (float*) ((char*) droplet_diameters + droplet_diameter_pitch*ti);
             float d50 = droplet_diameter[0];
@@ -411,31 +442,28 @@ __global__ void superSimpleDrift(
             const float u = water_velocity_bilinear_interpolation(eta_ptr, eta_pitch,
                                                             hu_ptr, hu_pitch,
                                                             Hm_ptr, Hm_pitch, 
-                                                            drifter_pos_x, drifter_pos_y,
+                                                            abs_pos_x, abs_pos_y,
                                                             dx, dy, false);
             const float v = water_velocity_bilinear_interpolation(eta_ptr, eta_pitch,
                                                             hv_ptr, hv_pitch,
                                                             Hm_ptr, Hm_pitch, 
-                                                            drifter_pos_x, drifter_pos_y,
+                                                            abs_pos_x, abs_pos_y,
                                                             dx, dy, false);
 
             // Move drifter with a simple forward Euler
-            drifter_pos_x += u*dt;
-            drifter_pos_y += v*dt;
+            rel_pos_x += u*dt;
+            rel_pos_y += v*dt;
             
             // Add horizontal diffusion
-            drifter_pos_x += rand_numbers[0]*sqrt(2*horizontal_diffusivity*dt);
-            drifter_pos_y += rand_numbers[1]*sqrt(2*horizontal_diffusivity*dt);
+            rel_pos_x += rand_numbers[0]*sqrt(2*horizontal_diffusivity*dt);
+            rel_pos_y += rand_numbers[1]*sqrt(2*horizontal_diffusivity*dt);
            
-            // Assuming periodic boundary conditions
-            drifter_pos_x -= floor(drifter_pos_x / (nx*dx))*(nx*dx);
-            drifter_pos_y -= floor(drifter_pos_y / (ny*dy))*(ny*dy);
-
+           
             // Move drifter vertically.
             if (is_submerged(drifter_depth)) {
                 // Find the local water depth
-                const int cell_id_x = (int)(floor(drifter_pos_x/dx) + 2);
-                const int cell_id_y = (int)(floor(drifter_pos_y/dy) + 2);
+                const int cell_id_x = (int)(floor(abs_pos_x/dx) + 2);
+                const int cell_id_y = (int)(floor(abs_pos_y/dy) + 2);
                 const float* Hm_row = (float*) ((char*) Hm_ptr + Hm_pitch*cell_id_y);
                 const float water_depth = Hm_row[cell_id_x];
 
@@ -450,17 +478,17 @@ __global__ void superSimpleDrift(
                 const float wind_u = water_velocity_bilinear_interpolation(nullptr, 0,
                                                             wind_u_ptr, wind_u_pitch,
                                                             nullptr, 0, 
-                                                            drifter_pos_x, drifter_pos_y,
+                                                            abs_pos_x, abs_pos_y,
                                                             dx, dy, true);
                 const float wind_v = water_velocity_bilinear_interpolation(nullptr, 0,
                                                             wind_v_ptr, wind_v_pitch,
                                                             nullptr, 0, 
-                                                            drifter_pos_x, drifter_pos_y,
+                                                            abs_pos_x, abs_pos_y,
                                                             dx, dy, true);
 
                 // Advection
-                drifter_pos_x += windage*wind_u*dt;
-                drifter_pos_y += windage*wind_v*dt;
+                rel_pos_x += windage*wind_u*dt;
+                rel_pos_y += windage*wind_v*dt;
             
                 // Create 2 random numbers from a uniform distribution
                 unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
@@ -474,10 +502,15 @@ __global__ void superSimpleDrift(
                 entrain(drifter_depth, d50, wind_speed, g, dt, rand_n_uniform, rand_numbers[3], oil_density, oil_viscosity, oil_water_ift, oil_film_thickness);
             }
 
+            // Assuming periodic boundary conditions
+            boundary_conditions(rel_pos_x, rel_pos_y, 
+                                ref_pos_x, ref_pos_y, 
+                                nx, ny, dx, dy);
+
             // Write to global memory
-            drifter[0] = drifter_pos_x;
-            drifter[1] = drifter_pos_y;
-            drifter[2] = drifter_depth;
+            relative_position[0] = rel_pos_x;
+            relative_position[1] = rel_pos_y;
+            relative_position[2] = drifter_depth;
             droplet_diameter[0] = d50;
  
         }

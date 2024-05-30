@@ -46,11 +46,28 @@ class OilDrift:
         self.local_size = (self.block_width, self.block_height, 1)
         self.global_size = (int(np.ceil((self.num_drifters + 1)/float(self.block_width))), 1)
         
+        # Initialize arrays for Lagrangian positions 
+        # A particle's position is made up of reference_position + relative_position
+        # where the reference_position is kept constant and the relative_position is the dynamic part.
+        # Relative positions are only used horizontally, the vertical positions
+        # are always absolute.
+        self.use_relative_positions = use_relative_positions
+        self.reference_positions = np.zeros((self.num_drifters, 2), dtype=np.float32)
+        relative_positions = drifter_positions.copy()
+        if self.use_relative_positions:
+            self.reference_positions[:, :] = relative_positions[:, :2]
+            relative_positions[:, :2] = 0.0
+
         # Allocate GPU memory and intialize using the 2D Array utility function, which is a wrapper around pycuda.gpuarray
         # Data size parameters are given by the signature (_, nx, ny, ghost_cells_x, ghost_cells_y, _)
-        self.drifter_positions_device = Common.CUDAArray2D(self.gpu_stream, 
+        
+        self.relative_positions_device = Common.CUDAArray2D(self.gpu_stream, 
                                                            3, self.num_drifters, 0, 0,
-                                                           drifter_positions)
+                                                           relative_positions)
+        self.reference_positions_device = Common.CUDAArray2D(self.gpu_stream, 
+                                                            2, self.num_drifters, 0, 0,
+                                                            self.reference_positions)
+
         # Initialize random number generators - require one seed per drifter
         self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream,
                                                1, self.num_drifters, 
@@ -79,7 +96,7 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiffPifffffffPiPif")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiPiffPifffffffPiPif")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
 
@@ -100,20 +117,29 @@ class OilDrift:
     def cleanUp(self):
         if self.rng is not None:
             self.rng.cleanUp()
-        if self.drifter_positions_device is not None:
-            self.drifter_positions_device.release()
+        if self.relative_positions_device is not None:
+            self.relative_positions_device.release()
+        if self.reference_positions_device is not None:
+            self.reference_positions_device.release()
         if self.droplet_diameters_device is not None:
             self.droplet_diameters_device.release()
         self.gpu_ctx = None
         
     def getDrifterPositions(self):
         # Download the positions from the gpu (device) to the host (cpu)
-        return self.drifter_positions_device.download(self.gpu_stream)
+        drifter_positions = self.relative_positions_device.download(self.gpu_stream)
+        drifter_positions[:, :2] += self.reference_positions 
+        return drifter_positions
 
     def setDrifterPositions(self, drifter_positions):
         # Upload new positions from the cpu (host) to the device (gpu)
         assert(drifter_positions.shape == (self.num_drifters, 3)), "expecting drifter_positions of shape "+str((self.num_drifters, 3))+" but got "+str(drifter_positions.shape)
-        self.drifter_positions_device.upload(self.gpu_stream, drifter_positions)
+        relative_positions = drifter_positions.copy()
+        if self.use_relative_positions:
+            self.reference_positions[:, :] = relative_positions[:, :2]
+            self.reference_positions_device.upload(self.gpu_stream, self.reference_positions)
+            relative_positions[:, :2] = 0.0
+        self.relative_positions_device.upload(self.gpu_stream, relative_positions)
 
     def getDropletDiameters(self):
         # Download the positions from the gpu (device) to the host (cpu)
@@ -147,8 +173,10 @@ class OilDrift:
                                                sim.gpu_data.hv0.data.gpudata, sim.gpu_data.hv0.pitch,
                                                sim.bathymetry.Bm.data.gpudata, sim.bathymetry.Bm.pitch,
                                                np.int32(self.num_drifters),
-                                               self.drifter_positions_device.data.gpudata,
-                                               self.drifter_positions_device.pitch,
+                                               self.relative_positions_device.data.gpudata,
+                                               self.relative_positions_device.pitch,
+                                               self.reference_positions_device.data.gpudata,
+                                               self.reference_positions_device.pitch,
                                                self.rng.seed.data.gpudata, self.rng.seed.pitch,
                                                self.horizontal_diffusivity, self.vertical_diffusivity,
                                                self.droplet_diameters_device.data.gpudata, self.droplet_diameters_device.pitch,
