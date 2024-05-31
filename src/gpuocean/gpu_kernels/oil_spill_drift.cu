@@ -369,13 +369,31 @@ __device__ void fill_randn(
     unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
     unsigned long long seed = seed_row[0];
     
-    for (int i = 0; i < 3; i++) {
+    // rand_numbers[0] = 0.1f;
+    // rand_numbers[1] = 0.2f;
+    // rand_numbers[2] = 0.3f;
+    // rand_numbers[3] = 0.4f;
+    // rand_numbers[4] = 0.5f;
+    
+    int i = 0;
+    while (i < n) {
         float2 rand_n = rand_normal(&seed);
-        rand_numbers[i*2] = rand_n.x;
-        if (i < (int)(floor(n/2.0))) {
-            rand_numbers[i*2+1] = rand_n.y;
+        rand_numbers[i] = rand_n.x;
+        i++;
+        if (i < n) {
+            rand_numbers[i] = rand_n.y;
+            i++;
         }
     }
+    // for (int i = 0; i < 3; i++) {
+    //     float2 rand_n = rand_normal(&seed);
+    //     // rand_numbers[i*2] = 0.1f*i*2;
+    //     rand_numbers[i*2] = rand_n.x;
+    //     if (i < (int)(floor(n/2.0f))) {
+    //         // rand_numbers[i*2+1] = 0.1f*(i*2 + 1);
+    //         rand_numbers[i*2+1] = rand_n.y;
+    //     }
+    // }
     // Write seed back to global memory
     seed_row[0] = seed;
 }
@@ -419,8 +437,8 @@ __global__ void superSimpleDrift(
         if (ti < num_drifters ) {
 
             // Generate 5 random numbers sampled from N(0, 1) 
-            float rand_numbers [5];
-            fill_randn(rand_numbers, 5, seed_ptr, seed_pitch, ti);
+            // float rand_numbers [5];
+            // fill_randn(rand_numbers, 5, seed_ptr, seed_pitch, ti);
             
             // Obtain pointer to our Lagrangian drifter:
             float* relative_position = (float*) ((char*) relative_positions + relative_positions_pitch*ti);
@@ -438,6 +456,12 @@ __global__ void superSimpleDrift(
             // Pointer to droplet diameter
             float* droplet_diameter = (float*) ((char*) droplet_diameters + droplet_diameter_pitch*ti);
             float d50 = droplet_diameter[0];
+
+            // Read random seed
+            unsigned long long* seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
+            unsigned long long seed = seed_row[0];
+            
+
             // Read and compute water velocity within cell
             const float u = water_velocity_bilinear_interpolation(eta_ptr, eta_pitch,
                                                             hu_ptr, hu_pitch,
@@ -449,16 +473,18 @@ __global__ void superSimpleDrift(
                                                             Hm_ptr, Hm_pitch, 
                                                             abs_pos_x, abs_pos_y,
                                                             dx, dy, false);
-
+            
             // Move drifter with a simple forward Euler
             rel_pos_x += u*dt;
             rel_pos_y += v*dt;
             
             // Add horizontal diffusion
-            rel_pos_x += rand_numbers[0]*sqrt(2*horizontal_diffusivity*dt);
-            rel_pos_y += rand_numbers[1]*sqrt(2*horizontal_diffusivity*dt);
+            float2 horizontal_diffusion = rand_normal(&seed);
+            // seed++;
+            rel_pos_x += horizontal_diffusion.x*0.001; //*sqrt(2*horizontal_diffusivity*dt);
+            rel_pos_y += horizontal_diffusion.y*sqrt(2*horizontal_diffusivity*dt);
            
-           
+            /*
             // Move drifter vertically.
             if (is_submerged(drifter_depth)) {
                 // Find the local water depth
@@ -506,13 +532,160 @@ __global__ void superSimpleDrift(
             boundary_conditions(rel_pos_x, rel_pos_y, 
                                 ref_pos_x, ref_pos_y, 
                                 nx, ny, dx, dy);
-
+            */
             // Write to global memory
-            relative_position[0] = rel_pos_x;
+            relative_position[0] = rel_pos_x;// + rand_numbers[0] + rand_numbers[1] + rand_numbers[2] + rand_numbers[3] + rand_numbers[4] ;
             relative_position[1] = rel_pos_y;
             relative_position[2] = drifter_depth;
             droplet_diameter[0] = d50;
- 
+
+            seed_row[0] = seed;
+        }
+    }
+} // extern "C"
+
+
+extern "C" {
+__global__ void randomNumberDebug(
+        const int nx, const int ny,
+        const float dx, const float dy, const float dt,
+
+        float* eta_ptr, const int eta_pitch,
+        float* hu_ptr, const int hu_pitch,
+        float* hv_ptr, const int hv_pitch,
+        float* Hm_ptr, const int Hm_pitch,
+
+        const int num_drifters,
+        float* relative_positions, const int relative_positions_pitch,
+        const float* reference_positions, const int reference_positions_pitch,
+        unsigned long long* seed_ptr, int seed_pitch, 
+        const float horizontal_diffusivity,
+        const float vertical_diffusivity,
+        float* droplet_diameters, const int droplet_diameter_pitch,
+        const float oil_density, const float water_density,
+        const float oil_viscosity, const float water_viscosity,
+        const float oil_film_thickness, const float oil_water_ift,
+        const float g,
+        float* wind_u_ptr, const int wind_u_pitch,
+        float* wind_v_ptr, const int wind_v_pitch,
+        const float windage)
+
+    {
+        // Each thread will be responsible for one drifter only 
+        // Local index of thread within block (only needed in one dim)
+        const int tx = threadIdx.x;
+        // Index of start of block 
+        const int bx = blockDim.x * blockIdx.x;
+        // Global index of thread 
+        const int ti = bx + tx;
+
+        // We might have launched more threads than we have drifters
+        if (ti < num_drifters ) {
+
+            // Generate 5 random numbers sampled from N(0, 1) 
+            // float rand_numbers [5];
+            // fill_randn(rand_numbers, 5, seed_ptr, seed_pitch, ti);
+            
+            // Obtain pointer to our Lagrangian drifter:
+            float* relative_position = (float*) ((char*) relative_positions + relative_positions_pitch*ti);
+            float rel_pos_x = relative_position[0];
+            float rel_pos_y = relative_position[1];
+            float drifter_depth = relative_position[2];
+
+            float* reference_position = (float*) ((char*) reference_positions + reference_positions_pitch*ti);
+            float ref_pos_x = reference_position[0];
+            float ref_pos_y = reference_position[1];
+            
+            float abs_pos_x = rel_pos_x + ref_pos_x;
+            float abs_pos_y = rel_pos_y + ref_pos_y;
+            
+            // Pointer to droplet diameter
+            float* droplet_diameter = (float*) ((char*) droplet_diameters + droplet_diameter_pitch*ti);
+            float d50 = droplet_diameter[0];
+
+            // Read random seed
+            unsigned long long* seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
+            unsigned long long seed = seed_row[0];
+            
+
+            // Read and compute water velocity within cell
+            const float u = water_velocity_bilinear_interpolation(eta_ptr, eta_pitch,
+                                                            hu_ptr, hu_pitch,
+                                                            Hm_ptr, Hm_pitch, 
+                                                            abs_pos_x, abs_pos_y,
+                                                            dx, dy, false);
+            const float v = water_velocity_bilinear_interpolation(eta_ptr, eta_pitch,
+                                                            hv_ptr, hv_pitch,
+                                                            Hm_ptr, Hm_pitch, 
+                                                            abs_pos_x, abs_pos_y,
+                                                            dx, dy, false);
+            
+            // Move drifter with a simple forward Euler
+            rel_pos_x += u*dt;
+            rel_pos_y += v*dt;
+            
+            // Add horizontal diffusion
+            float2 horizontal_diffusion = rand_normal(&seed);
+            // seed++;
+            rel_pos_x += horizontal_diffusion.x*0.001; //*sqrt(2*horizontal_diffusivity*dt);
+            rel_pos_y += horizontal_diffusion.y*sqrt(2*horizontal_diffusivity*dt);
+           
+            /*
+            // Move drifter vertically.
+            if (is_submerged(drifter_depth)) {
+                // Find the local water depth
+                const int cell_id_x = (int)(floor(abs_pos_x/dx) + 2);
+                const int cell_id_y = (int)(floor(abs_pos_y/dy) + 2);
+                const float* Hm_row = (float*) ((char*) Hm_ptr + Hm_pitch*cell_id_y);
+                const float water_depth = Hm_row[cell_id_x];
+
+                // Random number for vertical diffusion (normal distribution with mean 0 and variance dt)
+                const float ksi_z = rand_numbers[2] * sqrt(dt);
+                vertical_transport(drifter_depth, d50, water_density,
+                                   oil_density, water_viscosity, g, dt, ksi_z, water_depth,
+                                   vertical_diffusivity);
+            }
+            else {
+                // Influence from wind for surface drifters
+                const float wind_u = water_velocity_bilinear_interpolation(nullptr, 0,
+                                                            wind_u_ptr, wind_u_pitch,
+                                                            nullptr, 0, 
+                                                            abs_pos_x, abs_pos_y,
+                                                            dx, dy, true);
+                const float wind_v = water_velocity_bilinear_interpolation(nullptr, 0,
+                                                            wind_v_ptr, wind_v_pitch,
+                                                            nullptr, 0, 
+                                                            abs_pos_x, abs_pos_y,
+                                                            dx, dy, true);
+
+                // Advection
+                rel_pos_x += windage*wind_u*dt;
+                rel_pos_y += windage*wind_v*dt;
+            
+                // Create 2 random numbers from a uniform distribution
+                unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
+                unsigned long long seed = seed_row[0];
+                const float2 rand_n_uniform = rand_uniform(&seed);
+                // Write seed back to global memory
+                seed_row[0] = seed;
+
+                // Entrainment of surface drifter
+                const float wind_speed = sqrt(pow(wind_u, 2) + pow(wind_v, 2));
+                entrain(drifter_depth, d50, wind_speed, g, dt, rand_n_uniform, rand_numbers[3], oil_density, oil_viscosity, oil_water_ift, oil_film_thickness);
+            }
+
+            // Assuming periodic boundary conditions
+            boundary_conditions(rel_pos_x, rel_pos_y, 
+                                ref_pos_x, ref_pos_y, 
+                                nx, ny, dx, dy);
+            */
+            // Write to global memory
+            relative_position[0] = rel_pos_x;// + rand_numbers[0] + rand_numbers[1] + rand_numbers[2] + rand_numbers[3] + rand_numbers[4] ;
+            relative_position[1] = rel_pos_y;
+            relative_position[2] = drifter_depth;
+            droplet_diameter[0] = d50;
+
+            seed_row[0] = seed;
         }
     }
 } // extern "C"
