@@ -44,6 +44,10 @@ __device__ float2 boxMuller(float2 u) {
 }
 __device__ float2 rand_normal(unsigned long long* seed_ptr) {
     float2 u = ansic_lcg(seed_ptr);
+    if (u.x == 0.0) {
+        // u.x == 0.0 gives inf for normal distribution
+        u = ansic_lcg(seed_ptr);
+    }
     return boxMuller(u);
 }
 
