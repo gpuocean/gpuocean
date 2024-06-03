@@ -176,4 +176,26 @@ class RandomNumbersTest(unittest.TestCase):
     def test_seeded_random_numbers_curand(self):
         self.seeded_random_numbers(lcg=False)
 
+    def test_lcg_special_case(self):
+        x = 100
+        y = 342
+        self.create_rng(lcg=True)
+        host_seed = self.rng.getSeed()
 
+        # This special seed gives exact 0.0 as pseudo-random number from LCG
+        special_seed = 1871412062
+        host_seed[y, x] = special_seed
+
+        # Check that we get uniform random number as 0.0
+        self.rng.seed.upload(self.rng.gpu_stream, host_seed)
+        self.rng.generateUniformDistribution(self.random_numbers)
+        U = self.random_numbers.download(self.gpu_stream)
+        self.assertEqual(U[y, 2*x], 0.0, "expected random number to be 0.0, but got "+str(U[y, 2*x]))
+
+        # This value creates infinity as normal distributed random number, however,
+        # so we check that we are able to avoid that 
+        self.rng.seed.upload(self.rng.gpu_stream, host_seed)
+        self.rng.generateNormalDistribution(self.random_numbers)
+        N = self.random_numbers.download(self.gpu_stream)
+        self.assertLess(np.abs(N[y, 2*x]), 100)
+        self.assertLess(np.abs(N[y, 2*x+1]), 100)
