@@ -74,7 +74,7 @@ __global__ void uniformDistribution(
         float* const random_row = (float*) ((char*) random_ptr_ + random_pitch_*tj);
         
         unsigned long long seed = seed_row[ti];
-        float2 u = ansic_lcg(&seed);
+        float2 u = rand_uniform(&seed);
 
         seed_row[ti] = seed;
 
@@ -116,8 +116,7 @@ __global__ void normalDistribution(
         float* const random_row = (float*) ((char*) random_ptr_ + random_pitch_*tj);
         
         unsigned long long seed = seed_row[ti];
-        float2 r = ansic_lcg(&seed);
-        float2 u = boxMuller(r);
+        float2 u = rand_normal(&seed);
 
         seed_row[ti] = seed;
 
