@@ -99,9 +99,7 @@ class OilDrift:
         self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiPiffPifffffffPiPif")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
-        self.randomNumberDebugKernel = self.drift_kernels.get_function("randomNumberDebug")
-        self.randomNumberDebugKernel.prepare("iifffPiPiPiPiiPiPiPiffPifffffffPiPif")
-
+        
         # Wind:
         # TODO: Wind should be read from the ocean simulator object, but we are currently changing how wind is 
         # stored on the GPU. Therefore, we use this temporary solution with given restrictions... 
@@ -190,29 +188,6 @@ class OilDrift:
                                                self.wind_v.data.gpudata, self.wind_v.pitch,
                                                self.windage)
         
-    def rngDebug(self, sim, dt):
-        self.randomNumberDebugKernel.prepared_async_call(self.global_size, self.local_size, self.gpu_stream,
-                                               sim.nx, sim.ny, sim.dx, sim.dy, np.float32(dt),
-                                               sim.gpu_data.h0.data.gpudata, sim.gpu_data.h0.pitch,
-                                               sim.gpu_data.hu0.data.gpudata, sim.gpu_data.hu0.pitch,
-                                               sim.gpu_data.hv0.data.gpudata, sim.gpu_data.hv0.pitch,
-                                               sim.bathymetry.Bm.data.gpudata, sim.bathymetry.Bm.pitch,
-                                               np.int32(self.num_drifters),
-                                               self.relative_positions_device.data.gpudata,
-                                               self.relative_positions_device.pitch,
-                                               self.reference_positions_device.data.gpudata,
-                                               self.reference_positions_device.pitch,
-                                               self.rng.seed.data.gpudata, self.rng.seed.pitch,
-                                               self.horizontal_diffusivity, self.vertical_diffusivity,
-                                               self.droplet_diameters_device.data.gpudata, self.droplet_diameters_device.pitch,
-                                               self.oil_density, self.water_density,
-                                               self.oil_viscosity, self.water_viscosity,
-                                               self.oil_film_thickness, self.oil_water_ift,
-                                               self.g,
-                                               self.wind_u.data.gpudata, self.wind_u.pitch,
-                                               self.wind_v.data.gpudata, self.wind_v.pitch,
-                                               self.windage)
-
     def is_submerged(self):
         # Return True if the oil drifter is submerged
         return self.getDrifterPositions()[:,2] < 0
