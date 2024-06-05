@@ -44,6 +44,10 @@ __device__ float2 boxMuller(float2 u) {
 }
 __device__ float2 rand_normal(unsigned long long* seed_ptr) {
     float2 u = ansic_lcg(seed_ptr);
+    if (u.x == 0.0) {
+        // u.x == 0.0 gives inf for normal distribution
+        u = ansic_lcg(seed_ptr);
+    }
     return boxMuller(u);
 }
 
@@ -74,7 +78,7 @@ __global__ void uniformDistribution(
         float* const random_row = (float*) ((char*) random_ptr_ + random_pitch_*tj);
         
         unsigned long long seed = seed_row[ti];
-        float2 u = ansic_lcg(&seed);
+        float2 u = rand_uniform(&seed);
 
         seed_row[ti] = seed;
 
@@ -116,8 +120,7 @@ __global__ void normalDistribution(
         float* const random_row = (float*) ((char*) random_ptr_ + random_pitch_*tj);
         
         unsigned long long seed = seed_row[ti];
-        float2 r = ansic_lcg(&seed);
-        float2 u = boxMuller(r);
+        float2 u = rand_normal(&seed);
 
         seed_row[ti] = seed;
 
