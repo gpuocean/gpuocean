@@ -18,13 +18,27 @@ class OilDrift:
     At the same time, it should be mentioned that there are a lot of functions there that are never used...
     """
 
-    def __init__(self, gpu_ctx, drifter_positions, initial_droplet_diameter, oil_density=992, water_density=1025,
+    def __init__(self, gpu_ctx, drifter_positions, 
+                 initial_droplet_diameter =  5e-4, 
+                 oil_density=992, water_density=1025,
                  oil_viscosity=1.51, water_kinematic_viscosity=1.358e-6, oil_water_ift=0.013, oil_film_thickness=1e-4,
                  g=9.81,
                  horizontal_diffusivity=1.0, vertical_diffusivity=1.0, 
                  wind=WindStress.WindStress(), windage = 0.03,
                  use_relative_positions = True, seed = None,
+                 enable_entrainment = True,
                  block_width=32, rng_block_height=32):
+
+
+        # Define all member variables that will point to GPU memory in advance
+        self.rng = None
+        self.relative_positions_device = None
+        self.reference_positions_device = None
+        self.droplet_diameters_device = None
+        self.wind_x_current_arr = None
+        self.wind_y_current_arr = None
+        self.wind_x_next_arr = None
+        self.wind_y_next_arr = None
 
         assert(drifter_positions.shape[1] == 3), "expecting drifter_positions to be of shape (N, 3)"
         self.num_drifters = drifter_positions.shape[0]
@@ -85,12 +99,38 @@ class OilDrift:
         self.oil_film_thickness = np.float32(oil_film_thickness)
         self.oil_water_ift = np.float32(oil_water_ift)
 
-        # Compile cuda file found in this repository
+        # Allocate memory for two wind fields and upload the first two
+        self.wind = wind
+        t = 0  # TODO: check if this is correct
+        t_max_index = len(self.wind.t)-1
+        t0_index = max(0, np.searchsorted(self.wind.t, t)-1)
+        t1_index = min(t_max_index, np.searchsorted(self.wind.t,t))
+        self.wind_x_current_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind.wind_u[t0_index].shape[1], self.wind.wind_u[t0_index].shape[0], 0, 0,
+                                self.wind.wind_u[t0_index])
+        self.wind_y_current_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind.wind_v[t0_index].shape[1], self.wind.wind_v[t0_index].shape[0], 0, 0,
+                                self.wind.wind_v[t0_index])
+        self.wind_x_next_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind.wind_u[t1_index].shape[1], self.wind.wind_u[t1_index].shape[0], 0, 0,
+                                self.wind.wind_u[t1_index])
+        self.wind_y_next_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind.wind_v[t1_index].shape[1], self.wind.wind_v[t1_index].shape[0], 0, 0,
+                                self.wind.wind_v[t1_index])
+
+        self.wind_timestamps = {}
+        self.windage = np.float32(windage)
+
         # To do that, we need to provide the absolute path along with the corresponding flag
         self.kernel_filename = os.path.join("..", "gpu_kernels", "super_simple_drift_kernel.cu")
         self.kernel_filename = os.path.abspath(self.kernel_filename)
         self.drift_kernels = gpu_ctx.get_kernel(self.kernel_filename, \
-                                                defines={'block_width': self.block_width, 'block_height': self.block_height
+                                                defines={'block_width': self.block_width, 'block_height': self.block_height,
+                                                         'ENABLE_ENTRAINMENT': int(enable_entrainment),
+                                                         'WIND_X_NX': int(self.wind.wind_u[0].shape[1]),
+                                                         'WIND_X_NY': int(self.wind.wind_u[0].shape[0]),
+                                                         'WIND_Y_NX': int(self.wind.wind_v[0].shape[1]),
+                                                         'WIND_Y_NY': int(self.wind.wind_v[0].shape[0])
                                                        },
                                                 is_abs_path=True)
         
@@ -100,15 +140,7 @@ class OilDrift:
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
         
-        # Wind:
-        # TODO: Wind should be read from the ocean simulator object, but we are currently changing how wind is 
-        # stored on the GPU. Therefore, we use this temporary solution with given restrictions... 
-        if(len(wind.t) > 1):
-            warnings.warn("Currently only supporting wind that is constant in time.\nUsing wind from the first timestep only")
-       
-        self.wind_u = Common.CUDAArray2D(self.gpu_stream, wind.wind_u[0].shape[1], wind.wind_u[0].shape[0], 0, 0, wind.wind_u[0])
-        self.wind_v = Common.CUDAArray2D(self.gpu_stream, wind.wind_v[0].shape[1], wind.wind_v[0].shape[0], 0, 0, wind.wind_v[0])
-        self.windage = np.float32(windage)
+
 
     # Destructor and memory deallocation
     def __del__(self):
@@ -123,6 +155,14 @@ class OilDrift:
             self.reference_positions_device.release()
         if self.droplet_diameters_device is not None:
             self.droplet_diameters_device.release()
+        if self.wind_x_current_arr is not None:
+            self.wind_x_current_arr.release()
+        if self.wind_y_current_arr is not None:
+            self.wind_y_current_arr.release()
+        if self.wind_x_next_arr is not None:
+            self.wind_x_next_arr.release()
+        if self.wind_y_next_arr is not None:
+            self.wind_y_next_arr.release()
         self.gpu_ctx = None
         
     def getDrifterPositions(self):
@@ -161,10 +201,8 @@ class OilDrift:
         # Furthermore, the simulator has two buffers for each variable (e.g., hu0 and hu1), 
         # where the *0 is the one you should use, and *1 is used as a temporary storage during two-stage Runge Kutta for the finite volume method
 
-        # TODO: Fix wind check - it is currently a temporary solution awaiting new pull request to GPU Ocean
-        self._check_wind(sim)
-        #print(self.droplet_diameter_data)
-        #self.droplet_diameter_data = np.int32(self.num_drifters)
+        wind_stress_t = np.float32(self.update_wind(self.drift_kernels, sim.t))
+
         # The first three parameters to the kernel is always the subdivision of work (globale size and local size), and the gpu stream that will execute the kernel
         self.superSimpleDriftKernel.prepared_async_call(self.global_size, self.local_size, self.gpu_stream,
                                                sim.nx, sim.ny, sim.dx, sim.dy, np.float32(dt),
@@ -184,8 +222,8 @@ class OilDrift:
                                                self.oil_viscosity, self.water_viscosity,
                                                self.oil_film_thickness, self.oil_water_ift,
                                                self.g,
-                                               self.wind_u.data.gpudata, self.wind_u.pitch,
-                                               self.wind_v.data.gpudata, self.wind_v.pitch,
+                                               self.wind_x_current_arr.data.gpudata, self.wind_x_current_arr.pitch,
+                                               self.wind_y_current_arr.data.gpudata, self.wind_y_current_arr.pitch,
                                                self.windage)
         
     def is_submerged(self):
@@ -197,18 +235,44 @@ class OilDrift:
         return self.getDrifterPositions()[:,2] == 999
             
 
-    def _check_wind(self, sim):
-        if (self.wind_u.nx_halo == 1):
-            # Assuming then that the wind object is the default one with no wind.
-            # Extend the zero-wind to the same grid resolution as the simulator
-            wind_u = np.zeros((sim.ny+4, sim.nx+4), dtype=np.float32, order='C')
-            wind_v = np.zeros((sim.ny+4, sim.nx+4), dtype=np.float32, order='C')
-            
-            self.wind_u = Common.CUDAArray2D(self.gpu_stream, sim.nx, sim.ny, 2, 2, wind_u)
-            self.wind_v = Common.CUDAArray2D(self.gpu_stream, sim.nx, sim.ny, 2, 2, wind_v)
+    def update_wind(self, kernel_module, t):
+        #Key used to access the hashmaps
+        key = str(kernel_module)
 
-        assert(self.wind_u.nx_halo == sim.gpu_data.h0.nx_halo)
-        assert(self.wind_u.ny_halo == sim.gpu_data.h0.ny_halo)
-        assert(self.wind_v.nx_halo == sim.gpu_data.h0.nx_halo)
-        assert(self.wind_v.ny_halo == sim.gpu_data.h0.ny_halo)
-        
+        #Compute new t0 and t1
+        t_max_index = len(self.wind.t)-1
+        t0_index = max(0, np.searchsorted(self.wind.t, t)-1)
+        t1_index = min(t_max_index, np.searchsorted(self.wind.t,t))
+        new_t0 = self.wind.t[t0_index]
+        new_t1 = self.wind.t[t1_index]
+    
+        #Find the old (and update)
+        old_t0 = None
+        old_t1 = None
+        if (key in self.wind_timestamps):
+            old_t0 = self.wind_timestamps[key][0]
+            old_t1 = self.wind_timestamps[key][1]
+        self.wind_timestamps[key] = [new_t0, new_t1]
+
+        #If time interval has changed, upload new data
+        if (new_t0 != old_t0):
+            self.gpu_stream.synchronize()
+            self.gpu_ctx.synchronize()
+            self.wind_x_current_arr.upload(self.gpu_stream, self.wind.wind_u[t0_index])
+            self.wind_y_current_arr.upload(self.gpu_stream, self.wind.wind_v[t0_index])
+            self.gpu_ctx.synchronize()
+
+        if (new_t1 != old_t1):
+            self.gpu_stream.synchronize()
+            self.gpu_ctx.synchronize()
+            self.wind_x_next_arr.upload(self.gpu_stream, self.wind.wind_u[t1_index])
+            self.wind_y_next_arr.upload(self.gpu_stream, self.wind.wind_v[t1_index])
+            self.gpu_ctx.synchronize()
+
+        # Compute the wind_stress_t linear interpolation coefficient
+        wind_t = 0.0
+        elapsed_since_t0 = (t-new_t0)
+        time_interval = max(1.0e-10, (new_t1-new_t0))
+        wind_t = max(0.0, min(1.0, elapsed_since_t0 / time_interval))
+
+        return wind_t

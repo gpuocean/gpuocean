@@ -499,8 +499,10 @@ __global__ void superSimpleDrift(
                 seed_row[0] = seed;
 
                 // Entrainment of surface drifter
-                const float wind_speed = sqrt(pow(wind_u, 2) + pow(wind_v, 2));
-                entrain(drifter_depth, d50, wind_speed, g, dt, rand_u, rand_numbers[3], oil_density, oil_viscosity, oil_water_ift, oil_film_thickness);
+                if (ENABLE_ENTRAINMENT) {
+                    const float wind_speed = sqrt(pow(wind_u, 2) + pow(wind_v, 2));
+                    entrain(drifter_depth, d50, wind_speed, g, dt, rand_u, rand_numbers[3], oil_density, oil_viscosity, oil_water_ift, oil_film_thickness);
+                }
             }
 
             // Assuming periodic boundary conditions
