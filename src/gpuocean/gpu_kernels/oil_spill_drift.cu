@@ -39,15 +39,6 @@ __device__ float water_velocity(
     return velocity;
 }
 
-
-__device__ float array_lookup_2d(
-        const float* data_ptr, const int data_pitch,
-        const int cell_id_x, const int cell_id_y) {
-
-    const float* data_row = (float*)((char*) data_ptr + data_pitch*cell_id_y);
-    return data_row[cell_id_x];
-}
-
 __device__ float water_velocity_no_interpolation(
         const float* eta_ptr, const int eta_pitch,
         const float* momentum_ptr, const int momentum_pitch,
@@ -72,8 +63,7 @@ __device__ float water_velocity_bilinear_interpolation(
         const float* momentum_ptr, const int momentum_pitch,
         const float* Hm_ptr, const int Hm_pitch,
         const float drifter_pos_x, const float drifter_pos_y, 
-        const float dx, const float dy,
-        const bool momentum_is_wind) {
+        const float dx, const float dy) {
     
     // Find indices for the cell this thread's particle is in
     // Note that we compensate for 2 ghost cells in each direction 
@@ -97,18 +87,11 @@ __device__ float water_velocity_bilinear_interpolation(
     float vel_x0y1; 
     float vel_x1y1; 
 
-    if (momentum_is_wind) {
-        vel_x0y0 = array_lookup_2d(momentum_ptr, momentum_pitch, cell_id_x0, cell_id_y0);
-        vel_x1y0 = array_lookup_2d(momentum_ptr, momentum_pitch, cell_id_x1, cell_id_y0);
-        vel_x0y1 = array_lookup_2d(momentum_ptr, momentum_pitch, cell_id_x0, cell_id_y1);
-        vel_x1y1 = array_lookup_2d(momentum_ptr, momentum_pitch, cell_id_x1, cell_id_y1);
-    }
-    else {
-        vel_x0y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y0);
-        vel_x1y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y0);
-        vel_x0y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y1);
-        vel_x1y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y1);
-    }    
+    vel_x0y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y0);
+    vel_x1y0 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y0);
+    vel_x0y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x0, cell_id_y1);
+    vel_x1y1 = water_velocity(eta_ptr, eta_pitch, momentum_ptr, momentum_pitch, Hm_ptr, Hm_pitch, cell_id_x1, cell_id_y1);
+
     const float vel_y0 = (1-x_factor)*vel_x0y0 + x_factor * vel_x1y0; 
     const float vel_y1 = (1-x_factor)*vel_x0y1 + x_factor * vel_x1y1; 
 
@@ -466,12 +449,12 @@ __global__ void superSimpleDrift(
                                                             hu_ptr, hu_pitch,
                                                             Hm_ptr, Hm_pitch, 
                                                             abs_pos_x, abs_pos_y,
-                                                            dx, dy, false);
+                                                            dx, dy);
             const float v = water_velocity_bilinear_interpolation(eta_ptr, eta_pitch,
                                                             hv_ptr, hv_pitch,
                                                             Hm_ptr, Hm_pitch, 
                                                             abs_pos_x, abs_pos_y,
-                                                            dx, dy, false);
+                                                            dx, dy);
             
             // Move drifter with a simple forward Euler
             rel_pos_x += u*dt;
@@ -497,18 +480,6 @@ __global__ void superSimpleDrift(
                                    vertical_diffusivity);
             }
             else {
-                // Influence from wind for surface drifters
-                // const float wind_u = water_velocity_bilinear_interpolation(nullptr, 0,
-                //                                             wind_u_ptr, wind_u_pitch,
-                //                                             nullptr, 0, 
-                //                                             abs_pos_x, abs_pos_y,
-                //                                             dx, dy, true);
-                // const float wind_v = water_velocity_bilinear_interpolation(nullptr, 0,
-                //                                             wind_v_ptr, wind_v_pitch,
-                //                                             nullptr, 0, 
-                //                                             abs_pos_x, abs_pos_y,
-                //                                             dx, dy, true);
-
                 const float wind_u = wind(wind_x_current_arr, wind_x_next_arr, 
                                           wind_interpolation_t, 
                                           abs_pos_x, abs_pos_y, 
