@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "random_number_generators.cu"
+#include "interpolation.cu"
 
 __device__ float water_velocity(
         const float* eta_ptr, const int eta_pitch,
@@ -113,6 +114,24 @@ __device__ float water_velocity_bilinear_interpolation(
 
     // Read and compute water velocity within cell
     return (1-y_factor)*vel_y0 + y_factor*vel_y1;
+}
+
+__device__ float wind(const float* wind_current_arr, const float* wind_next_arr,
+                      const float wind_t_,
+                      const float drifter_pos_x_, const float drifter_pos_y_,
+                      const float domain_size_x_, const float domain_size_y_,
+                      const int data_nx, const int data_ny) {
+
+    //Normalize coordinates (to [0, 1])
+    const float s = drifter_pos_x_ / domain_size_x_;
+    const float t = drifter_pos_y_ / domain_size_y_;
+
+    //Look up current and next timestep (using bilinear texture interpolation)
+    const float current = bilinear_interpolation(wind_current_arr, data_nx, data_ny, s, t);
+    const float next = bilinear_interpolation(wind_next_arr, data_nx, data_ny, s, t);
+
+    //Interpolate in time
+    return wind_t_*next + (1.0f - wind_t_)*current;
 }
 
 __device__ void boundary_conditions(
@@ -402,8 +421,11 @@ __global__ void superSimpleDrift(
         const float oil_viscosity, const float water_viscosity,
         const float oil_film_thickness, const float oil_water_ift,
         const float g,
-        float* wind_u_ptr, const int wind_u_pitch,
-        float* wind_v_ptr, const int wind_v_pitch,
+        const float* wind_x_current_arr,
+        const float* wind_y_current_arr,
+        const float* wind_x_next_arr,
+        const float* wind_y_next_arr,
+        const float wind_interpolation_t,
         const float windage)
 
     {
@@ -476,16 +498,27 @@ __global__ void superSimpleDrift(
             }
             else {
                 // Influence from wind for surface drifters
-                const float wind_u = water_velocity_bilinear_interpolation(nullptr, 0,
-                                                            wind_u_ptr, wind_u_pitch,
-                                                            nullptr, 0, 
-                                                            abs_pos_x, abs_pos_y,
-                                                            dx, dy, true);
-                const float wind_v = water_velocity_bilinear_interpolation(nullptr, 0,
-                                                            wind_v_ptr, wind_v_pitch,
-                                                            nullptr, 0, 
-                                                            abs_pos_x, abs_pos_y,
-                                                            dx, dy, true);
+                // const float wind_u = water_velocity_bilinear_interpolation(nullptr, 0,
+                //                                             wind_u_ptr, wind_u_pitch,
+                //                                             nullptr, 0, 
+                //                                             abs_pos_x, abs_pos_y,
+                //                                             dx, dy, true);
+                // const float wind_v = water_velocity_bilinear_interpolation(nullptr, 0,
+                //                                             wind_v_ptr, wind_v_pitch,
+                //                                             nullptr, 0, 
+                //                                             abs_pos_x, abs_pos_y,
+                //                                             dx, dy, true);
+
+                const float wind_u = wind(wind_x_current_arr, wind_x_next_arr, 
+                                          wind_interpolation_t, 
+                                          abs_pos_x, abs_pos_y, 
+                                          nx*dx, ny*dy, 
+                                          WIND_X_NX, WIND_X_NY);
+                const float wind_v = wind(wind_y_current_arr, wind_y_next_arr, 
+                                          wind_interpolation_t, 
+                                          abs_pos_x, abs_pos_y, 
+                                          nx*dx, ny*dy, 
+                                          WIND_Y_NX, WIND_Y_NY);
 
                 // Advection
                 rel_pos_x += windage*wind_u*dt;

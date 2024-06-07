@@ -136,7 +136,7 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiPiffPifffffffPiPif")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiPiffPifffffffPPPPff")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
         
@@ -201,7 +201,7 @@ class OilDrift:
         # Furthermore, the simulator has two buffers for each variable (e.g., hu0 and hu1), 
         # where the *0 is the one you should use, and *1 is used as a temporary storage during two-stage Runge Kutta for the finite volume method
 
-        wind_stress_t = np.float32(self.update_wind(self.drift_kernels, sim.t))
+        wind_interpolation_t = np.float32(self.update_wind(self.drift_kernels, sim.t))
 
         # The first three parameters to the kernel is always the subdivision of work (globale size and local size), and the gpu stream that will execute the kernel
         self.superSimpleDriftKernel.prepared_async_call(self.global_size, self.local_size, self.gpu_stream,
@@ -222,8 +222,9 @@ class OilDrift:
                                                self.oil_viscosity, self.water_viscosity,
                                                self.oil_film_thickness, self.oil_water_ift,
                                                self.g,
-                                               self.wind_x_current_arr.data.gpudata, self.wind_x_current_arr.pitch,
-                                               self.wind_y_current_arr.data.gpudata, self.wind_y_current_arr.pitch,
+                                               self.wind_x_current_arr.data.gpudata, self.wind_y_current_arr.data.gpudata,
+                                               self.wind_x_next_arr.data.gpudata, self.wind_y_next_arr.data.gpudata,
+                                               wind_interpolation_t,
                                                self.windage)
         
     def is_submerged(self):
