@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "common.cu"
+#include <cuda_runtime.h>
 
 /**
   *  Calculating the coefficient matrix for bicubic interpolation.
@@ -186,6 +187,74 @@ __device__ float bilinear_interpolation(const float* data,  int data_nx, int dat
 
     // Reduce number of multiplications by grouping dx,dy
     const float result = d00 + dx*(d01-d00) + dy*(d10-d00) + dx*dy*(d00+d11-d01-d10);
+
+    return result;
+}
+
+
+__device__ float3 bilinear_interpolation_3channels(const float* data, int data_nx, int data_ny, float norm_x, float norm_y) {
+/**
+ * Performs bilinear interpolation on a 2D grid of data points using normalized coordinates for 3 channels.
+ *
+ * Calculates interpolated values within a data grid based on normalized (0 to 1) x and y coordinates for each of the 3 channels.
+ * Matches tex2D normalized input coordinates.
+ * Input coordinates outside [0,1] are clamped.
+ *
+ * Bilinear interpolation formula:
+ * I = (1 - dx) * (1 - dy) * I00 + dx * (1 - dy) * I01 + (1 - dx) * dy * I10 + dx * dy * I11
+ * Optimized formula to reduce multiplications:
+ *  I = I00 + dx * (I01 - I00) + dy * (I10 - I00) + dx * dy * (I00 + I11 - I01 - I10)
+ * where
+ * - I00, I01, I10, and I11 are the values at the four surrounding grid points,
+ * - dx and dy are the distances of the interpolated point from the grid points in the x and y directions, respectively.
+ *
+ * @param data Pointer to the 3D data array (row-major order, channels last).
+ * @param data_nx Number of columns in the data array.
+ * @param data_ny Number of rows in the data array.
+ * @param norm_x Normalized x-coordinate of the interpolation point, \in [0, 1].
+ * @param norm_y Normalized y-coordinate of the interpolation point, \in [0, 1].
+ *
+ * Returns:
+ * - The interpolated values at (norm_x, norm_y) for each channel in a float3 structure.
+ */
+
+    // Matching indexing to tex2D normalized coordinates
+    norm_x -= 0.5f / data_nx;
+    norm_y -= 0.5f / data_ny;
+
+    // Clamp normalized coordinates to [0, 1]
+    norm_x = __saturatef(norm_x);
+    norm_y = __saturatef(norm_y);
+
+    // Scale normalized coordinates up to the source dimensions
+    const float x = norm_x * data_nx;
+    const float y = norm_y * data_ny;
+
+    // Calculate the base indices (the lower left corner)
+    const int x0 = floorf(x);
+    const int y0 = floorf(y);
+
+    // Calculate the fractional part of the x and y coordinates
+    const float dx = x - x0;
+    const float dy = y - y0;
+
+    float3 result = make_float3(0.0f, 0.0f, 0.0f);
+
+    // Interpolate each channel
+    for (int c = 0; c < 3; ++c) {
+        // Fetch the values of the four neighbors ensuring they are clamped to edges of data array
+        const float d00 = data[(y0 * data_nx + x0) * 3 + c];
+        const float d01 = data[(y0 * data_nx + min(x0 + 1, data_nx - 1)) * 3 + c];
+        const float d10 = data[(min(y0 + 1, data_ny - 1) * data_nx + x0) * 3 + c];
+        const float d11 = data[(min(y0 + 1, data_ny - 1) * data_nx + min(x0 + 1, data_nx - 1)) * 3 + c];
+
+        // Reduce number of multiplications by grouping dx, dy
+        float res = d00 + dx * (d01 - d00) + dy * (d10 - d00) + dx * dy * (d00 + d11 - d01 - d10);
+
+        if (c == 0) result.x = res;
+        if (c == 1) result.y = res;
+        if (c == 2) result.z = res;
+    }
 
     return result;
 }

@@ -345,6 +345,7 @@ class CDKLM16(Simulator.Simulator):
         self.constant_equilibrium_depth = np.max(H)
         
         self.bc_kernel = Common.BoundaryConditionsArakawaA(gpu_ctx, \
+                                                           self.gpu_stream, \
                                                            self.nx, \
                                                            self.ny, \
                                                            ghost_cells_x, \
