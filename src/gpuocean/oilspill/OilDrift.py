@@ -195,7 +195,7 @@ class OilDrift:
 
     def driftFromSim(self, sim, dt):
         self.drift(sim, dt)
-        
+
     def drift(self, sim, dt):
         # Call the kernel to simulate the drifters for dt seconds using the ocean state available in the sim
         # Note: Only pointers to GPU memory can be given to the cuda kernel function
@@ -241,6 +241,28 @@ class OilDrift:
         # Return True if the oil drifter is stranded
         return self.getDrifterPositions()[:,2] == 999
             
+
+    def sortParticlesFromSim(self, sim):
+        self.sortParticles(sim.nx, sim.ny, sim.dx, sim.dy)
+
+    def sortParticles(self, nx, ny, dx, dy):
+        positions = self.getDrifterPositions()
+        
+        # get cell ids:
+        #def get_cell_ids(positions):
+        cell_id_x = np.floor(positions[:,0]/dx).astype(int)
+        cell_id_y = np.floor(positions[:,1]/dy).astype(int)
+        cell_id = cell_id_y*nx + cell_id_x
+
+        sorted_indices = cell_id.argsort()
+
+        positions = positions[sorted_indices]
+        self.setDrifterPositions(positions)
+
+        droplet_diameters = self.getDropletDiameters()
+        droplet_diameters = droplet_diameters[sorted_indices]
+        self.setDropletDiameters(droplet_diameters)
+
 
     def update_wind(self, kernel_module, t):
         #Key used to access the hashmaps
