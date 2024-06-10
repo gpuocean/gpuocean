@@ -101,7 +101,7 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
             #Initialize wind parameters
             self.wind_timestamps = {}
             
-            self.update_wind(self.drift_kernels, self.passiveDrifterKernel, 0.0)
+            self.update_wind(self.drift_kernels, 0.0)
         
         
         self.local_size = (self.block_width, self.block_height, 1)
