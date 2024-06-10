@@ -27,6 +27,7 @@ class OilDrift:
                  wind=WindStress.WindStress(), windage = 0.03,
                  use_relative_positions = True, seed = None,
                  enable_entrainment = True,
+                 release_times = None, 
                  block_width=32, rng_block_height=32):
 
 
@@ -71,6 +72,21 @@ class OilDrift:
         if self.use_relative_positions:
             self.reference_positions[:, :] = relative_positions[:, :2]
             relative_positions[:, :2] = 0.0
+
+        # Organize release times
+        if release_times is None:
+            self.release_times = np.array([-100000, np.nan])
+            self.num_released_drifters = np.array([self.num_drifters])
+            self.next_release_index = None
+            self.num_active_drifters = np.int32(self.num_drifters)
+        else:
+            assert(len(release_times) == self.num_drifters), "expecting "+str(self.num_drifters)+" release times (one per drifter), but got "+str(len(release_times))
+            self.release_times, self.num_released_drifters = np.unique(release_times, return_counts=True)
+            self.release_times = np.concatenate((self.release_times, np.array([np.nan])))
+            self.num_released_drifters = np.cumsum(self.num_released_drifters)
+            self.next_release_index = 0
+            self.num_active_drifters = np.int32(0)
+        
 
         # Allocate GPU memory and intialize using the 2D Array utility function, which is a wrapper around pycuda.gpuarray
         # Data size parameters are given by the signature (_, nx, ny, ghost_cells_x, ghost_cells_y, _)
@@ -136,7 +152,7 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiPiPiPiffPifffffffPPPPff")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiiPiPiPiffPifffffffPPPPff")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
         
@@ -168,15 +184,27 @@ class OilDrift:
     def setGPUStream(self, gpu_stream):
         self.gpu_stream = gpu_stream
 
-    def getDrifterPositions(self):
+    def getDrifterPositions(self, only_active=True):
         # Download the positions from the gpu (device) to the host (cpu)
         drifter_positions = self.relative_positions_device.download(self.gpu_stream)
-        drifter_positions[:, :2] += self.reference_positions 
+        drifter_positions[:, :2] += self.reference_positions
+
+        if only_active:
+            return drifter_positions[:self.num_active_drifters, :]
+        
         return drifter_positions
 
-    def setDrifterPositions(self, drifter_positions):
+    def setDrifterPositions(self, drifter_positions, only_active=True):
         # Upload new positions from the cpu (host) to the device (gpu)
-        assert(drifter_positions.shape == (self.num_drifters, 3)), "expecting drifter_positions of shape "+str((self.num_drifters, 3))+" but got "+str(drifter_positions.shape)
+        if only_active and (self.num_active_drifters != self.num_drifters):
+            assert(drifter_positions.shape == (self.num_active_drifters, 3)), "expecting drifter_positions of shape "+str((self.num_active_drifters, 3))+" but got "+str(drifter_positions.shape)
+        
+            all_drifter_positions = self.getDrifterPositions(only_active = False)
+            all_drifter_positions[:self.num_active_drifters, :] = drifter_positions[:, :]
+            self.setDrifterPositions(all_drifter_positions, only_active=False)
+            return
+
+        assert(drifter_positions.shape == (self.num_drifters, 3)), "expecting drifter_positions of shape "+str((self.num_drifters, 3))+" but got "+str(drifter_positions.shape)    
         relative_positions = drifter_positions.copy()
         if self.use_relative_positions:
             self.reference_positions[:, :] = relative_positions[:, :2]
@@ -184,12 +212,22 @@ class OilDrift:
             relative_positions[:, :2] = 0.0
         self.relative_positions_device.upload(self.gpu_stream, relative_positions)
 
-    def getDropletDiameters(self):
+    def getDropletDiameters(self, only_active=True):
         # Download the positions from the gpu (device) to the host (cpu)
+        if only_active:
+            return self.droplet_diameters_device.download(self.gpu_stream)[:self.num_active_drifters]
+
         return self.droplet_diameters_device.download(self.gpu_stream)
 
-    def setDropletDiameters(self, droplet_diameters):
+    def setDropletDiameters(self, droplet_diameters, only_active=False):
         # Upload new positions from the cpu (host) to the device (gpu)
+        if only_active and (self.num_active_drifters != self.num_drifters):
+            assert(droplet_diameters.shape == (self.num_active_drifters, 1)), "expecting droplet_diameters of shape "+str((self.num_active_drifters, 1))+" but got "+str(droplet_diameters.shape)
+            all_droplet_diameters = self.getDropletDiameters(only_active=False)
+            all_droplet_diameters[:self.num_active_drifters, :] = droplet_diameters[:,:]
+            self.setDropletDiameters(all_droplet_diameters, only_active=False)
+            return
+
         assert(droplet_diameters.shape == (self.num_drifters, 1)), "expecting droplet_diameters of shape "+str((self.num_drifters, 1))+" but got "+str(droplet_diameters.shape)
         self.droplet_diameters_device.upload(self.gpu_stream, droplet_diameters)
 
@@ -207,7 +245,8 @@ class OilDrift:
         # Furthermore, the simulator has two buffers for each variable (e.g., hu0 and hu1), 
         # where the *0 is the one you should use, and *1 is used as a temporary storage during two-stage Runge Kutta for the finite volume method
 
-        wind_interpolation_t = np.float32(self.update_wind(self.drift_kernels, sim.t))
+        wind_interpolation_t = np.float32(self.update_wind(self.drift_kernels, sim.drifter_t))
+        self._computeNumActiveDrifters(sim.drifter_t)
 
         # The first three parameters to the kernel is always the subdivision of work (globale size and local size), and the gpu stream that will execute the kernel
         self.superSimpleDriftKernel.prepared_async_call(self.global_size, self.local_size, self.gpu_stream,
@@ -217,6 +256,7 @@ class OilDrift:
                                                sim.gpu_data.hv0.data.gpudata, sim.gpu_data.hv0.pitch,
                                                sim.bathymetry.Bm.data.gpudata, sim.bathymetry.Bm.pitch,
                                                np.int32(self.num_drifters),
+                                               self.num_active_drifters,
                                                self.relative_positions_device.data.gpudata,
                                                self.relative_positions_device.pitch,
                                                self.reference_positions_device.data.gpudata,
@@ -233,6 +273,14 @@ class OilDrift:
                                                wind_interpolation_t,
                                                self.windage)
         
+    def _computeNumActiveDrifters(self, t):
+        if self.next_release_index is not None:
+            while t >= self.release_times[self.next_release_index]:
+                self.num_active_drifters = np.int32(self.num_released_drifters[self.next_release_index])
+                self.next_release_index = self.next_release_index + 1
+                # print("updated num_active_drifters at t="+str(t)+" to "+str(self.num_active_drifters))
+                
+
     def is_submerged(self):
         # Return True if the oil drifter is submerged
         return self.getDrifterPositions()[:,2] < 0
@@ -246,7 +294,7 @@ class OilDrift:
         self.sortParticles(sim.nx, sim.ny, sim.dx, sim.dy)
 
     def sortParticles(self, nx, ny, dx, dy):
-        positions = self.getDrifterPositions()
+        positions = self.getDrifterPositions(only_active=True)
         
         # get cell ids:
         #def get_cell_ids(positions):
@@ -257,11 +305,11 @@ class OilDrift:
         sorted_indices = cell_id.argsort()
 
         positions = positions[sorted_indices]
-        self.setDrifterPositions(positions)
+        self.setDrifterPositions(positions, only_active=True)
 
-        droplet_diameters = self.getDropletDiameters()
+        droplet_diameters = self.getDropletDiameters(only_active=True)
         droplet_diameters = droplet_diameters[sorted_indices]
-        self.setDropletDiameters(droplet_diameters)
+        self.setDropletDiameters(droplet_diameters, only_active=True)
 
 
     def update_wind(self, kernel_module, t):
