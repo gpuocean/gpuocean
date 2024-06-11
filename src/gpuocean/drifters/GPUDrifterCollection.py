@@ -206,6 +206,14 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
         allDrifters = self.driftersDevice.download(self.gpu_stream)
         return allDrifters[self.obs_index, :]
     
+    def driftFromSim(self, sim, dt):
+        self.drift(sim.gpu_data.h0, sim.gpu_data.hu0, \
+                   sim.gpu_data.hv0, \
+                   sim.bathymetry.Bm, \
+                   sim.nx, sim.ny, sim.t, sim.dx, sim.dy, \
+                   dt, \
+                   np.int32(2), np.int32(2))
+
     def drift(self, eta, hu, hv, Hm, nx, ny, t, dx, dy, dt, \
               x_zero_ref, y_zero_ref):
         if self.wind_drift_factor:

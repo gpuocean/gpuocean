@@ -687,12 +687,7 @@ class CDKLM16(Simulator.Simulator):
             self.CPdrifter_t += dt
         
         if self.hasDrifters:
-            self.drifters.drift(self.gpu_data.h0, self.gpu_data.hu0, \
-                                self.gpu_data.hv0, \
-                                self.bathymetry.Bm, \
-                                self.nx, self.ny, self.t, self.dx, self.dy, \
-                                dt, \
-                                np.int32(2), np.int32(2))
+            self.drifters.driftFromSim(self, dt)
             self.drifter_t += dt
             return self.drifter_t
         

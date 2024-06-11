@@ -361,7 +361,7 @@ class Simulator(object):
         self.drifters = drifters
         self.hasDrifters = True
         self.drifters.setGPUStream(self.gpu_stream)
-        self.drifter_t = 0.0
+        self.drifter_t = self.t
 
     def attachCrossProductDrifters(self, drifter_list, sim_list):
         """
@@ -373,7 +373,7 @@ class Simulator(object):
         for d in self.CrossProductDrifter:
             d.setGPUStream(self.gpu_stream)
         self.CPsims = sim_list
-        self.CPdrifter_t = 0.0
+        self.CPdrifter_t = self.t
     
     def download(self, interior_domain_only=False):
         """
