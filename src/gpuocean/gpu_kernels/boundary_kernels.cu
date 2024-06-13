@@ -446,7 +446,7 @@ __global__ void flowRelaxationScheme_NS(
 	const float alpha = 1.0f - tanh(fmaxf(0.0f, j)/2.0f);
 	
     //Normalize coordinates (to [0, 1])
-    const float s = ti / float(nx_);
+    const float s = ti / float(nx_ + 2*halo_x_);
     const float t = (tj < ny_ / 2.0) ? 0.25f : 0.75f; // choose north/south
 	
 	// Get exterior value
@@ -517,7 +517,7 @@ __global__ void flowRelaxationScheme_EW(
 
         //Normalize coordinates (to [0, 1])
         const float s = (ti < nx_ / 2.0) ? 0.25f : 0.75f; // choose east/west
-        const float t = tj / float(ny_);
+        const float t = tj / float(ny_ + 2*halo_y_);
 
         // Get exterior value
         const float3 current = bilinear_interpolation_3channels(bc_EW_current_arr, BC_EW_NX, BC_EW_NY, s, t);
