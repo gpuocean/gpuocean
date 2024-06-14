@@ -77,7 +77,7 @@ inline float2 getNorth(const float* angle_arr, const int i, const int j, int dat
     const float angle = bilinear_interpolation(angle_arr, data_nx, data_ny, s, t);
     //FIXME: Should implement so that subsampling does not get border issues, see
     //https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#table-lookup
-    return make_float2(sinf(angle), cosf(angle));
+    return make_float2(__sinf(angle), __cosf(angle));
 }
 
 // Q =[eta, u, v]
@@ -891,10 +891,6 @@ __global__ void cdklm_swe_2D(
         if (h >= KPSIMULATOR_DEPTH_CUTOFF) {
             // If not land
             if (R[0][j][i] != CDKLM_DRY_FLAG) {
-                // Wind
-                const float X = WIND_STRESS_FACTOR * windStress(wind_stress_x_current_arr, wind_stress_x_next_arr, wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4, WIND_STRESS_X_NX, WIND_STRESS_X_NY);
-                const float Y = WIND_STRESS_FACTOR * windStress(wind_stress_y_current_arr, wind_stress_y_next_arr, wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4, WIND_STRESS_Y_NX, WIND_STRESS_Y_NY);
-
                 // Bottom topography source terms!
                 // -g*(eta + H)*(-1)*dH/dx   * dx
                 const float RHxp = 0.5f*( Hi[H_j  ][H_i+1] + Hi[H_j+1][H_i+1] );
@@ -902,17 +898,6 @@ __global__ void cdklm_swe_2D(
                 const float RHyp = 0.5f*( Hi[H_j+1][H_i  ] + Hi[H_j+1][H_i+1] );
                 const float RHym = 0.5f*( Hi[H_j  ][H_i  ] + Hi[H_j  ][H_i+1] );
                 
-                const float H_x = RHxp - RHxm;
-                const float H_y = RHyp - RHym;
-                
-                const float eta_sn = 0.5f*(eta_north + eta_south);
-                const float eta_we = 0.5f*(eta_west  + eta_east);
-
-                // TODO: We might want to use the mean of the reconstructed eta's at the faces here, instead of R[0]...
-                //const float bathymetry1 = GRAV*(R[0][j][i] + Hm)*H_x;
-                //const float bathymetry2 = GRAV*(R[0][j][i] + Hm)*H_y;
-                const float bathymetry1 = GRAV*(eta_we + Hm)*H_x;
-                const float bathymetry2 = GRAV*(eta_sn + Hm)*H_y;
                 
                 //Project momenta onto north/east axes
                 const float hu_east =  hu*east.x + hv*east.y;
@@ -921,7 +906,7 @@ __global__ void cdklm_swe_2D(
                 //Convert momentums between east/north due to Coriolis
                 const float hu_east_cor = coriolis_f_central*hv_north;
                 const float hv_north_cor = -coriolis_f_central*hu_east;
-                
+
                 //Project back to x/y-coordinate system
                 const float2 up = make_float2(-north.x, north.y);
                 const float2 right = make_float2(up.y, -up.x);
@@ -934,12 +919,36 @@ __global__ void cdklm_swe_2D(
 #else
                 const float2 atm_p_central_diff = atmospheric_pressure_central_diff(atmospheric_pressure_current_arr, atmospheric_pressure_next_arr, atmospheric_pressure_t_,  ti+0.5, tj+0.5, NX+4, NY+4, ATMOS_PRES_NX, ATMOS_PRES_NY);
 #endif
-                const float atm_pressure_x = -atm_p_central_diff.x*h/(2.0f*DX*RHO_O);
-                const float atm_pressure_y = -atm_p_central_diff.y*h/(2.0f*DY*RHO_O);
+                // TODO: We might want to use the mean of the reconstructed eta's at the faces here, instead of R[0]...
+                //const float bathymetry1 = GRAV*(R[0][j][i] + Hm)*H_x;
+                //const float bathymetry2 = GRAV*(R[0][j][i] + Hm)*H_y;
 
+            {
+                // Atmospheric pressure
+                const float atm_pressure_x = -atm_p_central_diff.x*h/(2.0f*DX*RHO_O);
+                // Wind
+                const float X = WIND_STRESS_FACTOR * windStress(wind_stress_x_current_arr, wind_stress_x_next_arr, wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4, WIND_STRESS_X_NX, WIND_STRESS_X_NY);
+                // Coriolis
+                const float eta_we = 0.5f*(eta_west  + eta_east);
+                // Bottom topography
+                const float H_x = RHxp - RHxm;
+                const float bathymetry1 = GRAV*(eta_we + Hm)*H_x;
                 // Total source terms
                 st1 = X + hu_cor + atm_pressure_x + bathymetry1/DX;
+            }
+            {   
+                // Atmospheric pressure
+                const float atm_pressure_y = -atm_p_central_diff.y*h/(2.0f*DY*RHO_O);
+                // Wind
+                const float Y = WIND_STRESS_FACTOR * windStress(wind_stress_y_current_arr, wind_stress_y_next_arr, wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4, WIND_STRESS_Y_NX, WIND_STRESS_Y_NY);
+                // Coriolis
+                const float eta_sn = 0.5f*(eta_north + eta_south);
+                const float H_y = RHyp - RHym;
+                // Bottom topography
+                const float bathymetry2 = GRAV*(eta_sn + Hm)*H_y;
+                // Total source terms
                 st2 = Y + hv_cor + atm_pressure_y + bathymetry2/DY;
+            }
             }
         }
 

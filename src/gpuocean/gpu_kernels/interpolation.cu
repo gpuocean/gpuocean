@@ -134,7 +134,7 @@ __device__ float bicubic_evaluation(const float4 x,
 }
 
 
-__device__ float bilinear_interpolation(const float* data,  int data_nx, int data_ny, float norm_x, float norm_y) {
+__device__ float bilinear_interpolation(const float* data,  const int data_nx, const int data_ny, float norm_x, float norm_y) {
 /**
  * Performs bilinear interpolation on a 2D grid of data points using normalized coordinates.
  *
@@ -159,18 +159,15 @@ __device__ float bilinear_interpolation(const float* data,  int data_nx, int dat
  * Returns:
  * - The interpolated value at (norm_x, norm_y).
  */
-
-    // Matching indexing to tex2D normalised coordinates
-    norm_x -= 0.5f / data_nx;
-    norm_y -= 0.5f / data_ny;
-
+    // subtract 0.5 to match tex2D. Fused to save registers
     // Clamp normalized coordinates to [0, 1]
-    norm_x = __saturatef(norm_x);
-    norm_y = __saturatef(norm_y);
+    norm_x = __saturatef(norm_x - 0.5f / data_nx);
+    norm_y = __saturatef(norm_y - 0.5f / data_ny);
 
     // Scale normalised coordinates up to the source dimensions
     const float x = norm_x*data_nx;
     const float y = norm_y*data_ny;
+
     // Calculate the base indices (the lower left corner)
     const int x0 = floorf(x);
     const int y0 = floorf(y);
@@ -179,20 +176,21 @@ __device__ float bilinear_interpolation(const float* data,  int data_nx, int dat
     const float dx = x - x0;
     const float dy = y - y0;
 
+    // Pre-calculate min indices
+    const int x1 = min(x0 + 1, data_nx - 1);
+    const int y1 = min(y0 + 1, data_ny - 1);
+
     // Fetch the values of the four neighbors ensuring they are clamping to edges of data array
-    const float d00 = data[y0*data_nx + x0];
-    const float d01 = data[y0*data_nx + min(x0+1, data_nx-1)];
-    const float d10 = data[min(y0+1, data_ny-1)*data_nx + x0];
-    const float d11 = data[min(y0+1, data_ny-1)*data_nx + min(x0+1, data_nx-1)];
+    const float d00 = data[y0 * data_nx + x0];
+    const float d01 = data[y0 * data_nx + x1];
+    const float d10 = data[y1 * data_nx + x0];
+    const float d11 = data[y1 * data_nx + x1];
 
-    // Reduce number of multiplications by grouping dx,dy
-    const float result = d00 + dx*(d01-d00) + dy*(d10-d00) + dx*dy*(d00+d11-d01-d10);
-
-    return result;
+    return d00 + dx*(d01-d00) + dy*(d10-d00) + dx*dy*(d00+d11-d01-d10);
 }
 
 
-__device__ float3 bilinear_interpolation_3channels(const float* data, int data_nx, int data_ny, float norm_x, float norm_y) {
+__device__ float3 bilinear_interpolation_3channels(const float* data, const int data_nx, const int data_ny, float norm_x, float norm_y) {
 /**
  * Performs bilinear interpolation on a 2D grid of data points using normalized coordinates for 3 channels.
  *
@@ -218,13 +216,11 @@ __device__ float3 bilinear_interpolation_3channels(const float* data, int data_n
  * - The interpolated values at (norm_x, norm_y) for each channel in a float3 structure.
  */
 
-    // Matching indexing to tex2D normalized coordinates
-    norm_x -= 0.5f / data_nx;
-    norm_y -= 0.5f / data_ny;
-
+    // subtract 0.5 to match tex2D. Fused to save registers
     // Clamp normalized coordinates to [0, 1]
-    norm_x = __saturatef(norm_x);
-    norm_y = __saturatef(norm_y);
+    norm_x = __saturatef(norm_x - 0.5f / data_nx);
+    norm_y = __saturatef(norm_y - 0.5f / data_ny);
+
 
     // Scale normalized coordinates up to the source dimensions
     const float x = norm_x * data_nx;
@@ -238,15 +234,19 @@ __device__ float3 bilinear_interpolation_3channels(const float* data, int data_n
     const float dx = x - x0;
     const float dy = y - y0;
 
+        // Pre-calculate min indices
+    const int x1 = min(x0 + 1, data_nx - 1);
+    const int y1 = min(y0 + 1, data_ny - 1);
+
     float3 result = make_float3(0.0f, 0.0f, 0.0f);
 
     // Interpolate each channel
     for (int c = 0; c < 3; ++c) {
-        // Fetch the values of the four neighbors ensuring they are clamped to edges of data array
-        const float d00 = data[(y0 * data_nx + x0) * 3 + c];
-        const float d01 = data[(y0 * data_nx + min(x0 + 1, data_nx - 1)) * 3 + c];
-        const float d10 = data[(min(y0 + 1, data_ny - 1) * data_nx + x0) * 3 + c];
-        const float d11 = data[(min(y0 + 1, data_ny - 1) * data_nx + min(x0 + 1, data_nx - 1)) * 3 + c];
+        // Fetch the values of the four neighbors ensuring they are clamping to edges of data array
+        const float d00 = data[(y0 * data_nx + x0)*3 + c];
+        const float d01 = data[(y0 * data_nx + x1)*3 + c];
+        const float d10 = data[(y1 * data_nx + x0)*3 + c];
+        const float d11 = data[(y1 * data_nx + x1)*3 + c];
 
         // Reduce number of multiplications by grouping dx, dy
         float res = d00 + dx * (d01 - d00) + dy * (d10 - d00) + dx * dy * (d00 + d11 - d01 - d10);
