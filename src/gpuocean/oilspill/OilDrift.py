@@ -28,7 +28,7 @@ class OilDrift:
                  use_relative_positions = True, seed = None,
                  enable_entrainment = True,
                  release_times = None, 
-                 block_width=32, rng_block_height=32):
+                 block_width=128, rng_block_height=32):
 
 
         # Define all member variables that will point to GPU memory in advance
