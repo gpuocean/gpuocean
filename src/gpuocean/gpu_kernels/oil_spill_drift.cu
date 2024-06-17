@@ -48,8 +48,8 @@ __device__ float water_velocity_no_interpolation(
     
     // Find indices for the cell this thread's particle is in
     // Note that we compensate for 2 ghost cells in each direction 
-    const int cell_id_x = (int)(floor(drifter_pos_x/dx) + 2);
-    const int cell_id_y = (int)(floor(drifter_pos_y/dy) + 2);
+    const int cell_id_x = (int)(floorf(drifter_pos_x/dx) + 2);
+    const int cell_id_y = (int)(floorf(drifter_pos_y/dy) + 2);
     
     // Read and compute water velocity within cell
     return water_velocity(eta_ptr, eta_pitch,
@@ -67,12 +67,12 @@ __device__ float water_velocity_bilinear_interpolation(
     
     // Find indices for the cell this thread's particle is in
     // Note that we compensate for 2 ghost cells in each direction 
-    const int cell_id_x = (int)(floor(drifter_pos_x/dx) + 2);
-    const int cell_id_y = (int)(floor(drifter_pos_y/dy) + 2);
+    const int cell_id_x = (int)(floorf(drifter_pos_x/dx) + 2);
+    const int cell_id_y = (int)(floorf(drifter_pos_y/dy) + 2);
 
     // Find neighbouring cells and relative position between cell centers
-    float const frac_x = drifter_pos_x / dx - floor(drifter_pos_x / dx);
-    float const frac_y = drifter_pos_y / dy - floor(drifter_pos_y / dy);
+    float const frac_x = drifter_pos_x / dx - floorf(drifter_pos_x / dx);
+    float const frac_y = drifter_pos_y / dy - floorf(drifter_pos_y / dy);
     
     const int cell_id_x0 = frac_x < 0.5f ? cell_id_x - 1 : cell_id_x;
     const float x_factor = frac_x < 0.5f ? frac_x + 0.5f : frac_x - 0.5f; 
@@ -151,9 +151,9 @@ __device__ float rise_velocity(
     float rise_velocity = 0.0f;
     if (droplet_diameter > 0.0f) {
         const float g_delro = g * (water_density - oil_density) / water_density;
-        if (abs(g_delro) > 0) {
-            const float w1 = pow(droplet_diameter, 2) * g_delro / (18.0f * water_viscosity);
-            float w2 = 1.054f * sqrt(droplet_diameter * abs(g_delro));
+        if (fabsf(g_delro) > 0) {
+            const float w1 = droplet_diameter*droplet_diameter * g_delro / (18.0f * water_viscosity);
+            float w2 = 1.054f * sqrtf(droplet_diameter * fabsf(g_delro));
             w2 = copysignf(w2, g_delro);
             rise_velocity = w1 * w2 / (w1 + w2); // in m/s
         }
@@ -171,7 +171,7 @@ __device__ float euler_maruyama_scheme(
     const float vertical_diffusivity) {
     // Euler-Maruyama scheme assuming constant diffusivity. Return vertical displacement due to diffusivity.
 
-    return ksi * sqrt(2 * vertical_diffusivity);
+    return ksi * sqrtf(2 * vertical_diffusivity);
 }
 
 __device__ void vertical_transport(
@@ -193,9 +193,9 @@ __device__ void vertical_transport(
     // Conventions:
     // droplet_depth is 0 at the surface and negative downwards
     // water_depth is a positive number
-    droplet_depth = -abs(droplet_depth + diffusion_step); // Reflect off surface
+    droplet_depth = -fabsf(droplet_depth + diffusion_step); // Reflect off surface
     // Handling different sign conventions here
-    droplet_depth = max(-(2 * water_depth + droplet_depth), droplet_depth); // Reflect off bottom
+    droplet_depth = fmaxf(-(2 * water_depth + droplet_depth), droplet_depth); // Reflect off bottom
     // Handle droplets above surface after reflection
     // by putting them in the middle of the water column
     // (should only happen very rarely, and only in very shallow water)
@@ -209,7 +209,7 @@ __device__ void vertical_transport(
     // Vertical advection step in m
     const float advection_step = rise_vel * dt;
     droplet_depth += advection_step;
-    droplet_depth = min(droplet_depth, 0.0f);
+    droplet_depth = fminf(droplet_depth, 0.0f);
 }
 
 __device__ float white_cap_coverage(const float wind_speed) {
@@ -219,11 +219,13 @@ __device__ float white_cap_coverage(const float wind_speed) {
         return 0.0f;
     }
     if (wind_speed < 10.187f ) {
-        // Dividing by 100 to convert percent to fraction
-        return 3.18f * 10e-3 * powf(wind_speed - 3.7f, 3) / 100;
+        const float wind_diff = wind_speed - 3.7f;
+        // 10e-3 / 100 = 10e-5, where dividing by 100 to convert percent to fraction
+        return 3.18f * 10e-5f * wind_diff*wind_diff*wind_diff;
     } else {
-        // Dividing by 100 to convert percent to fraction
-        return 4.82f * 10e-4 * powf(wind_speed + 1.98f, 3) / 100;
+        const float wind_diff = wind_speed + 1.98f;
+        // 10e-4 / 100 = 10e-6, where dividing by 100 to convert percent to fraction
+        return 4.82f * 10e-6f * wind_diff*wind_diff*wind_diff;
     }
 }
 
@@ -250,7 +252,7 @@ __device__ float entrainment_rate(const float wind_speed, const float g) {
 __device__ float entrainment_probability(const float wind_speed, const float g, const float dt) {
     // Probability of entrainment of a surface particle.
     const float rate = entrainment_rate(wind_speed, g);
-    return 1 - exp(-rate * dt);
+    return 1 - expf(-rate * dt);
 }
 
 __device__ float significant_wave_height(const float wind_speed, const float fetch, const float g) {
@@ -268,8 +270,9 @@ __device__ float significant_wave_height(const float wind_speed, const float fet
         const float h_const = 0.0016f;  // Nondimensional height constant.
 
         // Calculate wave height
-        const float h_nodim = h_const * sqrt(g * fetch / pow(wind_speed, 2));
-        wave_height = min(h_max, h_nodim) * pow(wind_speed, 2) / g;
+        const float wind_speed_sq = wind_speed*wind_speed;
+        const float h_nodim = h_const * sqrtf(g * fetch / wind_speed_sq);
+        wave_height = fminf(h_max, h_nodim) * wind_speed_sq / g;
     }
 
     return wave_height;
@@ -292,7 +295,7 @@ __device__ float reynolds_number(
         const float wave_height,
         const float g) {
     // Calculate Reynold number (Johansen 2015)            
-    return sqrt(2 * g * wave_height) * oil_density * oil_film_thickness / oil_viscosity;
+    return sqrtf(2 * g * wave_height) * oil_density * oil_film_thickness / oil_viscosity;
 }
 
 __device__ float weber_natural_dispersion_d50(
@@ -316,7 +319,7 @@ __device__ float weber_natural_dispersion_d50(
     const float B = 0.027f;
     const float alpha = 0.6f;
 
-    return A * pow(We, -alpha)*(1 + B*pow((We / Re), alpha)) * oil_film_thickness; 
+    return A * powf(We, -alpha)*(1 + B*powf((We / Re), alpha)) * oil_film_thickness; 
 }
 
 __device__ void entrain(
@@ -357,10 +360,10 @@ __device__ void entrain(
 
         // From number size distribution to volume size distribution.
         const float sigma = 0.921034f;
-        const float d50v = exp(log(d50n) + 3.0f*pow(sigma, 2));
+        const float d50v = expf(logf(d50n) + 3.0f*sigma*sigma);
 
         // Log normal distribution
-        d50 = exp(random_number_normal * sigma + log(d50v));
+        d50 = expf(random_number_normal * sigma + logf(d50v));
     }
 }
 
@@ -375,7 +378,7 @@ __device__ void fill_randn(
     for (int i = 0; i < 3; i++) {
         float2 rand_n = rand_normal(&seed);
         rand_numbers[i*2] = rand_n.x;
-        if (i < (int)(floor(n/2.0f))) {
+        if (i < (int)(floorf(n/2.0f))) {
             rand_numbers[i*2+1] = rand_n.y;
         }
     }
@@ -463,15 +466,15 @@ __global__ void superSimpleDrift(
             rel_pos_y += v*dt;
             
             // Add horizontal diffusion
-            rel_pos_x += rand_numbers[0]*sqrt(2*horizontal_diffusivity*dt);
-            rel_pos_y += rand_numbers[1]*sqrt(2*horizontal_diffusivity*dt);
+            rel_pos_x += rand_numbers[0]*sqrtf(2*horizontal_diffusivity*dt);
+            rel_pos_y += rand_numbers[1]*sqrtf(2*horizontal_diffusivity*dt);
            
             
             // Move drifter vertically.
             if (is_submerged(drifter_depth)) {
                 // Find the local water depth
-                const int cell_id_x = (int)(floor(abs_pos_x/dx) + 2);
-                const int cell_id_y = (int)(floor(abs_pos_y/dy) + 2);
+                const int cell_id_x = (int)(floorf(abs_pos_x/dx) + 2);
+                const int cell_id_y = (int)(floorf(abs_pos_y/dy) + 2);
                 const float* Hm_row = (float*) ((char*) Hm_ptr + Hm_pitch*cell_id_y);
                 const float water_depth = Hm_row[cell_id_x];
 
@@ -507,7 +510,7 @@ __global__ void superSimpleDrift(
 
                 // Entrainment of surface drifter
                 if (ENABLE_ENTRAINMENT) {
-                    const float wind_speed = sqrt(pow(wind_u, 2) + pow(wind_v, 2));
+                    const float wind_speed = sqrtf(wind_u*wind_u + wind_v*wind_v);
                     entrain(drifter_depth, d50, wind_speed, g, dt, rand_u, rand_numbers[3], oil_density, oil_viscosity, oil_water_ift, oil_film_thickness);
                 }
             }
