@@ -367,25 +367,6 @@ __device__ void entrain(
     }
 }
 
-__device__ void fill_randn(
-        float* rand_numbers, const int n, 
-        unsigned long long* seed_ptr, const int seed_pitch,
-        const int ti) { 
-    // Read seed
-    unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
-    unsigned long long seed = seed_row[0];
-   
-    for (int i = 0; i < 3; i++) {
-        float2 rand_n = rand_normal(&seed);
-        rand_numbers[i*2] = rand_n.x;
-        if (i < (int)(floorf(n/2.0f))) {
-            rand_numbers[i*2+1] = rand_n.y;
-        }
-    }
-    // Write seed back to global memory
-    seed_row[0] = seed;
-}
-
 
 extern "C" {
 __global__ void superSimpleDrift(
@@ -428,10 +409,12 @@ __global__ void superSimpleDrift(
         // We might have launched more threads than we have drifters
         if ((ti < num_drifters) && (ti < num_active_drifters)) {
 
-            // Generate 5 random numbers sampled from N(0, 1) 
-            float rand_numbers [5];
-            fill_randn(rand_numbers, 5, seed_ptr, seed_pitch, ti);
-            
+            // Generate random numbers
+            unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch * ti);
+            unsigned long long seed = seed_row[0];
+            float2 rand_n1 = rand_normal(&seed);
+            float2 rand_n2 = rand_normal(&seed);
+
             // Obtain pointer to our Lagrangian drifter:
             float* relative_position = (float*) ((char*) relative_positions + relative_positions_pitch*ti);
             float rel_pos_x = relative_position[0];
@@ -464,12 +447,12 @@ __global__ void superSimpleDrift(
             // Move drifter with a simple forward Euler
             rel_pos_x += u*dt;
             rel_pos_y += v*dt;
-            
+
             // Add horizontal diffusion
-            rel_pos_x += rand_numbers[0]*sqrtf(2*horizontal_diffusivity*dt);
-            rel_pos_y += rand_numbers[1]*sqrtf(2*horizontal_diffusivity*dt);
-           
-            
+            rel_pos_x += rand_n1.x*sqrtf(2*horizontal_diffusivity*dt);
+            rel_pos_y += rand_n1.y*sqrtf(2*horizontal_diffusivity*dt);
+
+
             // Move drifter vertically.
             if (is_submerged(drifter_depth)) {
                 // Find the local water depth
@@ -479,7 +462,8 @@ __global__ void superSimpleDrift(
                 const float water_depth = Hm_row[cell_id_x];
 
                 // Random number for vertical diffusion (normal distribution with mean 0 and variance dt)
-                const float ksi_z = rand_numbers[2] * sqrt(dt);
+                
+                const float ksi_z = rand_n2.x * sqrtf(dt);
                 vertical_transport(drifter_depth, d50, water_density,
                                    oil_density, water_viscosity, g, dt, ksi_z, water_depth,
                                    vertical_diffusivity);
@@ -501,17 +485,16 @@ __global__ void superSimpleDrift(
                 rel_pos_x += windage*wind_u*dt;
                 rel_pos_y += windage*wind_v*dt;
             
-                // Create 2 random numbers from a uniform distribution
-                unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch*ti);
-                unsigned long long seed = seed_row[0];
-                const float2 rand_u = rand_uniform(&seed);
-                // Write seed back to global memory
-                seed_row[0] = seed;
+
 
                 // Entrainment of surface drifter
                 if (ENABLE_ENTRAINMENT) {
                     const float wind_speed = sqrtf(wind_u*wind_u + wind_v*wind_v);
-                    entrain(drifter_depth, d50, wind_speed, g, dt, rand_u, rand_numbers[3], oil_density, oil_viscosity, oil_water_ift, oil_film_thickness);
+                    // Create 2 random numbers from a uniform distribution
+                    const float2 rand_u = rand_uniform(&seed);
+                    // Write seed back to global memory
+                    seed_row[0] = seed;
+                    entrain(drifter_depth, d50, wind_speed, g, dt, rand_u, rand_n2.y, oil_density, oil_viscosity, oil_water_ift, oil_film_thickness);
                 }
             }
 
