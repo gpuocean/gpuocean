@@ -127,6 +127,7 @@ class Simulator(object):
             
         self.hasDrifters = False
         self.drifters = None
+        self.drifter_t = self.t
 
         # Model error object
         self.model_error = None
