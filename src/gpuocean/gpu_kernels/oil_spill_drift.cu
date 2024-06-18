@@ -209,6 +209,7 @@ __device__ void vertical_transport(
     // Vertical advection step in m
     const float advection_step = rise_vel * dt;
     droplet_depth += advection_step;
+    droplet_depth = min(droplet_depth, 0.0f);
 }
 
 __device__ float white_cap_coverage(const float wind_speed) {
@@ -394,6 +395,7 @@ __global__ void superSimpleDrift(
         float* Hm_ptr, const int Hm_pitch,
 
         const int num_drifters,
+        const int num_active_drifters,
         float* relative_positions, const int relative_positions_pitch,
         const float* reference_positions, const int reference_positions_pitch,
         unsigned long long* seed_ptr, int seed_pitch, 
@@ -421,7 +423,7 @@ __global__ void superSimpleDrift(
         const int ti = bx + tx;
 
         // We might have launched more threads than we have drifters
-        if (ti < num_drifters ) {
+        if ((ti < num_drifters) && (ti < num_active_drifters)) {
 
             // Generate 5 random numbers sampled from N(0, 1) 
             float rand_numbers [5];
@@ -478,6 +480,7 @@ __global__ void superSimpleDrift(
                 vertical_transport(drifter_depth, d50, water_density,
                                    oil_density, water_viscosity, g, dt, ksi_z, water_depth,
                                    vertical_diffusivity);
+                    
             }
             else {
                 const float wind_u = wind(wind_x_current_arr, wind_x_next_arr, 
