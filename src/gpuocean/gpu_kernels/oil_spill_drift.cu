@@ -492,8 +492,6 @@ __global__ void superSimpleDrift(
                     const float wind_speed = sqrtf(wind_u*wind_u + wind_v*wind_v);
                     // Create 2 random numbers from a uniform distribution
                     const float2 rand_u = rand_uniform(&seed);
-                    // Write seed back to global memory
-                    seed_row[0] = seed;
                     entrain(drifter_depth, d50, wind_speed, g, dt, rand_u, rand_n2.y, oil_density, oil_viscosity, oil_water_ift, oil_film_thickness);
                 }
             }
@@ -504,6 +502,8 @@ __global__ void superSimpleDrift(
                                 nx, ny, dx, dy);
             
             // Write to global memory
+            // Write seed back to global memory
+            seed_row[0] = seed;
             relative_position[0] = rel_pos_x;
             relative_position[1] = rel_pos_y;
             relative_position[2] = drifter_depth;
