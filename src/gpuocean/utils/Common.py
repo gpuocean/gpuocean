@@ -643,7 +643,134 @@ class CUDAArray2D:
         else:
             return data
 
-    
+
+class CUDAArray3D:
+    """
+    Class that holds 3D data, without halo. 
+    """
+
+    def __init__(self, gpu_stream, nx, ny, nc, data, \
+                 double_precision=False, integers=False):
+        """
+        Uploads initial data to the CUDA device
+        """
+        self.double_precision = double_precision
+        self.integers = integers
+        host_data = None
+        if self.double_precision:
+            host_data = data
+        else:
+            host_data = self.convert_to_float32(data)
+
+        self.nx = nx
+        self.ny = ny
+        self.nc = nc
+
+
+        assert(host_data.shape[1] == self.nx), str(host_data.shape[1]) + " vs " + str(self.nx)
+        assert(host_data.shape[0] == self.ny), str(host_data.shape[0]) + " vs " + str(self.ny)
+        assert(host_data.shape[2] == self.nc), str(host_data.shape[2]) + " vs " + str(self.nc)
+        assert(data.shape == (self.ny, self.nx, self.nc))
+
+        #Upload data to the device
+        self.data = pycuda.gpuarray.to_gpu_async(host_data, stream=gpu_stream)
+        self.holds_data = True
+
+        self.mask = None
+        if (np.ma.is_masked(data)):
+            self.mask = data.mask
+
+        self.bytes_per_float = host_data.itemsize
+        assert(self.bytes_per_float == 4 or
+              (self.double_precision and self.bytes_per_float == 8))
+
+    def upload(self, gpu_stream, data):
+        """
+        Filling the allocated buffer with new data
+        """
+        if not self.holds_data:
+            raise RuntimeError('The buffer has been freed before upload is called')
+
+        if (np.ma.is_masked(data)):
+            self.mask = data.mask
+
+        # Make sure that the input is of correct size:
+        if self.double_precision:
+            host_data = data
+        else:
+            host_data = self.convert_to_float32(data)
+
+        assert(host_data.shape[1] == self.nx), str(host_data.shape[1]) + " vs " + str(self.nx)
+        assert(host_data.shape[0] == self.ny), str(host_data.shape[0]) + " vs " + str(self.ny)
+        assert(host_data.shape[2] == self.nc), str(host_data.shape[2]) + " vs " + str(self.nc)
+        assert(data.shape == (self.ny, self.nx, self.nc))
+
+        assert(host_data.itemsize == self.bytes_per_float), "Host data itemsize is " + str(host_data.itemsize) + ", but should have been " + str(self.bytes_per_float)
+
+        # Okay, everything is fine, now upload:
+        self.data.set_async(host_data, stream=gpu_stream)
+
+
+    def copyBuffer(self, gpu_stream, buffer):
+        """
+        Copying the given device buffer into the already allocated memory
+        """
+        if not self.holds_data:
+            raise RuntimeError('The buffer has been freed before copying buffer')
+
+        if not buffer.holds_data:
+            raise RuntimeError('The provided buffer is either not allocated, or has been freed before copying buffer')
+
+        # Make sure that the input is of correct size:
+        assert(buffer.nx == self.nx), str(buffer.nx) + " vs " + str(self.nx)
+        assert(buffer.ny == self.ny), str(buffer.ny) + " vs " + str(self.ny)
+        assert(buffer.nc == self.nc), str(buffer.nc) + " vs " + str(self.nc)
+
+        assert(buffer.bytes_per_float == self.bytes_per_float), "Provided buffer itemsize is " + str(buffer.bytes_per_float) + ", but should have been " + str(self.bytes_per_float)
+
+        # Okay, everything is fine - issue device-to-device-copy:
+        total_num_bytes = self.bytes_per_float*self.nx*self.ny*self.nc
+        cuda.memcpy_dtod_async(self.data.ptr, buffer.data.ptr, total_num_bytes, stream=gpu_stream)
+
+
+
+    def download(self, gpu_stream):
+        """
+        Enables downloading data from CUDA device to Python
+        """
+        if not self.holds_data:
+            raise RuntimeError('CUDA buffer has been freed')
+
+        #Copy data from device to host
+        host_data = self.data.get(stream=gpu_stream)
+
+        if (self.mask is not None):
+            host_data = np.ma.array(host_data, mask=self.mask)
+
+        #Return
+        return host_data
+
+
+    def release(self):
+        """
+        Frees the allocated memory buffers on the GPU 
+        """
+        if self.holds_data:
+            self.data.gpudata.free()
+            self.holds_data = False
+
+
+    @staticmethod
+    def convert_to_float32(data):
+        """
+        Converts to C-style float 32 array suitable for the GPU/CUDA
+        """
+        if (not np.issubdtype(data.dtype, np.float32) or np.isfortran(data)):
+            return data.astype(np.float32, order='C')
+        else:
+            return data
+
+
 class SWEDataArakawaA:
     """
     A class representing an Arakawa A type (unstaggered, logically Cartesian) grid
@@ -996,7 +1123,7 @@ class BoundaryConditionsArakawaA:
     Class that checks boundary conditions and calls the required kernels for Arakawa A type grids.
     """
 
-    def __init__(self, gpu_ctx, nx, ny, \
+    def __init__(self, gpu_ctx, gpu_stream, nx, ny, \
                  halo_x, halo_y, \
                  boundary_conditions, \
                  bc_data=BoundaryConditionsData(), \
@@ -1015,7 +1142,13 @@ class BoundaryConditionsArakawaA:
         #print("numerical sponge cells (n,e,s,w): ", self.boundary_conditions.spongeCells)
         
         # Load CUDA module for periodic boundary
-        self.boundaryKernels = gpu_ctx.get_kernel("boundary_kernels.cu", defines={'block_width': block_width, 'block_height': block_height})
+        self.boundaryKernels = gpu_ctx.get_kernel("boundary_kernels.cu",
+                                                  defines={'block_width': block_width, 'block_height': block_height,
+                                                           'BC_NS_NX': int(self.bc_data.north.h[0].shape[0]),
+                                                           'BC_NS_NY': int(2),
+                                                           'BC_EW_NX': int(2),
+                                                           'BC_EW_NY': int(self.bc_data.east.h[0].shape[0]),
+                                                           })
 
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.periodicBoundary_NS = self.boundaryKernels.get_function("periodicBoundary_NS")
@@ -1027,18 +1160,30 @@ class BoundaryConditionsArakawaA:
         self.linearInterpolation_EW = self.boundaryKernels.get_function("linearInterpolation_EW")
         self.linearInterpolation_EW.prepare("iiiiiiiiPiPiPi")
         self.flowRelaxationScheme_NS = self.boundaryKernels.get_function("flowRelaxationScheme_NS")
-        self.flowRelaxationScheme_NS.prepare("iiiiiiiiPiPiPif")
+        self.flowRelaxationScheme_NS.prepare("iiiiiiiiPiPiPiPPf")
         self.flowRelaxationScheme_EW = self.boundaryKernels.get_function("flowRelaxationScheme_EW")
-        self.flowRelaxationScheme_EW.prepare("iiiiiiiiPiPiPif")
+        self.flowRelaxationScheme_EW.prepare("iiiiiiiiPiPiPiPPf")
         
         self.bc_timestamps = [None, None]
-        self.bc_textures = None
        
         # Set kernel launch parameters
         self.local_size = (block_width, block_height, 1)
         self.global_size = ( \
                              int(np.ceil((self.nx + 2*self.halo_x + 1)/float(self.local_size[0]))), \
                              int(np.ceil((self.ny + 2*self.halo_y + 1)/float(self.local_size[1]))) )
+        components = 3
+        self.bc_NS_current_arr = CUDAArray3D(gpu_stream,
+                                     self.bc_data.north.h[0].shape[0], 2, components,
+                                     np.zeros((2, self.bc_data.north.h[0].shape[0], components)))
+        self.bc_NS_next_arr = CUDAArray3D(gpu_stream,
+                                     self.bc_data.north.h[0].shape[0], 2, components,
+                                     np.zeros((2, self.bc_data.north.h[0].shape[0], components)))
+        self.bc_EW_current_arr = CUDAArray3D(gpu_stream,
+                                     2, self.bc_data.east.h[0].shape[0], components,
+                                     np.zeros((self.bc_data.east.h[0].shape[0], 2, components)))
+        self.bc_EW_next_arr = CUDAArray3D(gpu_stream,
+                                     2, self.bc_data.east.h[0].shape[0], components,
+                                     np.zeros((self.bc_data.east.h[0].shape[0], 2, components)))
 
 
         
@@ -1071,30 +1216,7 @@ class BoundaryConditionsArakawaA:
         self.logger.debug("Time indices: [%d, %d]", t0_index, t1_index)
         self.logger.debug("Time: %s  New interval is [%s, %s], old was [%s, %s]", \
                     t, new_t0, new_t1, old_t0, old_t1)
-                
-        #Get texture references
-        if (self.bc_textures):
-            NS0_texref, NS1_texref, EW0_texref, EW1_texref = self.bc_textures;
-        else:
-            NS0_texref = self.boundaryKernels.get_texref("bc_tex_NS_current")
-            EW0_texref = self.boundaryKernels.get_texref("bc_tex_EW_current")
-            NS1_texref = self.boundaryKernels.get_texref("bc_tex_NS_next")
-            EW1_texref = self.boundaryKernels.get_texref("bc_tex_EW_next")
-        
-        #Helper function to upload data to the GPU as a texture
-        def setTexture(texref, numpy_array):       
-            #Upload data to GPU and bind to texture reference
-            #shape is interpreted as height, width, num_channels for order == “C”,
-            data = np.ascontiguousarray(numpy_array)
-            texref.set_array(cuda.make_multichannel_2d_array(data, order="C"))
-            #cuda.bind_array_to_texref(cuda.make_multichannel_2d_array(numpy_array, order="C"), texref)
-                        
-            # Set texture parameters
-            texref.set_filter_mode(cuda.filter_mode.LINEAR) #bilinear interpolation
-            texref.set_address_mode(0, cuda.address_mode.CLAMP) #no indexing outside domain
-            texref.set_address_mode(1, cuda.address_mode.CLAMP)
-            texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
-            
+
         def packDataNS(data, t_index):
             h = data.h[t_index]
             hu = data.hu[t_index]
@@ -1103,12 +1225,11 @@ class BoundaryConditionsArakawaA:
             h = np.squeeze(h)
             hu = np.squeeze(hu)
             hv = np.squeeze(hv)
-            zeros = np.zeros_like(h)
             assert(len(h.shape) == 1), "NS-data must be one row"
             nx = h.shape[0]
             
-            components = 4
-            NS_data = np.vstack((h, hu, hv, zeros))
+            components = 3
+            NS_data = np.vstack((h, hu, hv))
             NS_data = np.transpose(NS_data);
             NS_data = np.reshape(NS_data, (1, nx, components))
             NS_data = np.ascontiguousarray(NS_data)
@@ -1124,12 +1245,11 @@ class BoundaryConditionsArakawaA:
             h = np.squeeze(h)
             hu = np.squeeze(hu)
             hv = np.squeeze(hv)
-            zeros = np.zeros_like(h)
             assert(len(h.shape) == 1), "EW-data must be one column"
             ny = h.shape[0]
             
-            components = 4
-            EW_data = np.vstack((h, hu, hv, zeros))
+            components = 3
+            EW_data = np.vstack((h, hu, hv))
             EW_data = np.transpose(EW_data);
             EW_data = np.reshape(EW_data, (ny, 1, components))
             EW_data = np.ascontiguousarray(EW_data)
@@ -1145,15 +1265,15 @@ class BoundaryConditionsArakawaA:
             N_data = packDataNS(self.bc_data.north, t0_index)
             S_data = packDataNS(self.bc_data.south, t0_index)
             NS_data = np.vstack((S_data, N_data))
-            setTexture(NS0_texref, NS_data)
-            self.flowRelaxationScheme_NS.param_set_texref(NS0_texref)
-            
+            NS_data = np.ascontiguousarray(NS_data)
+            self.bc_NS_current_arr.upload(gpu_stream, NS_data)
             
             E_data = packDataEW(self.bc_data.east, t0_index)
             W_data = packDataEW(self.bc_data.west, t0_index)
-            EW_data = np.hstack((W_data, E_data)) 
-            setTexture(EW0_texref, EW_data)
-            self.flowRelaxationScheme_EW.param_set_texref(EW0_texref)
+            EW_data = np.hstack((W_data, E_data))
+            EW_data = np.ascontiguousarray(EW_data)
+            self.bc_EW_current_arr.upload(gpu_stream, EW_data)
+            
             
             self.logger.debug("NS-Data is set to " + str(NS_data) + ", " + str(NS_data.shape))
             self.logger.debug("EW-Data is set to " + str(EW_data) + ", " + str(EW_data.shape))
@@ -1167,24 +1287,20 @@ class BoundaryConditionsArakawaA:
             N_data = packDataNS(self.bc_data.north, t1_index)
             S_data = packDataNS(self.bc_data.south, t1_index)
             NS_data = np.vstack((S_data, N_data))
-            setTexture(NS1_texref, NS_data)
-            self.flowRelaxationScheme_NS.param_set_texref(NS1_texref)
+            NS_data = np.ascontiguousarray(NS_data)
+            self.bc_NS_next_arr.upload(gpu_stream, NS_data)
             
             E_data = packDataEW(self.bc_data.east, t1_index)
             W_data = packDataEW(self.bc_data.west, t1_index)
             EW_data = np.hstack((W_data, E_data)) 
-            setTexture(EW1_texref, EW_data)
-            self.flowRelaxationScheme_EW.param_set_texref(EW1_texref)
+            EW_data = np.ascontiguousarray(EW_data)
+            self.bc_EW_next_arr.upload(gpu_stream, EW_data)
             
             self.logger.debug("NS-Data is set to " + str(NS_data) + ", " + str(NS_data.shape))
             self.logger.debug("EW-Data is set to " + str(EW_data) + ", " + str(EW_data.shape))
             
             gpu_stream.synchronize()
-                
-        # Store texture references (they are deleted if collected by python garbage collector)
-        self.logger.debug("Textures: \n[%s, %s, %s, %s]", NS0_texref, NS1_texref, EW0_texref, EW1_texref)
-        self.bc_textures = [NS0_texref, NS1_texref, EW0_texref, EW1_texref]
-        
+
         # Update the bc_t linear interpolation coefficient
         elapsed_since_t0 = (t-new_t0)
         time_interval = max(1.0e-10, (new_t1-new_t0))
@@ -1268,6 +1384,8 @@ class BoundaryConditionsArakawaA:
             h.data.gpudata, h.pitch, \
             u.data.gpudata, u.pitch, \
             v.data.gpudata, v.pitch, \
+            self.bc_NS_current_arr.data.gpudata, \
+            self.bc_NS_next_arr.data.gpudata, \
             self.bc_t)
 
     def flow_relaxation_EW(self, gpu_stream, h, u, v):
@@ -1281,6 +1399,8 @@ class BoundaryConditionsArakawaA:
             h.data.gpudata, h.pitch, \
             u.data.gpudata, u.pitch, \
             v.data.gpudata, v.pitch, \
+            self.bc_EW_current_arr.data.gpudata, \
+            self.bc_EW_next_arr.data.gpudata, \
             self.bc_t)
 
 
@@ -1329,7 +1449,14 @@ class Bathymetry:
         
         # Check boundary conditions and make Bi periodic if necessary
         # Load CUDA module for periodic boundary
-        self.boundaryKernels = gpu_ctx.get_kernel("boundary_kernels.cu", defines={'block_width': block_width, 'block_height': block_height})
+        self.boundaryKernels = gpu_ctx.get_kernel("boundary_kernels.cu",
+                                                  defines={'block_width': block_width, 'block_height': block_height,
+                                                           # setting dummy variables as they need to be defined
+                                                           'BC_NS_NX': int(-1),
+                                                           'BC_NS_NY': int(-1),
+                                                           'BC_EW_NX': int(-1),
+                                                           'BC_EW_NY': int(-1),
+                                                           })
 
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.periodic_boundary_intersections_NS = self.boundaryKernels.get_function("periodic_boundary_intersections_NS")
