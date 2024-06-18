@@ -270,9 +270,8 @@ __device__ float significant_wave_height(const float wind_speed, const float fet
         const float h_const = 0.0016f;  // Nondimensional height constant.
 
         // Calculate wave height
-        const float wind_speed_sq = wind_speed*wind_speed;
-        const float h_nodim = h_const * sqrtf(g * fetch / wind_speed_sq);
-        wave_height = fminf(h_max, h_nodim) * wind_speed_sq / g;
+        const float h_nodim = h_const * sqrtf(g * fetch) / wind_speed;
+        wave_height = fminf(h_max, h_nodim) * wind_speed*wind_speed / g;
     }
 
     return wave_height;
