@@ -28,8 +28,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "external_forcing.cu"
 #include "interpolation.cu"
 
-texture<float, cudaTextureType2D> angle_tex;
-
 
 //WARNING: Must match max_dt.cu and initBm_kernel.cu
 //WARNING: This is error prone - as comparison with floating point numbers is not accurate

@@ -25,8 +25,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "interpolation.cu"
 #include "random_number_generators.cu"
 
-texture<float, cudaTextureType2D> angle_tex;
-
 
 /**
   * Returns the coriolis parameter f from the coriolis data array.
@@ -395,7 +393,6 @@ __global__ void geostrophicBalance(
 
 
 
-//texture<float, cudaTextureType2D> angle_tex;
 
 /**
   * Kernel that adds a perturbation to the input fields eta, hu and hv.
