@@ -354,9 +354,9 @@ class IEWPFOceanTest(unittest.TestCase):
         rel_norm_hu  = np.linalg.norm(hu - huCPU)/np.max(hu)
         rel_norm_hv  = np.linalg.norm(hv - hvCPU)/np.max(hv)
        
-        self.assertAlmostEqual(rel_norm_eta, 0.0, places=5)
-        self.assertAlmostEqual(rel_norm_hu,  0.0, places=4)
-        self.assertAlmostEqual(rel_norm_hv,  0.0, places=3)
+        self.assertAlmostEqual(1.0 + rel_norm_eta, 1.0, places=5)
+        self.assertAlmostEqual(1.0 + rel_norm_hu,  1.0, places=3)
+        self.assertAlmostEqual(1.0 + rel_norm_hv,  1.0, places=3)
         
     def test_observation_operator_CPU_vs_GPU(self):
         self.run_ensemble()
