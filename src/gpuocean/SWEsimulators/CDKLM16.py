@@ -261,10 +261,10 @@ class CDKLM16(Simulator.Simulator):
                          'ANGLE_NY': int(angle.shape[0]),
                          'ATMOS_PRES_NX': int(self.atmospheric_pressure.P[0].shape[1]),
                          'ATMOS_PRES_NY': int(self.atmospheric_pressure.P[0].shape[0]),
-                         'WIND_STRESS_X_NX': int(self.wind_stress.wind_u[0].shape[1]),
-                         'WIND_STRESS_X_NY': int(self.wind_stress.wind_u[0].shape[0]),
-                         'WIND_STRESS_Y_NX': int(self.wind_stress.wind_v[0].shape[1]),
-                         'WIND_STRESS_Y_NY': int(self.wind_stress.wind_v[0].shape[0]),
+                         'WIND_STRESS_X_NX': int(self.wind_stress.stress_u[0].shape[1]),
+                         'WIND_STRESS_X_NY': int(self.wind_stress.stress_u[0].shape[0]),
+                         'WIND_STRESS_Y_NX': int(self.wind_stress.stress_v[0].shape[1]),
+                         'WIND_STRESS_Y_NY': int(self.wind_stress.stress_v[0].shape[0]),
                          'USE_DIRECT_LOOKUP' : bool(use_direct_lookup)
         }
         
