@@ -213,13 +213,24 @@ class OceanNoiseEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
         self.r = sim.r
         self.wind = sim.wind_stress
         
-        self.small_scale_perturbation = sim.small_scale_perturbation
-        self.small_scale_perturbation_amplitude = None
-        self.small_scale_perturbation_interpolation_factor = 1.0
+        self.has_model_error = sim.model_error is not None
+        self.model_error_args = {}
+        if self.has_model_error:
+            self.model_error_name = sim.model_error.__class__.__name__
         
-        if self.small_scale_perturbation:
-            self.small_scale_perturbation_amplitude = sim.small_scale_model_error.soar_q0
-            self.small_scale_perturbation_interpolation_factor = sim.small_scale_perturbation_interpolation_factor
+            if self.model_error_name ==  "OceanStateNoise":
+                self.model_error_args["small_scale_perturbation_amplitude"] = sim.model_error.soar_q0
+                self.model_error_args["small_scale_perturbation_interpolation_factor"] = sim.model_error.interpolation_factor
+                    
+            elif self.model_error_name == "ModelErrorKL":
+                self.model_error_args["kl_decay"]       = sim.model_error.kl_decay
+                self.model_error_args["kl_scaling"]     = sim.model_error.kl_scaling
+                self.model_error_args["include_cos"]    = sim.model_error.include_cos
+                self.model_error_args["include_sin"]    = sim.model_error.include_sin
+                self.model_error_args["basis_x_start"]  = sim.model_error.basis_x_start
+                self.model_error_args["basis_y_start"]  = sim.model_error.basis_y_start
+                self.model_error_args["basis_x_end"]    = sim.model_error.basis_x_end
+                self.model_error_args["basis_y_end"]    = sim.model_error.basis_y_end
             
         
         
@@ -276,13 +287,14 @@ class OceanNoiseEnsemble(BaseOceanStateEnsemble.BaseOceanStateEnsemble):
                                                 self.nx, self.ny, self.dx, self.dy, self.dt, \
                                                 self.g, self.f, self.r, \
                                                 boundary_conditions=self.boundaryConditions, \
-                                                write_netcdf=False, \
-                                                small_scale_perturbation=self.ensemble_small_scale_perturbation, \
-                                                small_scale_perturbation_amplitude=self.small_scale_perturbation_amplitude,
-                                                small_scale_perturbation_interpolation_factor=self.small_scale_perturbation_interpolation_factor)
-            
+                                                write_netcdf=False)
+            if self.model_error_name == "OceanStateNoise":
+                self.particles[i].setSOARModelError(**self.model_error_args) 
+            elif self.model_error_name == "ModelErrorKL":
+                self.particles[i].setKLModelError(**self.model_error_args)
+                
             if self.initialization_variance_factor_ocean_field != 0.0:
-                self.particles[i].perturbState(q0_scale=self.initialization_variance_factor_ocean_field)
+                self.particles[i].perturbState(perturbation_scale=self.initialization_variance_factor_ocean_field)
                 
             # Add drifters
             drifters = GPUDrifterCollection.GPUDrifterCollection(self.gpu_ctx, self.driftersPerOceanModel,
