@@ -108,7 +108,7 @@ class OceanStateNoiseTestParent(unittest.TestCase):
     def useLCG(self):
         return False
             
-    def create_noise(self, factor=1):
+    def create_noise(self, factor=1, seed=1):
         n,e,s,w = 1,1,1,1
         if self.periodicNS:
             n,s = 2,2
@@ -120,8 +120,9 @@ class OceanStateNoiseTestParent(unittest.TestCase):
                                      Common.BoundaryConditions(n,e,s,w),
                                      staggered=self.staggered,
                                      interpolation_factor=factor,
-                                     use_lcg=self.useLCG())
-    def create_large_noise(self):
+                                     use_lcg=self.useLCG(), 
+                                     np_seed=seed)
+    def create_large_noise(self, seed=1):
         n,e,s,w = 1,1,1,1
         if self.periodicNS:
             n,s = 2,2
@@ -132,7 +133,8 @@ class OceanStateNoiseTestParent(unittest.TestCase):
                                            self.dx, self.dy,
                                            Common.BoundaryConditions(n,e,s,w),
                                            staggered = self.staggered,
-                                           use_lcg=self.useLCG())
+                                           use_lcg=self.useLCG(),
+                                           np_seed=seed)
 
     def allocateBuffers(self, HCPU):
         host_buffer = np.zeros((self.ny+2*self.ghost_cells_y, self.nx+2*self.ghost_cells_x))

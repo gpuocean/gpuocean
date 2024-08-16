@@ -33,7 +33,8 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
     def __init__(self, numDrifters, observation_variance=0.01,
                  boundaryConditions=Common.BoundaryConditions(), 
                  initialization_cov_drifters=None,
-                 domain_size_x=1.0, domain_size_y=1.0):
+                 domain_size_x=1.0, domain_size_y=1.0,
+                 initialize=False):
         """
         Creates a GlobalParticles object for drift trajectory ensemble.
 
@@ -53,7 +54,8 @@ class CPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
         self.positions = np.zeros((self.numDrifters + 1, 2))
         
         # Initialize drifters:
-        self.uniformly_distribute_drifters(initialization_cov_drifters=initialization_cov_drifters)
+        if initialize:
+            self.uniformly_distribute_drifters(initialization_cov_drifters=initialization_cov_drifters)
         
     def copy(self):
         """

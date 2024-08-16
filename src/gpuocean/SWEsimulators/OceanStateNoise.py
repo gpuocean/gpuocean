@@ -49,7 +49,7 @@ class OceanStateNoise(object):
                  boundaryConditions, staggered,
                  soar_q0=None, soar_L=None,
                  interpolation_factor = 1,
-                 use_lcg=False, xorwow_seed = None,
+                 use_lcg=False, xorwow_seed = None, np_seed = None,
                  angle=np.array([[0]], dtype=np.float32),
                  coriolis_f=np.array([[0]], dtype=np.float32),
                  block_width=16, block_height=16):
@@ -128,7 +128,8 @@ class OceanStateNoise(object):
 
         self.rng = RandomNumbers.RandomNumbers(gpu_ctx, self.gpu_stream, 
                                                self.rand_nx, self.rand_ny, 
-                                               use_lcg=self.use_lcg, xorwow_seed=xorwow_seed,
+                                               use_lcg=self.use_lcg,
+                                               seed=np_seed, xorwow_seed=xorwow_seed,
                                                block_width=block_width, block_height=block_height)
 
         # Since normal distributed numbers are generated in pairs, we need to store half the number of

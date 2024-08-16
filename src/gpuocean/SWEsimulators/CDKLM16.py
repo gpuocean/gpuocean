@@ -663,9 +663,6 @@ class CDKLM16(Simulator.Simulator):
                                                              use_lcg=otherSim.model_error.use_lcg, 
                                                              block_width=otherSim.model_error.local_size[0], block_height=otherSim.model_error.local_size[1])
  
-    def setModelErrorFromFile(self, filename, use_lcg=False, xorwow_seed = None):
-        raise("Not implemented")
-
     def drifterStep(self, dt):
         # Evolve drifters
         if self.hasCrossProductDrifter:
