@@ -66,17 +66,19 @@ class NetCDFtest(unittest.TestCase):
         doubleJetCase = DoubleJetCase.DoubleJetCase(self.gpu_ctx,
                                                     DoubleJetCase.DoubleJetPerturbationType.IEWPFPaperCase)
 
-        doubleJetCase_args, doubleJetCase_init = doubleJetCase.getInitConditions()
+        doubleJetCase_args, doubleJetCase_init, model_error_args = doubleJetCase.getInitConditions()
         netcdf_args = {
             'write_netcdf': True,
             'netcdf_filename': 'netcdf_test/netcdf_test.nc'
         }
         self.sim = CDKLM16.CDKLM16(**doubleJetCase_args, **doubleJetCase_init, **netcdf_args)
+        self.sim.setSOARModelError(**model_error_args)
         self.sim.closeNetCDF()
         
         
         # Create new simulator from the newly created file
         self.file_sim = CDKLM16.CDKLM16.fromfilename(self.gpu_ctx, netcdf_args['netcdf_filename'], cont_write_netcdf=False)
+        self.file_sim.setModelErrorFromFile(netcdf_args['netcdf_filename'])
         
         # Loop over object attributes and compare those that are scalars
         for attr in dir(self.sim):
@@ -107,17 +109,17 @@ class NetCDFtest(unittest.TestCase):
                     #    print('Diff: ' + str(getattr(file_sim, attr) - getattr(sim, attr)))
 
         # Loop over attributes in the model error
-        for attr in dir(self.sim.small_scale_model_error):
+        for attr in dir(self.sim.model_error):
             if not attr.startswith('__'):
-                if np.isscalar(getattr(self.sim.small_scale_model_error, attr)):
+                if np.isscalar(getattr(self.sim.model_error, attr)):
                     
-                    sim_attr      = getattr(self.sim.small_scale_model_error,      attr)
-                    file_sim_attr = getattr(self.file_sim.small_scale_model_error, attr)
+                    sim_attr      = getattr(self.sim.model_error,      attr)
+                    file_sim_attr = getattr(self.file_sim.model_error, attr)
                     
                     # Create error message and compare values of attributes
                     assert_msg = "Discrepancy in attribute " + attr + ":\n" + \
-                                 "         sim.small_scale_model_error"+ attr + ": " + str(sim_attr) + \
-                                 "    file_sim.small_scale_model_error"+ attr + ": " + str(file_sim_attr)
+                                 "         sim.model_error"+ attr + ": " + str(sim_attr) + \
+                                 "    file_sim.model_error"+ attr + ": " + str(file_sim_attr)
                     self.assertEqual(sim_attr, file_sim_attr, msg=assert_msg)
                     
                     if self.printall:
