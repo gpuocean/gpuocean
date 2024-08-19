@@ -26,9 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "common.cu"
 #include "external_forcing.cu"
-
-texture<float, cudaTextureType2D> angle_tex;
-texture<float, cudaTextureType2D> coriolis_f_tex;
+#include "interpolation.cu"
 
 
 //WARNING: Must match max_dt.cu and initBm_kernel.cu
@@ -39,39 +37,45 @@ texture<float, cudaTextureType2D> coriolis_f_tex;
 
 
 /**
-  * Returns the coriolis parameter f from the coriolis texture. 
+  * Returns the coriolis parameter f from the coriolis data array. 
+  * @param coriolis_f_arr Array of coriolis force values to interpolate from
   * @param i Cell number along x-axis, starting from (0, 0) corresponding to first cell in domain after global ghost cells
   * @param j Cell number along y-axis
+  * @param data_nx Number of cells along x axis for the coriolis array
+  * @param data_ny Number of cells along y axis for the coriolis array
   * The texture is assumed to also cover the ghost cells (same shape/extent as eta)
   */
 __device__
-inline float coriolisF(const int i, const int j) {
+inline float coriolisF(const float* coriolis_f_arr, const int i, const int j, int data_nx, int data_ny) {
     //nx+4 to account for ghost cells
     //+0.5f to go to center of texel
     const float s = (i+0.5f) / (NX+4.0f); 
     const float t = (j+0.5f) / (NY+4.0f);
     //FIXME: Should implement so that subsampling does not get border issues, see
     //https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#table-lookup
-    return tex2D(coriolis_f_tex, s, t);
+    return bilinear_interpolation(coriolis_f_arr, data_nx, data_ny, s, t);
 }
 
 
 
 /**
   * Decompose the north vector to x and y coordinates
+  * @param angle_arr Array of angle values to interpolate from
   * @param i Cell number along x-axis, starting from (0, 0) corresponding to first cell in domain after global ghost cells
   * @param j Cell number along y-axis
+  * @param data_nx Number of cells along x axis for the angle array
+  * @param data_ny Number of cells along y axis for the angle array
   */
 __device__
-inline float2 getNorth(const int i, const int j) {
+inline float2 getNorth(const float* angle_arr, const int i, const int j, int data_nx, int data_ny) {
     //nx+4 to account for ghost cells
     //+0.5f to go to center of texel
     const float s = (i+0.5f) / (NX+4.0f);
     const float t = (j+0.5f) / (NY+4.0f);
-    const float angle = tex2D(angle_tex, s, t);
+    const float angle = bilinear_interpolation(angle_arr, data_nx, data_ny, s, t);
     //FIXME: Should implement so that subsampling does not get border issues, see
     //https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#table-lookup
-    return make_float2(sinf(angle), cosf(angle));
+    return make_float2(__sinf(angle), __cosf(angle));
 }
 
 // Q =[eta, u, v]
@@ -157,7 +161,8 @@ void adjustSlopes_x(const int bx, const int by,
                     float R[3][block_height+4][block_width+4],
                     float Qx[3][block_height+2][block_width+2], // used as if Qx[3][block_height][block_width + 2]
                     float Hi[block_height+3][block_width+3],
-                    const int& bc_east_, const int& bc_west_) {
+                    const int& bc_east_, const int& bc_west_,
+                    const float* coriolis_f_arr) {
     
     // Need K_x (Qx[2]), coriolis parameter (f, beta), eta (R[0]), v (R[2]), H (Hi), g, dx
 
@@ -181,7 +186,7 @@ void adjustSlopes_x(const int bx, const int by,
         if ((bc_east_ == 1) && (bx + k > NX+2)) { v = -v; }
         
         // Coriolis in this cell
-        const float coriolis_f = coriolisF(bx+k, by+l);
+        const float coriolis_f = coriolisF(coriolis_f_arr, bx+k, by+l, CORIOLIS_F_NX, CORIOLIS_F_NY);
         
         const float dxfv = DX*coriolis_f*v;
         
@@ -207,7 +212,8 @@ void adjustSlopes_y(const int bx, const int by,
                     float R[3][block_height+4][block_width+4],
                     float Qx[3][block_height+2][block_width+2], // used as if Qx[3][block_height+2][block_width]
                     float Hi[block_height+3][block_width+3],
-                    const int& bc_north_, const int& bc_south_) {
+                    const int& bc_north_, const int& bc_south_,
+                    const float* coriolis_f_arr) {
     
     // Need K_x (Qx[2]), coriolis parameter (f, beta), eta (R[0]), v (R[2]), H (Hi), g, dx
 
@@ -231,7 +237,7 @@ void adjustSlopes_y(const int bx, const int by,
         if ((bc_north_ == 1) && (by + l > NY+2)) { u = -u; }
         
         // Coriolis in this cell
-        const float coriolis_f = coriolisF(bx+k, by+l);
+        const float coriolis_f = coriolisF(coriolis_f_arr, bx+k, by+l, CORIOLIS_F_NX, CORIOLIS_F_NY);
 
         const float dyfu = DY*coriolis_f*u;
         
@@ -486,9 +492,23 @@ __global__ void cdklm_swe_2D(
         float* Hm_ptr_, const int Hm_pitch_,
         float land_value_,
 
+        //Coriolis
+        const float* coriolis_f_arr,
+
+        //Angle data array
+        const float* angle_arr,
+
         //External forcing parameters
-        const float wind_stress_t_,
+        //Atmospheric pressure
+        const float* atmospheric_pressure_current_arr,
+        const float* atmospheric_pressure_next_arr,
         const float atmospheric_pressure_t_,
+        //Windstress
+        const float* wind_stress_x_current_arr,
+        const float* wind_stress_x_next_arr,
+        const float* wind_stress_y_current_arr,
+        const float* wind_stress_y_next_arr,
+        const float wind_stress_t_,
 
         // Boundary conditions (1: wall, 2: periodic, 3: open boundary (flow relaxation scheme))
         // Note: these are packed north, east, south, west boolean bits into an int
@@ -684,11 +704,11 @@ __global__ void cdklm_swe_2D(
             }
             
             // Get north vector for thread (bx + k, by +l)
-            const float2 local_north = getNorth(bx+k, by+l);
+            const float2 local_north = getNorth(angle_arr, bx+k, by+l, ANGLE_NX, ANGLE_NY);
             
-            const float left_coriolis_f   = coriolisF(bx+k-1, by+l);
-            const float center_coriolis_f = coriolisF(  bx+k, by+l);
-            const float right_coriolis_f  = coriolisF(bx+k+1, by+l);
+            const float left_coriolis_f   = coriolisF(coriolis_f_arr, bx+k-1, by+l, CORIOLIS_F_NX, CORIOLIS_F_NY);
+            const float center_coriolis_f = coriolisF(coriolis_f_arr, bx+k  , by+l, CORIOLIS_F_NX, CORIOLIS_F_NY);
+            const float right_coriolis_f  = coriolisF(coriolis_f_arr, bx+k+1, by+l, CORIOLIS_F_NX, CORIOLIS_F_NY);
             
             const float left_fv  = (local_north.x*left_u + local_north.y*left_v)*left_coriolis_f;
             const float center_fv = (local_north.x*center_u + local_north.y*center_v)*center_coriolis_f;
@@ -712,20 +732,21 @@ __global__ void cdklm_swe_2D(
     // Need K_x (Qx[2]), coriolis parameter (f, beta), eta (R[0]), v (R[2]), H (Hi), g, dx
     adjustSlopes_x(bx, by,
                    R, Qx, Hi,
-                   bc_east, bc_west);
+                   bc_east, bc_west,
+                   coriolis_f_arr);
     __syncthreads();
    
     float3 flux_diff;
     
     // Get Coriolis terms needed for fluxes etc.
-    const float coriolis_f_central = coriolisF(  ti,   tj);
+    const float coriolis_f_central = coriolisF(coriolis_f_arr, ti, tj, CORIOLIS_F_NX, CORIOLIS_F_NY);
     // North and east vector in xy-coordinate system
-    const float2 north = getNorth(ti, tj);
+    const float2 north = getNorth(angle_arr, ti, tj, ANGLE_NX, ANGLE_NY);
     const float2 east = make_float2(north.y, -north.x);
     
     { //Scope
-        const float coriolis_f_left    = coriolisF(ti-1,   tj);
-        const float coriolis_f_right   = coriolisF(ti+1,   tj);
+        const float coriolis_f_left    = coriolisF(coriolis_f_arr, ti-1, tj, CORIOLIS_F_NX, CORIOLIS_F_NY);
+        const float coriolis_f_right   = coriolisF(coriolis_f_arr, ti+1, tj, CORIOLIS_F_NX, CORIOLIS_F_NY);
 
         // Compute flux along x axis
         flux_diff = (  
@@ -789,12 +810,12 @@ __global__ void cdklm_swe_2D(
             }
             
             // Get north and east vectors for thread (bx + k, by +l)
-            const float2 local_north = getNorth(bx+k, by+l);
+            const float2 local_north = getNorth(angle_arr, bx+k, by+l, ANGLE_NX, ANGLE_NY);
             const float2 local_east = make_float2(local_north.y, -local_north.x);
             
-            const float lower_coriolis_f  = coriolisF(bx+k, by+l-1);
-            const float center_coriolis_f = coriolisF(bx+k,   by+l);
-            const float upper_coriolis_f  = coriolisF(bx+k, by+l+1);
+            const float lower_coriolis_f  = coriolisF(coriolis_f_arr, bx+k, by+l-1, CORIOLIS_F_NX, CORIOLIS_F_NY);
+            const float center_coriolis_f = coriolisF(coriolis_f_arr, bx+k, by+l  , CORIOLIS_F_NX, CORIOLIS_F_NY);
+            const float upper_coriolis_f  = coriolisF(coriolis_f_arr, bx+k, by+l+1, CORIOLIS_F_NX, CORIOLIS_F_NY);
 
             const float lower_fu  = (local_east.x*lower_u  + local_east.y*lower_v )*lower_coriolis_f;
             const float center_fu = (local_east.x*center_u + local_east.y*center_v)*center_coriolis_f;
@@ -816,14 +837,15 @@ __global__ void cdklm_swe_2D(
     // Need L_x (Qx[2]), coriolis parameter (f, beta), eta (R[0]), u (R[1]), H (Hi), g, dx
     adjustSlopes_y(bx, by,
                    R, Qx, Hi,
-                   bc_north, bc_south);
+                   bc_north, bc_south,
+                   coriolis_f_arr);
     __syncthreads();
     
     
     if (! ONE_DIMENSIONAL)
     { // scope
-        const float coriolis_f_lower   = coriolisF(  ti, tj-1);
-        const float coriolis_f_upper   = coriolisF(  ti, tj+1);
+        const float coriolis_f_lower   = coriolisF(coriolis_f_arr, ti, tj-1, CORIOLIS_F_NX, CORIOLIS_F_NY);
+        const float coriolis_f_upper   = coriolisF(coriolis_f_arr, ti, tj+1, CORIOLIS_F_NX, CORIOLIS_F_NY);
     
         //Compute fluxes along the y axis
         flux_diff = flux_diff + 
@@ -867,10 +889,6 @@ __global__ void cdklm_swe_2D(
         if (h >= KPSIMULATOR_DEPTH_CUTOFF) {
             // If not land
             if (R[0][j][i] != CDKLM_DRY_FLAG) {
-                // Wind
-                const float X = WIND_STRESS_FACTOR * windStressX(wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4);
-                const float Y = WIND_STRESS_FACTOR * windStressY(wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4);
-
                 // Bottom topography source terms!
                 // -g*(eta + H)*(-1)*dH/dx   * dx
                 const float RHxp = 0.5f*( Hi[H_j  ][H_i+1] + Hi[H_j+1][H_i+1] );
@@ -878,17 +896,6 @@ __global__ void cdklm_swe_2D(
                 const float RHyp = 0.5f*( Hi[H_j+1][H_i  ] + Hi[H_j+1][H_i+1] );
                 const float RHym = 0.5f*( Hi[H_j  ][H_i  ] + Hi[H_j  ][H_i+1] );
                 
-                const float H_x = RHxp - RHxm;
-                const float H_y = RHyp - RHym;
-                
-                const float eta_sn = 0.5f*(eta_north + eta_south);
-                const float eta_we = 0.5f*(eta_west  + eta_east);
-
-                // TODO: We might want to use the mean of the reconstructed eta's at the faces here, instead of R[0]...
-                //const float bathymetry1 = GRAV*(R[0][j][i] + Hm)*H_x;
-                //const float bathymetry2 = GRAV*(R[0][j][i] + Hm)*H_y;
-                const float bathymetry1 = GRAV*(eta_we + Hm)*H_x;
-                const float bathymetry2 = GRAV*(eta_sn + Hm)*H_y;
                 
                 //Project momenta onto north/east axes
                 const float hu_east =  hu*east.x + hv*east.y;
@@ -897,7 +904,7 @@ __global__ void cdklm_swe_2D(
                 //Convert momentums between east/north due to Coriolis
                 const float hu_east_cor = coriolis_f_central*hv_north;
                 const float hv_north_cor = -coriolis_f_central*hu_east;
-                
+
                 //Project back to x/y-coordinate system
                 const float2 up = make_float2(-north.x, north.y);
                 const float2 right = make_float2(up.y, -up.x);
@@ -905,13 +912,41 @@ __global__ void cdklm_swe_2D(
                 const float hv_cor = up.x*hu_east_cor + up.y*hv_north_cor;
 
                 // Atmospheric pressure
-                const float2 atm_p_central_diff = atmospheric_pressure_central_diff(atmospheric_pressure_t_,  ti+0.5, tj+0.5, NX+4, NY+4);
-                const float atm_pressure_x = -atm_p_central_diff.x*h/(2.0f*DX*RHO_O);
-                const float atm_pressure_y = -atm_p_central_diff.y*h/(2.0f*DY*RHO_O);
+#if USE_DIRECT_LOOKUP
+                const float2 atm_p_central_diff = atmospheric_pressure_central_diff_lookup(atmospheric_pressure_current_arr, atmospheric_pressure_next_arr, atmospheric_pressure_t_,  ti, tj, ATMOS_PRES_NX);
+#else
+                const float2 atm_p_central_diff = atmospheric_pressure_central_diff(atmospheric_pressure_current_arr, atmospheric_pressure_next_arr, atmospheric_pressure_t_,  ti+0.5, tj+0.5, NX+4, NY+4, ATMOS_PRES_NX, ATMOS_PRES_NY);
+#endif
+                // TODO: We might want to use the mean of the reconstructed eta's at the faces here, instead of R[0]...
+                //const float bathymetry1 = GRAV*(R[0][j][i] + Hm)*H_x;
+                //const float bathymetry2 = GRAV*(R[0][j][i] + Hm)*H_y;
 
+            {
+                // Atmospheric pressure
+                const float atm_pressure_x = -atm_p_central_diff.x*h/(2.0f*DX*RHO_O);
+                // Wind
+                const float X = WIND_STRESS_FACTOR * windStress(wind_stress_x_current_arr, wind_stress_x_next_arr, wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4, WIND_STRESS_X_NX, WIND_STRESS_X_NY);
+                // Coriolis
+                const float eta_we = 0.5f*(eta_west  + eta_east);
+                // Bottom topography
+                const float H_x = RHxp - RHxm;
+                const float bathymetry1 = GRAV*(eta_we + Hm)*H_x;
                 // Total source terms
                 st1 = X + hu_cor + atm_pressure_x + bathymetry1/DX;
+            }
+            {   
+                // Atmospheric pressure
+                const float atm_pressure_y = -atm_p_central_diff.y*h/(2.0f*DY*RHO_O);
+                // Wind
+                const float Y = WIND_STRESS_FACTOR * windStress(wind_stress_y_current_arr, wind_stress_y_next_arr, wind_stress_t_, ti+0.5, tj+0.5, NX+4, NY+4, WIND_STRESS_Y_NX, WIND_STRESS_Y_NY);
+                // Coriolis
+                const float eta_sn = 0.5f*(eta_north + eta_south);
+                const float H_y = RHyp - RHym;
+                // Bottom topography
+                const float bathymetry2 = GRAV*(eta_sn + Hm)*H_y;
+                // Total source terms
                 st2 = Y + hv_cor + atm_pressure_y + bathymetry2/DY;
+            }
             }
         }
 

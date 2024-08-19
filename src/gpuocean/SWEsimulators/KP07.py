@@ -53,6 +53,7 @@ class KP07(Simulator.Simulator):
                  wind=WindStress.WindStress(), \
                  atmospheric_pressure=AtmosphericPressure.AtmosphericPressure(), \
                  boundary_conditions=Common.BoundaryConditions(), \
+                 boundary_conditions_data=Common.BoundaryConditionsData(), \
                  write_netcdf=False, \
                  comm=None, \
                  ignore_ghostcells=False, \
@@ -148,7 +149,11 @@ class KP07(Simulator.Simulator):
                    'KPSIMULATOR_FLUX_SLOPE_EPS': str(flux_slope_eps)+'f',
                    'KPSIMULATOR_FLUX_SLOPE_EPS_4': str(flux_slope_eps**4)+'f',
                    'KPSIMULATOR_DEPTH_CUTOFF': str(depth_cutoff)+'f',
-                   'FLUX_BALANCER': "{:.12f}f".format(flux_balancer)
+                   'FLUX_BALANCER': "{:.12f}f".format(flux_balancer),
+                   'WIND_STRESS_X_NX': int(self.wind_stress.wind_u[0].shape[1]),
+                   'WIND_STRESS_X_NY': int(self.wind_stress.wind_u[0].shape[0]),
+                   'WIND_STRESS_Y_NX': int(self.wind_stress.wind_v[0].shape[1]),
+                   'WIND_STRESS_Y_NY': int(self.wind_stress.wind_v[0].shape[0]),
                 }
      
         
@@ -174,8 +179,8 @@ class KP07(Simulator.Simulator):
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.swe_2D = self.kp07_kernel.get_function("swe_2D")
-        self.swe_2D.prepare("iifffffffffiPiPiPiPiPiPiPiPiiiiif")
-        self.update_wind_stress(self.kp07_kernel, self.swe_2D)
+        self.swe_2D.prepare("iifffffffffiPiPiPiPiPiPiPiPiiiiiPPPPf")
+        self.update_wind_stress(self.kp07_kernel)
         
         
         # Upload Bathymetry
@@ -191,11 +196,13 @@ class KP07(Simulator.Simulator):
         
          
         self.bc_kernel = Common.BoundaryConditionsArakawaA(gpu_ctx, \
+                                                           self.gpu_stream, \
                                                            self.nx, \
                                                            self.ny, \
                                                            ghost_cells_x, \
                                                            ghost_cells_y, \
-                                                           self.boundary_conditions)
+                                                           self.boundary_conditions,
+                                                           boundary_conditions_data)
         
         if self.write_netcdf:
             self.sim_writer = SimWriter.SimNetCDFWriter(self, ignore_ghostcells=self.ignore_ghostcells, \
@@ -289,7 +296,7 @@ class KP07(Simulator.Simulator):
             local_dt = np.float32(min(self.dt, t_end-i*self.dt))
             
 
-            wind_stress_t = np.float32(self.update_wind_stress(self.kp07_kernel, self.swe_2D))
+            wind_stress_t = np.float32(self.update_wind_stress(self.kp07_kernel))
             
             if (local_dt <= 0.0):
                 break
@@ -314,6 +321,10 @@ class KP07(Simulator.Simulator):
                         self.bathymetry.Bi.data.gpudata, self.bathymetry.Bi.pitch, \
                         self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
                         self.boundary_conditions.north, self.boundary_conditions.east, self.boundary_conditions.south, self.boundary_conditions.west, \
+                        self.wind_stress_x_current_arr.data.gpudata, \
+                        self.wind_stress_x_next_arr.data.gpudata, \
+                        self.wind_stress_y_current_arr.data.gpudata, \
+                        self.wind_stress_y_next_arr.data.gpudata, \
                         wind_stress_t)
                 
                 self.bc_kernel.boundaryCondition(self.gpu_stream, \
@@ -338,6 +349,10 @@ class KP07(Simulator.Simulator):
                         self.bathymetry.Bi.data.gpudata, self.bathymetry.Bi.pitch, \
                         self.bathymetry.Bm.data.gpudata, self.bathymetry.Bm.pitch, \
                         self.boundary_conditions.north, self.boundary_conditions.east, self.boundary_conditions.south, self.boundary_conditions.west, \
+                        self.wind_stress_x_current_arr.data.gpudata, \
+                        self.wind_stress_x_next_arr.data.gpudata, \
+                        self.wind_stress_y_current_arr.data.gpudata, \
+                        self.wind_stress_y_next_arr.data.gpudata, \
                         wind_stress_t)
                 
                 self.bc_kernel.boundaryCondition(self.gpu_stream, \
