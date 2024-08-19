@@ -1053,9 +1053,9 @@ class SingleBoundaryConditionData():
     This class holds the external solution for a single boundary over time.
     """
     def __init__(self, h=None, hu=None, hv=None):
-        self.h = [np.zeros((1,2), dtype=np.float32, order='C')]
-        self.hu = [np.zeros((1,2), dtype=np.float32, order='C')]
-        self.hv = [np.zeros((1,2), dtype=np.float32, order='C')]
+        self.h = [np.zeros(2, dtype=np.float32, order='C')]
+        self.hu = [np.zeros(2, dtype=np.float32, order='C')]
+        self.hv = [np.zeros(2, dtype=np.float32, order='C')]
         self.numSteps = 1
         self.shape = self.h[0].shape
         
