@@ -22,6 +22,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "random_number_generators.cu"
 #include "interpolation.cu"
 
+#define DRY_EPS 1.0e-3f
+#define LAND_VALUE 1.0e20f
+
 __device__ float water_velocity(
         const float* eta_ptr, const int eta_pitch,
         const float* momentum_ptr, const int momentum_pitch,
@@ -366,6 +369,18 @@ __device__ void entrain(
     }
 }
 
+__device__ bool is_dry_cell(float water_depth) {
+    // Function to check if a cell is dry (land)
+    return (fabsf(water_depth - LAND_VALUE) <= DRY_EPS);
+}
+
+__device__ float get_water_depth(float* Hm_ptr, int Hm_pitch, float abs_pos_x, float abs_pos_y, float dx, float dy) {
+    // Function to get water depth at a given position
+    const int cell_id_x = (int)(floorf(abs_pos_x/dx) + 2);
+    const int cell_id_y = (int)(floorf(abs_pos_y/dy) + 2);
+    const float* Hm_row = (float*) ((char*) Hm_ptr + Hm_pitch*cell_id_y);
+    return Hm_row[cell_id_x];
+}
 
 extern "C" {
 __global__ void superSimpleDrift(
@@ -397,6 +412,7 @@ __global__ void superSimpleDrift(
         const float windage)
 
     {
+
         // Each thread will be responsible for one drifter only 
         // Local index of thread within block (only needed in one dim)
         const int tx = threadIdx.x;
@@ -408,17 +424,24 @@ __global__ void superSimpleDrift(
         // We might have launched more threads than we have drifters
         if ((ti < num_drifters) && (ti < num_active_drifters)) {
 
-            // Generate random numbers
-            unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch * ti);
-            unsigned long long seed = seed_row[0];
-            float2 rand_n1 = rand_normal(&seed);
-            float2 rand_n2 = rand_normal(&seed);
 
             // Obtain pointer to our Lagrangian drifter:
             float* relative_position = (float*) ((char*) relative_positions + relative_positions_pitch*ti);
             float rel_pos_x = relative_position[0];
             float rel_pos_y = relative_position[1];
             float drifter_depth = relative_position[2];
+
+            // stranded
+            if (drifter_depth == 999) {
+                return;
+            }
+
+            // Generate random numbers
+            unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch * ti);
+            unsigned long long seed = seed_row[0];
+            float2 rand_n1 = rand_normal(&seed);
+            float2 rand_n2 = rand_normal(&seed);
+
 
             float* reference_position = (float*) ((char*) reference_positions + reference_positions_pitch*ti);
             float ref_pos_x = reference_position[0];
@@ -442,31 +465,19 @@ __global__ void superSimpleDrift(
                                                             Hm_ptr, Hm_pitch, 
                                                             abs_pos_x, abs_pos_y,
                                                             dx, dy);
-            
+
             // Move drifter with a simple forward Euler
             rel_pos_x += u*dt;
             rel_pos_y += v*dt;
 
-            // Add horizontal diffusion
-            rel_pos_x += rand_n1.x*sqrtf(2*horizontal_diffusivity*dt);
-            rel_pos_y += rand_n1.y*sqrtf(2*horizontal_diffusivity*dt);
-
-
             // Move drifter vertically.
             if (is_submerged(drifter_depth)) {
-                // Find the local water depth
-                const int cell_id_x = (int)(floorf(abs_pos_x/dx) + 2);
-                const int cell_id_y = (int)(floorf(abs_pos_y/dy) + 2);
-                const float* Hm_row = (float*) ((char*) Hm_ptr + Hm_pitch*cell_id_y);
-                const float water_depth = Hm_row[cell_id_x];
-
                 // Random number for vertical diffusion (normal distribution with mean 0 and variance dt)
-                
+                float water_depth = get_water_depth(Hm_ptr, Hm_pitch, abs_pos_x, abs_pos_y, dx, dy); // should this pos be after drift update?
                 const float ksi_z = rand_n2.x * sqrtf(dt);
                 vertical_transport(drifter_depth, d50, water_density,
                                    oil_density, water_viscosity, g, dt, ksi_z, water_depth,
                                    vertical_diffusivity);
-                    
             }
             else {
                 const float wind_u = wind(wind_x_current_arr, wind_x_next_arr, 
@@ -483,8 +494,6 @@ __global__ void superSimpleDrift(
                 // Advection
                 rel_pos_x += windage*wind_u*dt;
                 rel_pos_y += windage*wind_v*dt;
-            
-
 
                 // Entrainment of surface drifter
                 if (ENABLE_ENTRAINMENT) {
@@ -495,11 +504,36 @@ __global__ void superSimpleDrift(
                 }
             }
 
+            // after drift and advection we need to check if the particle has stranded
+            abs_pos_x = rel_pos_x + ref_pos_x;
+            abs_pos_y = rel_pos_y + ref_pos_y;
+            float water_depth = get_water_depth(Hm_ptr, Hm_pitch, abs_pos_x, abs_pos_y, dx, dy);
+
+            if (is_dry_cell(water_depth)) {
+                // Stranded
+                drifter_depth = 999;
+            }
+            
+            // Add horizontal diffusion
+            // If a particle is randomly displaced onto land, put it back where it came from
+            auto new_rel_pos_x = rel_pos_x + rand_n1.x*sqrtf(2*horizontal_diffusivity*dt);
+            auto new_rel_pos_y = rel_pos_y + rand_n1.y*sqrtf(2*horizontal_diffusivity*dt);
+
+            abs_pos_x = new_rel_pos_x + ref_pos_x;
+            abs_pos_y = new_rel_pos_y + ref_pos_y;
+
+            water_depth = get_water_depth(Hm_ptr, Hm_pitch, abs_pos_x, abs_pos_y, dx, dy);
+            // Only move particle if new cell is not land
+            if (!is_dry_cell(water_depth)) {
+                rel_pos_x = new_rel_pos_x;
+                rel_pos_y = new_rel_pos_y;
+            }
+            
             // Assuming periodic boundary conditions
             boundary_conditions(rel_pos_x, rel_pos_y, 
                                 ref_pos_x, ref_pos_y, 
                                 nx, ny, dx, dy);
-            
+
             // Write to global memory
             // Write seed back to global memory
             seed_row[0] = seed;
