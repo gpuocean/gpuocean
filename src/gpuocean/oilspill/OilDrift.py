@@ -152,7 +152,7 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiiPiPiPiffPifffffffPPPPff")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiPiiiPiPiPiffPifffffffPPPPff")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
         
@@ -255,6 +255,7 @@ class OilDrift:
                                                sim.gpu_data.hu0.data.gpudata, sim.gpu_data.hu0.pitch,
                                                sim.gpu_data.hv0.data.gpudata, sim.gpu_data.hv0.pitch,
                                                sim.bathymetry.Bm.data.gpudata, sim.bathymetry.Bm.pitch,
+                                               sim.bathymetry.Bi.data.gpudata, sim.bathymetry.Bi.pitch,
                                                np.int32(self.num_drifters),
                                                self.num_active_drifters,
                                                self.relative_positions_device.data.gpudata,

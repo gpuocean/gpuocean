@@ -391,6 +391,7 @@ __global__ void superSimpleDrift(
         float* hu_ptr, const int hu_pitch,
         float* hv_ptr, const int hv_pitch,
         float* Hm_ptr, const int Hm_pitch,
+        float* Bi_ptr, const int Bi_pitch,
 
         const int num_drifters,
         const int num_active_drifters,
@@ -507,7 +508,7 @@ __global__ void superSimpleDrift(
             // after drift and advection we need to check if the particle has stranded
             abs_pos_x = rel_pos_x + ref_pos_x;
             abs_pos_y = rel_pos_y + ref_pos_y;
-            float water_depth = get_water_depth(Hm_ptr, Hm_pitch, abs_pos_x, abs_pos_y, dx, dy);
+            float water_depth = get_water_depth(Bi_ptr, Bi_pitch, abs_pos_x, abs_pos_y, dx, dy);
 
             if (is_dry_cell(water_depth)) {
                 // Stranded
@@ -522,7 +523,7 @@ __global__ void superSimpleDrift(
             abs_pos_x = new_rel_pos_x + ref_pos_x;
             abs_pos_y = new_rel_pos_y + ref_pos_y;
 
-            water_depth = get_water_depth(Hm_ptr, Hm_pitch, abs_pos_x, abs_pos_y, dx, dy);
+            water_depth = get_water_depth(Bi_ptr, Bi_pitch, abs_pos_x, abs_pos_y, dx, dy);
             // Only move particle if new cell is not land
             if (!is_dry_cell(water_depth)) {
                 rel_pos_x = new_rel_pos_x;
