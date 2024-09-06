@@ -388,6 +388,14 @@ __device__ float get_water_depth(const float* Hm_ptr, const int Hm_pitch, const 
     return Hm_row[cell_id.x];
 }
 
+__device__ inline bool is_stranded(const float drifter_depth){
+    return drifter_depth > 999;
+}
+
+__device__ inline float set_stranded(const float t) {
+    return 1000.0f + t;
+}
+
 extern "C" {
 __global__ void superSimpleDrift(
         const int nx, const int ny,
@@ -415,7 +423,8 @@ __global__ void superSimpleDrift(
         const float* wind_x_next_arr,
         const float* wind_y_next_arr,
         const float wind_interpolation_t,
-        const float windage)
+        const float windage, 
+        const float t)
 
     {
 
@@ -438,8 +447,7 @@ __global__ void superSimpleDrift(
             float drifter_depth = relative_position[2];
 
             // stranded
-            if (drifter_depth == 999) {
-                // TODO: re-enter to the ocean with a given probability?
+            if (is_stranded(drifter_depth)) {
                 return;
             }
 
@@ -518,11 +526,11 @@ __global__ void superSimpleDrift(
             if (new_cell_id.x != cell_id.x || new_cell_id.y != cell_id.y) {
                 if (is_dry_cell(get_water_depth(Hm_ptr, Hm_pitch, new_cell_id))) {
                     // Stranded
-                    drifter_depth = 999;
+                    drifter_depth = set_stranded(t);
                 }
             }
 
-            if (drifter_depth != 999) {
+            if (!is_stranded(drifter_depth)) {
                 // Add horizontal diffusion
                 // If a particle is randomly displaced onto land, put it back where it came from
                 const float no_diffusion_rel_pos_x = rel_pos_x;
