@@ -8,10 +8,10 @@ class OilSpillIO:
     File interaction for oil spill simulations 
     """
 
-    def __init__(self, positions=[], diameters=[], t=[]):
-        self.positions = positions
-        self.diameters = diameters
-        self.t = t
+    def __init__(self, positions=None, diameters=None, t=None):
+        self.positions = positions if positions is not None else []
+        self.diameters = diameters if diameters is not None else []
+        self.t = t if t is not None else []
 
     def save_from_sim(self, sim):
         self.t.append(sim.t)
@@ -44,5 +44,6 @@ class OilSpillIO:
         assert(t_index < len(self.t) or t_index == -1)
         print(self.positions[-1].shape)
         return OilDrift.OilDrift(gpu_ctx, self.positions[t_index])
+
 
     

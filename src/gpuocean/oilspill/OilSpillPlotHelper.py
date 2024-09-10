@@ -70,11 +70,14 @@ def addConcentrationToBackground2(ax, sim, cb_shrink=0.7, cb_pad=0.2, clim=None)
                  #location='bottom')
 
 
-def plotOilWithVerticalDistribution(sim, domain=[0, None, 0, None], do_save=False, dirname="oilspill", counter=0,
+def plotOilWithVerticalDistribution(sim, domain=[0, None, 0, None],
+                                    do_save=False, dirname="oilspill", counter=0,
+                                    save_filename=None,
                                     oilspill_clim=None, max_depth=None, vmax=None,
                                     submerged_particles_max=30000,
                                     include_stranding=None, classifier=None,
-                                    stranding_start=0):
+                                    stranding_start=0, midpoint_gs=7,
+                                    close_plot=False):
     
     vertical_plots = 1
     if include_stranding:
@@ -88,7 +91,7 @@ def plotOilWithVerticalDistribution(sim, domain=[0, None, 0, None], do_save=Fals
 
     fig = plt.figure(figsize=(12,5))
     gs = fig.add_gridspec(vertical_plots,10)
-    ax1 = fig.add_subplot(gs[:, 0:7])
+    ax1 = fig.add_subplot(gs[:, 0:midpoint_gs])
     DrifterPlotHelper.background_from_sim(sim, ax=ax1, drifter_domain=domain, vmax=vmax), #, background_type="eta")
 
     # # DrifterPlotHelper.add_drifter_positions_on_background(ax, drifters.getDrifterPositions(), s=0.05)
@@ -96,18 +99,18 @@ def plotOilWithVerticalDistribution(sim, domain=[0, None, 0, None], do_save=Fals
     # ax1.set_title("After t = " +str(int(sim.t)/3600)+" h")
     ax1.set_title("Oil spill after {0:04.1f} hours".format(int(sim.t)/3600))
 
-    ax2 = fig.add_subplot(gs[0, 7:])
+    ax2 = fig.add_subplot(gs[0, midpoint_gs:])
     plotVerticalHistogram(sim, ax=ax2, max_depth=max_depth, 
                           submerged_particles_max=submerged_particles_max)
     
     if include_stranding:
         
-        ax3 = fig.add_subplot(gs[1, 7:])
+        ax3 = fig.add_subplot(gs[1, midpoint_gs:])
         stranded_pos, stranded_times = sim.drifters.get_stranded_particles()
         classification, hist_labels = classifier(stranded_pos)
         unique_classifications = np.unique(classification)
         print(unique_classifications)
-        stranded_cmap = ["red", "blue", "green"]      
+        stranded_cmap = ["red", "blue", "forestgreen"]      
 
         stranded_times = stranded_times/3600  
         first_time = np.min(stranded_times)
@@ -121,12 +124,13 @@ def plotOilWithVerticalDistribution(sim, domain=[0, None, 0, None], do_save=Fals
                         c=stranded_cmap[key], s=0.5, alpha=1)
 
             ax3.hist(stranded_times[classification==key], bins=bins, density=False, 
-                     facecolor=stranded_cmap[key], alpha=1,
+                     facecolor=stranded_cmap[key], alpha=0.8,
                      label=[hist_labels[key]])
         if hist_labels[0] is not None:
             ax3.legend()
         ax3.set_xlim([stranding_start, 24.5])
-        ax3.set_title("Stranding times")
+        frac_stranded = len(stranded_times)/sim.drifters.num_active_drifters
+        ax3.set_title('Stranding times ('+str(int(frac_stranded*1000)/10)+"%)")
         ax3.set_ylabel("num particles")
         ax3.set_xlabel("time (hours)")
         ax3.set_yscale("log")
@@ -134,9 +138,13 @@ def plotOilWithVerticalDistribution(sim, domain=[0, None, 0, None], do_save=Fals
     plt.tight_layout()
 
     if do_save:
-        plt.close()
-        fig.savefig(os.path.join(dirname, "oilspill_"+str(counter).zfill(4)+".png"))
-
+        if close_plot:
+            plt.close()
+        if save_filename is None:
+            save_filename = "oilspill_"+str(counter).zfill(4)
+        fig.savefig(os.path.join(dirname, save_filename+".png"))
+        fig.savefig(os.path.join(dirname, save_filename+".pdf"))
+        
 
 def plotVerticalHistogram(sim, ax=None, max_depth=None, submerged_particles_max=30000, figsize=(4,6)):
     if ax is None:
