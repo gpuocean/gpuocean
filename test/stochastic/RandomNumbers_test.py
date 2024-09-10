@@ -66,7 +66,7 @@ class RandomNumbersTest(unittest.TestCase):
    
         gc.collect()
             
-    def create_rng(self, lcg, seed=None):
+    def create_rng(self, lcg, seed=0):
         self.rng = RandomNumbers.RandomNumbers(self.gpu_ctx, self.gpu_stream,
                                                self.nx, self.ny,
                                                use_lcg=lcg, seed=seed)
@@ -184,6 +184,7 @@ class RandomNumbersTest(unittest.TestCase):
 
         # This special seed gives exact 0.0 as pseudo-random number from LCG
         special_seed = 1871412062
+        print(host_seed[y,x])
         host_seed[y, x] = special_seed
 
         # Check that we get uniform random number as 0.0

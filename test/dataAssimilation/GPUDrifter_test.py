@@ -53,9 +53,10 @@ class GPUDrifterTest(BaseDrifterTest):
                                                     self.observationVariance,
                                                     self.boundaryCondition)
 
-    def create_resampling_drifter_set(self):
+    def create_resampling_drifter_set(self, initialize=True):
         self.resamplingDrifterSet = GPUDrifterCollection(self.gpu_ctx,
-                                                         self.resampleNumDrifters)
+                                                         self.resampleNumDrifters,
+                                                         initialize=initialize)
         
     def create_large_drifter_set(self, size, domain_x, domain_y):
         self.largeDrifterSet = GPUDrifterCollection(self.gpu_ctx, size, domain_size_x=domain_x, domain_size_y=domain_y) 

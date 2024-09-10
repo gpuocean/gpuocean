@@ -71,8 +71,13 @@ class IEWPFOcean:
         self.dy = np.float32(ensemble.getDy())
         self.nx = np.int32(ensemble.getNx())
         self.ny = np.int32(ensemble.getNy())
+
+        # Check that we have a supported model error term
+        assert (ensemble.particles[0].model_error is not None), "The ensemble members seem not to have a model error object"
+        model_error_name = ensemble.particles[0].model_error.__class__.__name__ 
+        assert (model_error_name == "OceanStateNoise"), "Found model error of type "+model_error_name+", but only supported model error type is OceanStateNoise"
         
-        self.interpolation_factor = np.int32(ensemble.particles[0].small_scale_model_error.interpolation_factor)
+        self.interpolation_factor = np.int32(ensemble.particles[0].model_error.interpolation_factor)
         
         # Check that the interpolation factor plays well with the grid size:
         assert ( self.interpolation_factor > 0 and self.interpolation_factor % 2 == 1), 'interpolation_factor must be a positive odd integer'
@@ -84,9 +89,10 @@ class IEWPFOcean:
         self.coarse_ny = np.int32(self.ny/self.interpolation_factor)
         self.coarse_dx = np.float32(self.dx*self.interpolation_factor)
         self.coarse_dy = np.float32(self.dy*self.interpolation_factor)
-        
-        self.soar_q0 = np.float32(ensemble.particles[0].small_scale_model_error.soar_q0)
-        self.soar_L  = np.float32(ensemble.particles[0].small_scale_model_error.soar_L)
+
+
+        self.soar_q0 = np.float32(ensemble.particles[0].model_error.soar_q0)
+        self.soar_L  = np.float32(ensemble.particles[0].model_error.soar_L)
         self.f = np.float32(ensemble.particles[0].f)
         self.g = np.float32(ensemble.particles[0].g)
         
@@ -313,8 +319,8 @@ class IEWPFOcean:
                                                  alpha, beta)
                     
                     # Add scaled sample from P to the state vector
-                    ensemble.particles[p].small_scale_model_error.perturbSim(ensemble.particles[p],\
-                                                                             update_random_field=False)
+                    ensemble.particles[p].model_error.perturbSim(ensemble.particles[p],\
+                                                                 update_random_field=False)
                     
                     # Update ghost cells to ensure that periodic boundary conditions are satisfied
                     ensemble.particles[p].applyBoundaryConditions()
@@ -375,9 +381,9 @@ class IEWPFOcean:
             alpha = self.solveImplicitEquation(gamma, target_weight, w_rest[p], c_star, particle_id=p)
             
             # Loop steps 4:Add scaled sample from P to the state vector
-            ensemble.particles[p].small_scale_model_error.perturbSim(ensemble.particles[p],\
-                                                                     update_random_field=False, \
-                                                                     perturbation_scale=np.sqrt(alpha))   
+            ensemble.particles[p].model_error.perturbSim(ensemble.particles[p],\
+                                                         update_random_field=False, \
+                                                         perturbation_scale=np.sqrt(alpha))   
             
             # Update ghost cells to ensure that periodic boundary conditions are satisfied
             ensemble.particles[p].applyBoundaryConditions()
@@ -483,9 +489,9 @@ class IEWPFOcean:
             
             
             # Loop steps 4:Add scaled sample from P to the state vector
-            ensemble.particles[p].small_scale_model_error.perturbSim(ensemble.particles[p],\
-                                                                     update_random_field=False, \
-                                                                     perturbation_scale=np.sqrt(alpha))
+            ensemble.particles[p].model_error.perturbSim(ensemble.particles[p],\
+                                                         update_random_field=False, \
+                                                         perturbation_scale=np.sqrt(alpha))
             
             # Update ghost cells to ensure that periodic boundary conditions are satisfied
             ensemble.particles[p].applyBoundaryConditions()
@@ -515,10 +521,10 @@ class IEWPFOcean:
         self.setBufferToZeroKernel.prepared_async_call(self.noise_buffer_domain,
                                                        self.local_size_domain, 
                                                        sim.gpu_stream,
-                                                       sim.small_scale_model_error.rand_nx, 
-                                                       sim.small_scale_model_error.rand_ny,
-                                                       sim.small_scale_model_error.random_numbers.data.gpudata,
-                                                       sim.small_scale_model_error.random_numbers.pitch)
+                                                       sim.model_error.rand_nx, 
+                                                       sim.model_error.rand_ny,
+                                                       sim.model_error.random_numbers.data.gpudata,
+                                                       sim.model_error.random_numbers.pitch)
         
     def addBetaNuIntoAlphaXi(self, sim, alpha, beta):
         """
@@ -535,12 +541,12 @@ class IEWPFOcean:
         self.blas_xaxpbyKernel.prepared_async_call(self.noise_buffer_domain,
                                                   self.local_size_domain, 
                                                   sim.gpu_stream,
-                                                  sim.small_scale_model_error.rand_nx, 
-                                                  sim.small_scale_model_error.rand_ny,
-                                                  sim.small_scale_model_error.random_numbers.data.gpudata,
-                                                  sim.small_scale_model_error.random_numbers.pitch,
-                                                  sim.small_scale_model_error.perpendicular_random_numbers.data.gpudata,
-                                                  sim.small_scale_model_error.perpendicular_random_numbers.pitch,
+                                                  sim.model_error.rand_nx, 
+                                                  sim.model_error.rand_ny,
+                                                  sim.model_error.random_numbers.data.gpudata,
+                                                  sim.model_error.random_numbers.pitch,
+                                                  sim.model_error.perpendicular_random_numbers.data.gpudata,
+                                                  sim.model_error.perpendicular_random_numbers.pitch,
                                                   np.float32(np.sqrt(alpha)),
                                                   np.float32(np.sqrt(beta)))
         
@@ -582,14 +588,14 @@ class IEWPFOcean:
                                                              coarse_cell_id_x, coarse_cell_id_y,
                                                              self.geoBalanceConst,
                                                              np.float32(e[0,0]), np.float32(e[0,1]),
-                                                             sim.small_scale_model_error.random_numbers.data.gpudata,
-                                                             sim.small_scale_model_error.random_numbers.pitch)
+                                                             sim.model_error.random_numbers.data.gpudata,
+                                                             sim.model_error.random_numbers.pitch)
             
             phi += local_innovation[0]*e[0,0] + local_innovation[1]*e[0,1]
             
             # The final step of the Kalman gain is to obtain geostrophic balance on the obtained field.
-            sim.small_scale_model_error.perturbSim(sim, update_random_field=False,
-                                                  align_with_cell_i=cell_id_x, align_with_cell_j=cell_id_y)
+            sim.model_error.perturbSim(sim, update_random_field=False,
+                                       align_with_cell_i=cell_id_x, align_with_cell_j=cell_id_y)
         return phi
         # end of addKalmanGain
         #----------------------------------
@@ -603,15 +609,15 @@ class IEWPFOcean:
         (applying SOAR + geostrophic balance, and scaling) can be done next.
         """
         # Sample from N(0,I)
-        sim.small_scale_model_error.generateNormalDistribution()
+        sim.model_error.generateNormalDistribution()
 
         std_norm_host = None        
         if return_original_random_numbers:
-            std_norm_host = sim.small_scale_model_error.getRandomNumbers()
+            std_norm_host = sim.model_error.getRandomNumbers()
         
         # Obtain gamma
         sim.gpu_stream.synchronize()
-        gamma = sim.small_scale_model_error.getRandomNorm() * self.random_numbers_ratio
+        gamma = sim.model_error.getRandomNorm() * self.random_numbers_ratio
         sim.gpu_stream.synchronize()
             
         for drifter in range(self.numDrifters):
@@ -654,7 +660,7 @@ class IEWPFOcean:
         """
         self.applyLocalSVDOnGlobal(sim, 
                                    drifter_coarse_cell_id_x, drifter_coarse_cell_id_y,
-                                   sim.small_scale_model_error.random_numbers)
+                                   sim.model_error.random_numbers)
         
     def applyLocalSVDOnGlobalNu(self, sim, drifter_coarse_cell_id_x, drifter_coarse_cell_id_y):
         """
@@ -662,7 +668,7 @@ class IEWPFOcean:
         """
         self.applyLocalSVDOnGlobal(sim, 
                                    drifter_coarse_cell_id_x, drifter_coarse_cell_id_y,
-                                   sim.small_scale_model_error.perpendicular_random_numbers)
+                                   sim.model_error.perpendicular_random_numbers)
         
     
     
@@ -671,16 +677,16 @@ class IEWPFOcean:
         Samples two perpendicular random vectors from N(0,I)
         """
         # Sample perpendicular xi and nu
-        sim.small_scale_model_error.generatePerpendicularNormalDistributions()
+        sim.model_error.generatePerpendicularNormalDistributions()
         
         orig_xi_host, orig_nu_host = None, None       
         if return_original_random_numbers:
-            orig_xi_host = sim.small_scale_model_error.getRandomNumbers()
-            orig_nu_host = sim.small_scale_model_error.getPerpendicularRandomNumbers()
+            orig_xi_host = sim.model_error.getRandomNumbers()
+            orig_nu_host = sim.model_error.getPerpendicularRandomNumbers()
         
         # Obtain the norms of
         sim.gpu_stream.synchronize()
-        reduction_buffer_host = sim.small_scale_model_error.getReductionBuffer()
+        reduction_buffer_host = sim.model_error.getReductionBuffer()
         sim.gpu_stream.synchronize()
         
         gamma = reduction_buffer_host[0,0] * self.random_numbers_ratio
@@ -924,7 +930,7 @@ class IEWPFOcean:
             
             # Use a function alias to get more readable code
             # This function has input values: coarse_eta, coarse_i, coarse_j, rel_x, rel_y
-            interpolation_alias = ensemble.particles[0].small_scale_model_error._bicubic_interpolation_inner
+            interpolation_alias = ensemble.particles[0].model_error._bicubic_interpolation_inner
             
             # Relative offset of neighbouring fine grid point
             rel_offset = 1.0/self.interpolation_factor
@@ -1400,19 +1406,19 @@ class IEWPFOcean:
     def drawFromP_CPU(self, sim, observed_drifter_pos):
 
         # 1) Draw \tilde{\xi} \sim N(0, I)
-        sim.small_scale_model_error.generateNormalDistributionCPU()
-        if self.debug: print ("noise shape: ", sim.small_scale_model_error.random_numbers_host.shape)
+        sim.model_error.generateNormalDistributionCPU()
+        if self.debug: print ("noise shape: ", sim.model_error.random_numbers_host.shape)
 
         # Comment in these lines to see how the SVD structure affect the random numbers
-        #sim.small_scale_model_error.random_numbers_host *= 0
-        #sim.small_scale_model_error.random_numbers_host += 1
+        #sim.model_error.random_numbers_host *= 0
+        #sim.model_error.random_numbers_host += 1
         original = None
-        if self.debug: original = sim.small_scale_model_error.random_numbers_host.copy()
+        if self.debug: original = sim.model_error.random_numbers_host.copy()
 
         # 1.5) Find gamma, which is needed by step 3
-        gamma = np.sum(sim.small_scale_model_error.random_numbers_host **2)
+        gamma = np.sum(sim.model_error.random_numbers_host **2)
         if self.debug: print ("Gamma obtained from standard gaussian: ", gamma)
-        if self.debug: self.showMatrices(sim.small_scale_model_error.random_numbers_host, original,\
+        if self.debug: self.showMatrices(sim.model_error.random_numbers_host, original,\
                                          "Std normal dist numbers")
 
         # 2) For each drifter, apply the local sqrt SVD-term
@@ -1424,24 +1430,24 @@ class IEWPFOcean:
             cell_id_y = int(np.floor(observed_drifter_pos[drifter,1]/sim.dy))
 
             # 2.2) Apply the local sqrt(SVD)-term
-            self._apply_local_SVD_to_global_xi_CPU(sim.small_scale_model_error.random_numbers_host, \
+            self._apply_local_SVD_to_global_xi_CPU(sim.model_error.random_numbers_host, \
                                                    cell_id_x, cell_id_y)
-            if self.debug: self.showMatrices(sim.small_scale_model_error.random_numbers_host, \
-                                             original - sim.small_scale_model_error.random_numbers_host, \
+            if self.debug: self.showMatrices(sim.model_error.random_numbers_host, \
+                                             original - sim.model_error.random_numbers_host, \
                                              "Std normal dist numbers after SVD from drifter " + str(drifter))
 
         # 3 and 4) Apply SOAR and geostrophic balance
         H_mid = sim.downloadBathymetry()[0]
-        p_eta, p_hu, p_hv = sim.small_scale_model_error._obtainOceanPerturbations_CPU(H_mid, sim.f, sim.coriolis_beta, sim.g)
+        p_eta, p_hu, p_hv = sim.model_error._obtainOceanPerturbations_CPU(H_mid, sim.f, sim.coriolis_beta, sim.g)
 
         if self.debug:
             self.showMatrices(p_eta[1:-1, 1:-1], p_hu, "Sample from P", p_hv)
             draw_from_q_maker = OceanStateNoise.OceanStateNoise(sim.gpu_ctx, sim.gpu_stream, \
                                                                 sim.nx, sim.ny, sim.dx, sim.dy, \
                                                                 sim.boundary_conditions, \
-                                                                sim.small_scale_model_error.staggered, \
-                                                                sim.small_scale_model_error.soar_q0, \
-                                                                sim.small_scale_model_error.soar_L)
+                                                                sim.model_error.staggered, \
+                                                                sim.model_error.soar_q0, \
+                                                                sim.model_error.soar_L)
             draw_from_q_maker.random_numbers_host = original.copy()
             q_eta, q_hu, q_hv = draw_from_q_maker._obtainOceanPerturbations_CPU(H_mid, sim.f, sim.coriolis_beta, sim.g)
             self.showMatrices(q_eta[1:-1, 1:-1], q_hu, "Equivalent sample from Q", q_hv)
@@ -1524,11 +1530,11 @@ class IEWPFOcean:
             if self.debug: self.showMatrices(K_eta_tmp, local_eta, "global K_eta from local K_eta, halfway in the calc.")
 
             # 2.2.2) Use K_eta_tmp as the noise.random_numbers_host
-            sim.small_scale_model_error.random_numbers_host = K_eta_tmp
+            sim.model_error.random_numbers_host = K_eta_tmp
 
             # 2.2.3) Apply soar + geo-balance
             H_mid = sim.downloadBathymetry()[0]
-            K_eta , K_hu, K_hv = sim.small_scale_model_error._obtainOceanPerturbations_CPU(H_mid, sim.f, sim.coriolis_beta, sim.g)
+            K_eta , K_hu, K_hv = sim.model_error._obtainOceanPerturbations_CPU(H_mid, sim.f, sim.coriolis_beta, sim.g)
             if self.debug: self.showMatrices(K_eta[1:-1, 1:-1], K_hu, "Kalman gain from drifter " + str(drifter), K_hv)
 
             total_K_eta += K_eta[2:-2, 2:-2]

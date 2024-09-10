@@ -125,9 +125,8 @@ class IEWPFOceanTest(unittest.TestCase):
                                    self.nx, self.ny, self.dx, self.dy, self.dt, \
                                    self.g, self.f, self.r, \
                                    boundary_conditions=self.boundaryConditions, \
-                                   write_netcdf=False, \
-                                   small_scale_perturbation=True, \
-                                   small_scale_perturbation_amplitude=self.q0)
+                                   write_netcdf=False)
+        self.sim.setSOARModelError(small_scale_perturbation_amplitude=self.q0)
         
 
         self.ensemble = OceanNoiseEnsemble.OceanNoiseEnsemble(self.gpu_ctx, self.ensembleSize, self.sim,
@@ -153,7 +152,7 @@ class IEWPFOceanTest(unittest.TestCase):
         self.assertAlmostEqual(self.iewpf.dx, self.dx)
         self.assertAlmostEqual(self.iewpf.dy, self.dy)
         self.assertAlmostEqual(self.iewpf.soar_q0, self.q0)
-        self.assertAlmostEqual(self.iewpf.soar_L, self.sim.small_scale_model_error.soar_L)
+        self.assertAlmostEqual(self.iewpf.soar_L, self.sim.model_error.soar_L)
         self.assertAlmostEqual(self.iewpf.f, self.f)
         self.assertAlmostEqual(self.iewpf.g, self.g, places=6)
         self.assertAlmostEqual(self.iewpf.const_H, self.waterDepth)
@@ -213,14 +212,14 @@ class IEWPFOceanTest(unittest.TestCase):
         self.assertEqual(test_data.shape, (self.ny, self.nx))
 
         # Upload reference input data to the sim random numbers buffer:
-        sim.small_scale_model_error.random_numbers.upload(sim.gpu_stream,
-                                                          test_data.astype(np.float32))
+        sim.model_error.random_numbers.upload(sim.gpu_stream,
+                                              test_data.astype(np.float32))
         
         # Apply SVD centered in the chosen cell (30, 30):
         self.iewpf.applyLocalSVDOnGlobalXi(sim, 30, 30)
         
         # Download results:
-        gpu_result = sim.small_scale_model_error.random_numbers.download(sim.gpu_stream)
+        gpu_result = sim.model_error.random_numbers.download(sim.gpu_stream)
 
         # Compare:
         rel_norm_results = np.linalg.norm(gpu_result - results_from_file)/np.max(results_from_file)
@@ -246,24 +245,24 @@ class IEWPFOceanTest(unittest.TestCase):
         
 
     def test_set_buffer_to_zero(self):
-        self.ensemble.particles[0].small_scale_model_error.generateNormalDistribution()
+        self.ensemble.particles[0].model_error.generateNormalDistribution()
         
         self.iewpf.setNoiseBufferToZero(self.ensemble.particles[0])
         
-        obtained_random_numbers = self.ensemble.particles[0].small_scale_model_error.getRandomNumbers()
+        obtained_random_numbers = self.ensemble.particles[0].model_error.getRandomNumbers()
         for j in range(self.iewpf.coarse_ny):
             for i in range(self.iewpf.coarse_nx):
                 self.assertEqual(obtained_random_numbers[j,i], 0.0)
     
     def test_blas_xaxpby(self):
         self.iewpf.samplePerpendicular(self.ensemble.particles[0])
-        x = self.ensemble.particles[0].small_scale_model_error.getRandomNumbers()
-        y = self.ensemble.particles[0].small_scale_model_error.getPerpendicularRandomNumbers()
+        x = self.ensemble.particles[0].model_error.getRandomNumbers()
+        y = self.ensemble.particles[0].model_error.getPerpendicularRandomNumbers()
         alpha = 2.12
         beta  = 5.1
         
         self.iewpf.addBetaNuIntoAlphaXi(self.ensemble.particles[0], alpha, beta)
-        x_res_gpu = self.ensemble.particles[0].small_scale_model_error.getRandomNumbers()
+        x_res_gpu = self.ensemble.particles[0].model_error.getRandomNumbers()
         x_res_cpu = np.sqrt(alpha)*x + np.sqrt(beta)*y
         
         assert2DListAlmostEqual(self, x_res_gpu.tolist(), x_res_gpu.tolist(), 10, "test_blas_xaxpby")
@@ -277,8 +276,8 @@ class IEWPFOceanTest(unittest.TestCase):
         self.ensemble.particles[0].gpu_data.hv0.upload(self.iewpf.master_stream, zeros)
         
         self.iewpf.samplePerpendicular(self.ensemble.particles[0])
-        xi = self.ensemble.particles[0].small_scale_model_error.getRandomNumbers()
-        nu = self.ensemble.particles[0].small_scale_model_error.getPerpendicularRandomNumbers()
+        xi = self.ensemble.particles[0].model_error.getRandomNumbers()
+        nu = self.ensemble.particles[0].model_error.getPerpendicularRandomNumbers()
         alpha = np.float32(9.0)
         beta = np.float32(4.0)
         drifter_positions = np.array([[120, 120], [40, 120], [80, 40]], dtype=np.float32)
@@ -293,15 +292,15 @@ class IEWPFOceanTest(unittest.TestCase):
        
         # Old SVD
         self.iewpf.applySVDtoPerpendicular_slow(self.ensemble.particles[0], drifter_positions)
-        Pxi = self.ensemble.particles[0].small_scale_model_error.getRandomNumbers()
-        Pnu = self.ensemble.particles[0].small_scale_model_error.getPerpendicularRandomNumbers()
+        Pxi = self.ensemble.particles[0].model_error.getRandomNumbers()
+        Pnu = self.ensemble.particles[0].model_error.getPerpendicularRandomNumbers()
         aPxibPnu = np.sqrt(alpha)*Pxi + np.sqrt(beta)*Pnu
 
         # Old Q
-        self.ensemble.particles[0].small_scale_model_error.perturbSim(self.ensemble.particles[0],\
-                                                                      update_random_field=False, \
-                                                                      perturbation_scale=np.sqrt(alpha),
-                                                                      perpendicular_scale=np.sqrt(beta))
+        self.ensemble.particles[0].model_error.perturbSim(self.ensemble.particles[0],\
+                                                          update_random_field=False, \
+                                                          perturbation_scale=np.sqrt(alpha),
+                                                          perpendicular_scale=np.sqrt(beta))
         old_eta, old_hu, old_hv = self.ensemble.particles[0].download(interior_domain_only=True)
 
         # Sample from N(0,P) the new way
@@ -313,13 +312,13 @@ class IEWPFOceanTest(unittest.TestCase):
         self.ensemble.particles[0].gpu_data.hv0.upload(self.iewpf.master_stream, zeros)
        
         # New SVD
-        self.ensemble.particles[0].small_scale_model_error.random_numbers.upload(self.iewpf.master_stream, xi)
-        self.ensemble.particles[0].small_scale_model_error.perpendicular_random_numbers.upload(self.iewpf.master_stream, nu)
+        self.ensemble.particles[0].model_error.random_numbers.upload(self.iewpf.master_stream, xi)
+        self.ensemble.particles[0].model_error.perpendicular_random_numbers.upload(self.iewpf.master_stream, nu)
         self.iewpf.applySVDtoPerpendicular(self.ensemble.particles[0], drifter_positions, alpha, beta)
-        Paxibnu = self.ensemble.particles[0].small_scale_model_error.getRandomNumbers()
+        Paxibnu = self.ensemble.particles[0].model_error.getRandomNumbers()
         
         # New Q
-        self.ensemble.particles[0].small_scale_model_error.perturbSim(self.ensemble.particles[0],\
+        self.ensemble.particles[0].model_error.perturbSim(self.ensemble.particles[0],\
                                                                       update_random_field=False)
         new_eta, new_hu, new_hv = self.ensemble.particles[0].download(interior_domain_only=True)
 
@@ -355,9 +354,9 @@ class IEWPFOceanTest(unittest.TestCase):
         rel_norm_hu  = np.linalg.norm(hu - huCPU)/np.max(hu)
         rel_norm_hv  = np.linalg.norm(hv - hvCPU)/np.max(hv)
        
-        self.assertAlmostEqual(rel_norm_eta, 0.0, places=5)
-        self.assertAlmostEqual(rel_norm_hu,  0.0, places=5)
-        self.assertAlmostEqual(rel_norm_hv,  0.0, places=5)
+        self.assertAlmostEqual(1.0 + rel_norm_eta, 1.0, places=5)
+        self.assertAlmostEqual(1.0 + rel_norm_hu,  1.0, places=3)
+        self.assertAlmostEqual(1.0 + rel_norm_hv,  1.0, places=3)
         
     def test_observation_operator_CPU_vs_GPU(self):
         self.run_ensemble()

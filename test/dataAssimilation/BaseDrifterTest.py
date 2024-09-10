@@ -115,6 +115,34 @@ class BaseDrifterTest(unittest.TestCase):
     ### START TESTS ###
     
     def test_default_constructor(self):
+        self.create_resampling_drifter_set(initialize=False)
+        defaultDrifterSet = self.resamplingDrifterSet
+
+        self.assertEqual(defaultDrifterSet.getNumDrifters(), self.resampleNumDrifters)
+        self.assertEqual(defaultDrifterSet.getObservationVariance(), 0.01)
+
+        positions = defaultDrifterSet.getDrifterPositions()
+        defaultPosition = [0,0]
+        defaultPositionWithSixDrifters = [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0],
+                                          [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]
+                                          
+        
+        self.assertEqual(positions.shape, ((self.resampleNumDrifters, 2)))
+        for i in range(self.resampleNumDrifters):
+            self.assertAlmostEqual(positions[i,0], defaultPositionWithSixDrifters[i][0], 6)
+            self.assertEqual(      positions[i,1], defaultPositionWithSixDrifters[i][1])
+                         
+        observation = defaultDrifterSet.getObservationPosition()
+        self.assertEqual(observation.shape, ((2,)))
+        self.assertEqual(observation.tolist(), defaultPosition)
+
+        self.assertEqual(defaultDrifterSet.getDomainSizeX(), 1.0)
+        self.assertEqual(defaultDrifterSet.getDomainSizeY(), 1.0)
+
+        # Check boundary condition
+        self.assertTrue(defaultDrifterSet.getBoundaryConditions().isDefault())
+
+    def test_default_constructor_with_initilization(self):
         self.create_resampling_drifter_set()
         defaultDrifterSet = self.resamplingDrifterSet
 
@@ -141,7 +169,8 @@ class BaseDrifterTest(unittest.TestCase):
 
         # Check boundary condition
         self.assertTrue(defaultDrifterSet.getBoundaryConditions().isDefault())
-        
+
+
     def test_non_default_constructor(self):
         self.set_positions_small_set()
         self.assertEqual(self.smallDrifterSet.getNumDrifters(), self.numDrifters)
