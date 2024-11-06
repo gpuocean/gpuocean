@@ -1,3 +1,4 @@
+[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.11502400.svg)](http://dx.doi.org/10.5281/zenodo.11502400)
 
 <img src="logo/gpuocean-logo.png" width=500>
 
