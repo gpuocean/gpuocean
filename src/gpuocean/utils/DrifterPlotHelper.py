@@ -477,7 +477,7 @@ def set_drifter_zoom(ax, extent, drifter_domain, dx, dy):
 ##################################################3
 # Kernel Density Estimation
 
-def add_kde_on_background(ax, ensemble_obs, drifter_id=0, cmap="Greens", label=None,
+def add_kde_on_background(ax, ensemble_obs, drifter_id=0, cmap="Greens", label=None, add_legend=True,
                               drifter_t=None, **kwargs):
     
     if drifter_t is None:
@@ -552,14 +552,15 @@ def add_kde_on_background(ax, ensemble_obs, drifter_id=0, cmap="Greens", label=N
     cset = ax.contour(xx, yy, f, levels=desired_levels, colors='k', alpha=0.25, linewidths=1)
     
     # Legend
-    proxy = [plt.Rectangle((0,0),1,1,fc = pc.get_facecolor()[0]) for pc in cfset.collections]
-    labels = []
-    for p in desired_probs:
-        labels.append(str(int(p*100))+"%")
-    ax.legend(proxy, labels, 
-              #prop={'size': 18}, 
-              labelcolor="black", 
-              framealpha=0.9,
-              loc=0
-              )
+    if add_legend:
+        proxy = [plt.Rectangle((0,0),1,1,fc = pc.get_facecolor()[0]) for pc in cfset.collections]
+        labels = []
+        for p in desired_probs:
+            labels.append(str(int(p*100))+"%")
+        ax.legend(proxy, labels, 
+                #prop={'size': 18}, 
+                labelcolor="black", 
+                framealpha=0.9,
+                loc=0
+                )
     
