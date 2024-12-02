@@ -84,12 +84,11 @@ class CombinedCDKLM16test(unittest.TestCase):
 
         bc_in = Common.BoundaryConditions(3,3,3,3, spongeCells={'north':10, 'south': 10, 'east': 10, 'west': 10})
         bc_data_in  = Common.BoundaryConditionsData()
-        bc_data_in.north.h = [np.array([[1,1]], dtype=np.float32)]
+        bc_data_in.north.h = [np.array([1,1], dtype=np.float32)]
 
         bc_out = Common.BoundaryConditions(3,3,3,3, spongeCells={'north':10, 'south': 10, 'east': 10, 'west': 10})
         bc_data_out = Common.BoundaryConditionsData()
-        bc_data_out.north.h = [np.array([[-1,-1]], dtype=np.float32)]
-
+        bc_data_out.north.h = [np.array([-1,-1], dtype=np.float32)]
 
         # Individual sim with in-coming wave
         sim_in = CDKLM16.CDKLM16(self.gpu_ctx_in, eta0_in, hu0_in, hv0_in, Hi_in,\

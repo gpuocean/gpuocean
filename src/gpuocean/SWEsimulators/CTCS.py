@@ -132,7 +132,11 @@ class CTCS(Simulator.Simulator):
         self._set_interior_domain_from_sponge_cells()
 
         self.step_kernel = gpu_ctx.get_kernel("CTCS_step_kernel.cu", 
-                defines={'block_width': block_width, 'block_height': block_height},
+                defines={'block_width': block_width, 'block_height': block_height,
+                         'WIND_STRESS_X_NX': int(self.wind_stress.wind_u[0].shape[1]),
+                         'WIND_STRESS_X_NY': int(self.wind_stress.wind_u[0].shape[0]),
+                         'WIND_STRESS_Y_NX': int(self.wind_stress.wind_v[0].shape[1]),
+                         'WIND_STRESS_Y_NY': int(self.wind_stress.wind_v[0].shape[0]),},
                 compile_args={
                     'no_extern_c': True,
                     'options': ["--use_fast_math"],
@@ -150,10 +154,10 @@ class CTCS(Simulator.Simulator):
         self.ctcsStepKernel = self.step_kernel.get_function("ctcsStepKernel")
         
         # Prepare kernel lauches
-        self.ctcsStepKernel.prepare("iiifffffffffPiPiPiPiPiPiPif")
+        self.ctcsStepKernel.prepare("iiifffffffffPiPiPiPiPiPiPiPPPPf")
         
         # Set up textures
-        self.update_wind_stress(self.step_kernel, self.ctcsStepKernel)
+        self.update_wind_stress(self.step_kernel)
         
         #Create data by uploading to device     
         self.H = Common.CUDAArray2D(self.gpu_stream, nx, ny, halo_x, halo_y, H)
@@ -294,7 +298,7 @@ class CTCS(Simulator.Simulator):
             if (local_dt <= 0.0):
                 break
             
-            wind_stress_t = np.float32(self.update_wind_stress(self.step_kernel, self.ctcsStepKernel))
+            wind_stress_t = np.float32(self.update_wind_stress(self.step_kernel))
 
             self.ctcsStepKernel.prepared_async_call(self.global_size, self.local_size, self.gpu_stream, \
                     self.nx, self.ny, \
@@ -312,6 +316,10 @@ class CTCS(Simulator.Simulator):
                     self.gpu_data.hu1.data.gpudata, self.gpu_data.hu1.pitch,   # U^{n} \
                     self.gpu_data.hv1.data.gpudata, self.gpu_data.hv1.pitch,   # V^{n} \
 
+                    self.wind_stress_x_current_arr.data.gpudata, \
+                    self.wind_stress_x_next_arr.data.gpudata, \
+                    self.wind_stress_y_current_arr.data.gpudata, \
+                    self.wind_stress_y_next_arr.data.gpudata, \
                     wind_stress_t)
                    
             self.bc_kernel.boundaryConditionEta(self.gpu_stream, self.gpu_data.h0)
