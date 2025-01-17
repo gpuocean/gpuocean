@@ -26,19 +26,16 @@ GPU Ocean aims to be a powerful tool to complement ocean current forecasts throu
 See [here](https://github.com/gpuocean/gpuocean/wiki/Installation).
 
 ## Academic publications using GPU Ocean
+* F. Beiser, H. Holm, K. Lye, J. Eidsvik (2025) **Multi-Level Data Assimilation for Ocean Forecasting using the Shallow-Water Equations**, *Journal of Computational Physics*, vol 524, 113722 [10.1016/j.jcp.2025.113722](https://doi.org/10.1016/j.jcp.2025.113722)
 * F. Beiser, H. Holm, M. Sætra, N. Kristensen, K. Christensen (2024) **Combining Barotropic and Baroclinic Simplified Models for Drift Trajectory Predictions**, *Journal of Operational Oceanography*, 17(3), 187-206. DOI: [10.1080/1755876X.2024.2364975](https://doi.org/10.1080/1755876X.2024.2364975)
 * F. Beiser, H. Holm, J. Eidsvik (2024) **Comparison of Ensemble-Based Data Assimilation Methods for Sparse Oceanographic Data**,  *Quarterly Journal of the Royal Meteorological Society*, 150(759), 1068–1095. DOI: [10.1002/qj.4637](https://doi.org/10.1002/qj.4637) [Preprint: [arXiv:2302.07197](https://arxiv.org/abs/2302.07197)]. 
 * H. Holm, F. Beiser (2023) **Reducing Numerical Artifacts by Sacrificing Well-Balance for Rotating Shallow-Water Flow**. In: Franck, E., Fuhrmann, J., Michel-Dansac, V., Navoret, L. (eds) *Finite Volumes for Complex Applications X — Volume 2, Hyperbolic and Related Problems*. FVCA 2023. Springer Proceedings in Mathematics & Statistics, vol 433. Springer, Cham. DOI: [10.1007/978-3-031-40860-1_19](https://doi.org/10.1007/978-3-031-40860-1_19)
 *	A. Brodtkorb, H. Holm (2021) **Coastal Ocean Forecasting on the GPU using a Two-Dimensional Finite Volume Scheme**. *Tellus A: Dynamic Meteorology and Oceanography*, 73:1, 1-22, DOI: [10.1080/16000870.2021.1876341](https://doi.org/10.1080/16000870.2021.1876341) [Preprint: [arXiv:1912.02457](https://arxiv.org/abs/1912.02457)]
 *	H. Holm, A. Brodtkorb, M. Sætra (2020) **Data Assimilation for Ocean Drift Trajectories Using Massive Ensembles and GPUs**. In: Klöfkorn, R., Keilegavlen, E., Radu, F.A., Fuhrmann, J. (eds) *Finite Volumes for Complex Applications IX - Methods, Theoretical Aspects, Examples*. FVCA 2020. Springer Proceedings in Mathematics & Statistics, vol 323. Springer, Cham. DOI: [10.1007/978-3-030-43651-3_68](https://doi.org/10.1007/978-3-030-43651-3_68)
-*	H. Holm, M. Sætra, P. van Leeuwen (2020) **Massively parallel implicit-equal weights particle filter for ocean drift trajectory forecasting**. *Journal of Computational Physics: X*, volume 6, 100053. DOI: [10.1016/j.jcpx.2020.100053](https://doi.org/10.1016/j.jcpx.2020.100053) [Preprint: [arXiv:1910.01031](https://arxiv.org/abs/1910.01031)]
-* H. Holm, A. Brodtkorb, K. Christensen, G. Broström, M. Sætra (2020) **Evaluation of selected finite-difference and finite-volume approaches to rotational shallow-water flow**. *Communications in Computational Physics*, volume 27, pp. 1234-1274. DOI: [10.4208/cicp.OA-2019-0033](https://doi.org/10.4208/cicp.OA-2019-0033)
+*	H. Holm, M. Sætra, P. van Leeuwen (2020) **Massively Parallel Implicit-Equal Weights Particle Filter for Ocean Drift Trajectory Forecasting**. *Journal of Computational Physics: X*, volume 6, 100053. DOI: [10.1016/j.jcpx.2020.100053](https://doi.org/10.1016/j.jcpx.2020.100053) [Preprint: [arXiv:1910.01031](https://arxiv.org/abs/1910.01031)]
+* H. Holm, A. Brodtkorb, K. Christensen, G. Broström, M. Sætra (2020) **Evaluation of Selected Finite-Difference and Finite-Volume Approaches to Rotational Shallow-Water Flow**. *Communications in Computational Physics*, volume 27, pp. 1234-1274. DOI: [10.4208/cicp.OA-2019-0033](https://doi.org/10.4208/cicp.OA-2019-0033)
 * H. Holm, A. Brodtkorb, M. Sætra (2020) **GPU Computing with Python: Performance, Energy Efficiency and Usability**. *Computation*, volume 8, number 1:4 (Special issue on Energy-Efficient Computing on Parallel Architectures). DOI: [10.3390/computation8010004](https://doi.org/10.3390/computation8010004). [Preprint: [arXiv:1912.02607](https://arxiv.org/abs/1912.02607)]
-*	H. Holm, A. Brodtkorb, M. Sætra (2020) **Performance and energy efficiency of CUDA and OpenCL for GPU computing using Python**. *Advances in Parallel Computing*, volume 36, pp. 593-604. DOI: [10.3233/APC200089](https://doi.org/10.3233/APC200089)
-
-
-**Preprints**
-* F. Beiser, H. Holm, K. Lye, J. Eidsvik (2024) **Multi-level Data Assimilation for Simplified Ocean Models**, preprint in *Nonlinear Processes in Geophysics* [npg-2023-27](https://doi.org/10.5194/npg-2023-27)
+*	H. Holm, A. Brodtkorb, M. Sætra (2020) **Performance and Energy Efficiency of CUDA and OpenCL for GPU Computing using Python**. *Advances in Parallel Computing*, volume 36, pp. 593-604. DOI: [10.3233/APC200089](https://doi.org/10.3233/APC200089)
 
 
 
