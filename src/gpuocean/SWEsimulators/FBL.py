@@ -144,7 +144,11 @@ class FBL(Simulator.Simulator):
         
         #Get kernels
         self.step_kernel = gpu_ctx.get_kernel("FBL_step_kernel.cu", 
-                defines={'block_width': block_width, 'block_height': block_height},
+                defines={'block_width': block_width, 'block_height': block_height,
+                         'WIND_STRESS_X_NX': int(self.wind_stress.wind_u[0].shape[1]),
+                         'WIND_STRESS_X_NY': int(self.wind_stress.wind_u[0].shape[0]),
+                         'WIND_STRESS_Y_NX': int(self.wind_stress.wind_v[0].shape[1]),
+                         'WIND_STRESS_Y_NY': int(self.wind_stress.wind_v[0].shape[0]),},
                 compile_args={
                     'no_extern_c': True,
                     'options': ["--use_fast_math"],
@@ -162,10 +166,10 @@ class FBL(Simulator.Simulator):
         self.fblStepKernel = self.step_kernel.get_function("fblStepKernel")
         
         # Prepare kernel lauches
-        self.fblStepKernel.prepare("iiffffffffPiPiPiPiif")
+        self.fblStepKernel.prepare("iiffffffffPiPiPiPiiPPPPf")
         
         # Set up textures
-        self.update_wind_stress(self.step_kernel, self.fblStepKernel)
+        self.update_wind_stress(self.step_kernel)
         
         self.H = Common.CUDAArray2D(self.gpu_stream, nx, ny, ghost_cells_x, ghost_cells_y, H)
         self.gpu_data = Common.SWEDataArakawaC(self.gpu_stream, nx, ny, ghost_cells_x, ghost_cells_y, eta0, hu0, hv0, fbl=True)
@@ -297,7 +301,7 @@ class FBL(Simulator.Simulator):
             if (local_dt <= 0.0):
                 break
                 
-            wind_stress_t = np.float32(self.update_wind_stress(self.step_kernel, self.fblStepKernel))
+            wind_stress_t = np.float32(self.update_wind_stress(self.step_kernel))
 
             self.fblStepKernel.prepared_async_call(self.global_size, self.local_size, self.gpu_stream, \
                     self.nx, self.ny, \
@@ -307,7 +311,12 @@ class FBL(Simulator.Simulator):
                     self.gpu_data.hu0.data.gpudata, self.gpu_data.hu0.pitch, \
                     self.gpu_data.hv0.data.gpudata, self.gpu_data.hv0.pitch, \
                     self.gpu_data.h0.data.gpudata, self.gpu_data.h0.pitch, \
-                    self.wall_bc, wind_stress_t)
+                    self.wall_bc,
+                    self.wind_stress_x_current_arr.data.gpudata, \
+                    self.wind_stress_x_next_arr.data.gpudata, \
+                    self.wind_stress_y_current_arr.data.gpudata, \
+                    self.wind_stress_y_next_arr.data.gpudata, \
+                    wind_stress_t)
             
             # Fix U boundary
             self.bc_kernel.boundaryConditionU(self.gpu_stream, self.gpu_data.hu0)

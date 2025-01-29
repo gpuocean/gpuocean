@@ -28,40 +28,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
   
 //Code relating to wind-data
 
-texture<float, cudaTextureType2D> wind_X_current;
-texture<float, cudaTextureType2D> wind_X_next;
 
-texture<float, cudaTextureType2D> wind_Y_current;
-texture<float, cudaTextureType2D> wind_Y_next;
+#include "interpolation.cu"
 
-__device__ float windX(const float wind_t_, 
-                       const float drifter_pos_x_, const float drifter_pos_y_, 
-                       const float domain_size_x_, const float domain_size_y_) {
-    
+
+__device__ float wind(const float* wind_current_arr, const float* wind_next_arr,
+                      const float wind_t_,
+                      const float drifter_pos_x_, const float drifter_pos_y_,
+                      const float domain_size_x_, const float domain_size_y_,
+                      const int data_nx, const int data_ny) {
+
     //Normalize coordinates (to [0, 1])
     const float s = drifter_pos_x_ / domain_size_x_;
     const float t = drifter_pos_y_ / domain_size_y_;
-    
-    //Look up current and next timestep (using bilinear texture interpolation)
-    const float current = tex2D(wind_X_current, s, t);
-    const float next = tex2D(wind_X_next, s, t);
-    
-    //Interpolate in time
-    return wind_t_*next + (1.0f - wind_t_)*current;
-}
 
-__device__ float windY(const float wind_t_, 
-                       const float drifter_pos_x_, const float drifter_pos_y_, 
-                       const float domain_size_x_, const float domain_size_y_) {
-    
-    //Normalize coordinates (to [0, 1])
-    const float s = drifter_pos_x_ / domain_size_x_;
-    const float t = drifter_pos_y_ / domain_size_y_;
-    
     //Look up current and next timestep (using bilinear texture interpolation)
-    const float current = tex2D(wind_Y_current, s, t);
-    const float next = tex2D(wind_Y_next, s, t);
-    
+    const float current = bilinear_interpolation(wind_current_arr, data_nx, data_ny, s, t);
+    const float next = bilinear_interpolation(wind_next_arr, data_nx, data_ny, s, t);
+
     //Interpolate in time
     return wind_t_*next + (1.0f - wind_t_)*current;
 }
@@ -94,7 +78,7 @@ __global__ void passiveDrifterKernel(
 
         const int x_zero_reference_cell_, // the cell column representing x0 (x0 at western face)
         const int y_zero_reference_cell_, // the cell row representing y0 (y0 at southern face)
-        
+
         // Data
         float* eta_ptr_, const int eta_pitch_,
         float* hu_ptr_, const int hu_pitch_,
@@ -103,12 +87,16 @@ __global__ void passiveDrifterKernel(
 
         const int periodic_north_south_,
         const int periodic_east_west_,
-        
+
         const int num_drifters_,
         float* drifters_positions_, const int drifters_pitch_,
         const float sensitivity_,
-        const float wind_t_, 
-        const float wind_drift_factor_) 
+        const float* wind_x_current_arr,
+        const float* wind_x_next_arr,
+        const float* wind_y_current_arr,
+        const float* wind_y_next_arr,
+        const float wind_t_,
+        const float wind_drift_factor_)
         {
 
     //Index of thread within block (only needed in one dim)
@@ -164,8 +152,8 @@ __global__ void passiveDrifterKernel(
             float* const Hm_row_y = (float*) ((char*) Hm_ptr_ + Hm_pitch_*cell_id_y);
             float const Hm = Hm_row_y[cell_id_x];
             if (Hm < 1e20){ //using mask_value from Common.Bathymetry-class 
-                u = u + (windX(wind_t_, drifter_pos_x, drifter_pos_y, nx_*dx_, ny_*dy_) - u) * wind_drift_factor_;
-                v = v + (windY(wind_t_, drifter_pos_x, drifter_pos_y, nx_*dx_, ny_*dy_) - v) * wind_drift_factor_;
+                u = u + (wind(wind_x_current_arr, wind_x_next_arr, wind_t_, drifter_pos_x, drifter_pos_y, nx_*dx_, ny_*dy_, WIND_X_NX, WIND_X_NY) - u) * wind_drift_factor_;
+                v = v + (wind(wind_y_current_arr, wind_y_next_arr, wind_t_, drifter_pos_x, drifter_pos_y, nx_*dx_, ny_*dy_, WIND_X_NX, WIND_X_NY) - v) * wind_drift_factor_;
             }
         }
         
