@@ -42,7 +42,6 @@ class OilSpillIO:
 
     def create_drifter_object(self, gpu_ctx, t_index):
         assert(t_index < len(self.t) or t_index == -1)
-        print(self.positions[-1].shape)
         return OilDrift.OilDrift(gpu_ctx, self.positions[t_index])
 
 
