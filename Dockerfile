@@ -1,4 +1,6 @@
-FROM quay.io/jupyter/scipy-notebook:python-3.12
+FROM quay.io/jupyter/pytorch-notebook:cuda12-python-3.12
+# EDITO Jupyter-gpu uses the image below
+#FROM inseefrlab/onyxia-jupyter-pytorch:py3.13.7-gpu
 
 USER root
 
@@ -35,12 +37,21 @@ RUN mamba env update -f /tmp/env.yaml && \
 
 RUN chown -R ${NB_USER}:users /home/${NB_USER}
 
-USER ${NB_UID}
+# why does this not work? (permissions are set to root, even after this line)
+#USER ${NB_UID}
 
 # move to notebook base directory and fill it with content
 WORKDIR "/home/${NB_USER}/work"
 
-#COPY example_long_cmems.ipynb README.md .
+COPY CITATION.cff LICENSE README.md .
+COPY examples ./examples
+COPY logo ./logo
+COPY src ./src
+COPY test ./test
+
+# this should not be necessary
+RUN chown -R ${NB_USER}:users .
+USER ${NB_UID}
 
 EXPOSE 8888
 
