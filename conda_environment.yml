@@ -11,6 +11,7 @@ dependencies:
 - ipykernel
 - numpy
 - matplotlib=3.3.3
+- xarray
 - netcdf4
 - pytest
 - xmlrunner
