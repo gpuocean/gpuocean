@@ -4,7 +4,7 @@
 This software is part of GPU Ocean. 
 
 Copyright (C) 2019 Norwegian Meteorological Institute
-Copyright (C) 2019 SINTEF Digital
+Copyright (C) 2019,2025 SINTEF Digital
 
 This python module implements saving shallow water simulations to a
 netcdf file.
