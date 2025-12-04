@@ -152,7 +152,7 @@ class OilDrift:
         
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
-        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiiPiPiPiffPifffffffPPPPff")
+        self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiiPiPiPiffPifffffffPPPPfff")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)
         
@@ -271,7 +271,7 @@ class OilDrift:
                                                self.wind_x_current_arr.data.gpudata, self.wind_y_current_arr.data.gpudata,
                                                self.wind_x_next_arr.data.gpudata, self.wind_y_next_arr.data.gpudata,
                                                wind_interpolation_t,
-                                               self.windage)
+                                               self.windage, sim.drifter_t)
         
     def _computeNumActiveDrifters(self, t):
         if self.next_release_index is not None:
@@ -287,7 +287,15 @@ class OilDrift:
     
     def is_stranded(self):
         # Return True if the oil drifter is stranded
-        return self.getDrifterPositions()[:,2] == 999
+        # If stranded, the particle's depth represents the time of stranding
+        return self.getDrifterPositions()[:,2] > 999
+    
+    def get_stranded_particles(self):
+        # Return stranded particles as (locations, stranded time)
+        all_positions = self.getDrifterPositions()
+        stranded_positions = all_positions[all_positions[:, 2] > 999, :]
+        stranded_times = stranded_positions[:, 2] - 1000
+        return stranded_positions[:, :2], stranded_times
             
 
     def sortParticlesFromSim(self, sim):

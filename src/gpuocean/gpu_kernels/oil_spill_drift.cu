@@ -22,6 +22,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "random_number_generators.cu"
 #include "interpolation.cu"
 
+#define DRY_EPS 1.0e-3f
+#define LAND_VALUE 1.0e20f
+
+__device__ int2 get_cell_indices(
+        const float pos_x, const float pos_y, 
+        const float dx, const float dy) {
+
+    const int cell_id_x = (int)(floorf(pos_x/dx) + 2);
+    const int cell_id_y = (int)(floorf(pos_y/dy) + 2);
+
+    return make_int2(cell_id_x, cell_id_y);
+}
+
 __device__ float water_velocity(
         const float* eta_ptr, const int eta_pitch,
         const float* momentum_ptr, const int momentum_pitch,
@@ -48,14 +61,13 @@ __device__ float water_velocity_no_interpolation(
     
     // Find indices for the cell this thread's particle is in
     // Note that we compensate for 2 ghost cells in each direction 
-    const int cell_id_x = (int)(floorf(drifter_pos_x/dx) + 2);
-    const int cell_id_y = (int)(floorf(drifter_pos_y/dy) + 2);
+    const int2 cell_id = get_cell_indices(drifter_pos_x, drifter_pos_y, dx, dy);
     
     // Read and compute water velocity within cell
     return water_velocity(eta_ptr, eta_pitch,
                           momentum_ptr, momentum_pitch,
                           Hm_ptr, Hm_pitch, 
-                          cell_id_x, cell_id_y);
+                          cell_id.x, cell_id.y);
 }
 
 __device__ float water_velocity_bilinear_interpolation(
@@ -67,18 +79,17 @@ __device__ float water_velocity_bilinear_interpolation(
     
     // Find indices for the cell this thread's particle is in
     // Note that we compensate for 2 ghost cells in each direction 
-    const int cell_id_x = (int)(floorf(drifter_pos_x/dx) + 2);
-    const int cell_id_y = (int)(floorf(drifter_pos_y/dy) + 2);
-
+    const int2 cell_id = get_cell_indices(drifter_pos_x, drifter_pos_y, dx, dy);
+    
     // Find neighbouring cells and relative position between cell centers
     float const frac_x = drifter_pos_x / dx - floorf(drifter_pos_x / dx);
     float const frac_y = drifter_pos_y / dy - floorf(drifter_pos_y / dy);
     
-    const int cell_id_x0 = frac_x < 0.5f ? cell_id_x - 1 : cell_id_x;
+    const int cell_id_x0 = frac_x < 0.5f ? cell_id.x - 1 : cell_id.x;
     const float x_factor = frac_x < 0.5f ? frac_x + 0.5f : frac_x - 0.5f; 
     const int cell_id_x1 = cell_id_x0 + 1;
 
-    const int cell_id_y0 = frac_y < 0.5f ? cell_id_y - 1 : cell_id_y;
+    const int cell_id_y0 = frac_y < 0.5f ? cell_id.y - 1 : cell_id.y;
     const float y_factor = frac_y < 0.5f ? frac_y + 0.5f : frac_y - 0.5f; 
     const int cell_id_y1 = cell_id_y0 + 1;
     
@@ -366,6 +377,24 @@ __device__ void entrain(
     }
 }
 
+__device__ bool is_dry_cell(float water_depth) {
+    // Function to check if a cell is dry (land)
+    return (fabsf(water_depth - LAND_VALUE) <= DRY_EPS);
+}
+
+__device__ float get_water_depth(const float* Hm_ptr, const int Hm_pitch, const int2 cell_id) {
+    // Function to get water depth at a given position
+    const float* Hm_row = (float*) ((char*) Hm_ptr + Hm_pitch*cell_id.y);
+    return Hm_row[cell_id.x];
+}
+
+__device__ inline bool is_stranded(const float drifter_depth){
+    return drifter_depth > 999;
+}
+
+__device__ inline float set_stranded(const float t) {
+    return 1000.0f + t;
+}
 
 extern "C" {
 __global__ void superSimpleDrift(
@@ -394,9 +423,11 @@ __global__ void superSimpleDrift(
         const float* wind_x_next_arr,
         const float* wind_y_next_arr,
         const float wind_interpolation_t,
-        const float windage)
+        const float windage, 
+        const float t)
 
     {
+
         // Each thread will be responsible for one drifter only 
         // Local index of thread within block (only needed in one dim)
         const int tx = threadIdx.x;
@@ -408,11 +439,6 @@ __global__ void superSimpleDrift(
         // We might have launched more threads than we have drifters
         if ((ti < num_drifters) && (ti < num_active_drifters)) {
 
-            // Generate random numbers
-            unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch * ti);
-            unsigned long long seed = seed_row[0];
-            float2 rand_n1 = rand_normal(&seed);
-            float2 rand_n2 = rand_normal(&seed);
 
             // Obtain pointer to our Lagrangian drifter:
             float* relative_position = (float*) ((char*) relative_positions + relative_positions_pitch*ti);
@@ -420,12 +446,26 @@ __global__ void superSimpleDrift(
             float rel_pos_y = relative_position[1];
             float drifter_depth = relative_position[2];
 
+            // stranded
+            if (is_stranded(drifter_depth)) {
+                return;
+            }
+
+            // Generate random numbers
+            unsigned long long* const seed_row = (unsigned long long*) ((char*) seed_ptr + seed_pitch * ti);
+            unsigned long long seed = seed_row[0];
+            float2 rand_n1 = rand_normal(&seed);
+            float2 rand_n2 = rand_normal(&seed);
+
+
             float* reference_position = (float*) ((char*) reference_positions + reference_positions_pitch*ti);
             float ref_pos_x = reference_position[0];
             float ref_pos_y = reference_position[1];
             
             float abs_pos_x = rel_pos_x + ref_pos_x;
             float abs_pos_y = rel_pos_y + ref_pos_y;
+
+            const int2 cell_id = get_cell_indices(abs_pos_x, abs_pos_y, dx, dy);
             
             // Pointer to droplet diameter
             float* droplet_diameter = (float*) ((char*) droplet_diameters + droplet_diameter_pitch*ti);
@@ -442,31 +482,19 @@ __global__ void superSimpleDrift(
                                                             Hm_ptr, Hm_pitch, 
                                                             abs_pos_x, abs_pos_y,
                                                             dx, dy);
-            
+
             // Move drifter with a simple forward Euler
             rel_pos_x += u*dt;
             rel_pos_y += v*dt;
 
-            // Add horizontal diffusion
-            rel_pos_x += rand_n1.x*sqrtf(2*horizontal_diffusivity*dt);
-            rel_pos_y += rand_n1.y*sqrtf(2*horizontal_diffusivity*dt);
-
-
             // Move drifter vertically.
             if (is_submerged(drifter_depth)) {
-                // Find the local water depth
-                const int cell_id_x = (int)(floorf(abs_pos_x/dx) + 2);
-                const int cell_id_y = (int)(floorf(abs_pos_y/dy) + 2);
-                const float* Hm_row = (float*) ((char*) Hm_ptr + Hm_pitch*cell_id_y);
-                const float water_depth = Hm_row[cell_id_x];
-
                 // Random number for vertical diffusion (normal distribution with mean 0 and variance dt)
-                
+                float water_depth = get_water_depth(Hm_ptr, Hm_pitch, cell_id); // should this pos be after drift update?
                 const float ksi_z = rand_n2.x * sqrtf(dt);
                 vertical_transport(drifter_depth, d50, water_density,
                                    oil_density, water_viscosity, g, dt, ksi_z, water_depth,
                                    vertical_diffusivity);
-                    
             }
             else {
                 const float wind_u = wind(wind_x_current_arr, wind_x_next_arr, 
@@ -483,8 +511,6 @@ __global__ void superSimpleDrift(
                 // Advection
                 rel_pos_x += windage*wind_u*dt;
                 rel_pos_y += windage*wind_v*dt;
-            
-
 
                 // Entrainment of surface drifter
                 if (ENABLE_ENTRAINMENT) {
@@ -495,11 +521,38 @@ __global__ void superSimpleDrift(
                 }
             }
 
+            // after drift and advection we need to check if the particle has stranded
+            const int2 new_cell_id = get_cell_indices(rel_pos_x + ref_pos_x, rel_pos_y + ref_pos_y, dx, dy);
+            if (new_cell_id.x != cell_id.x || new_cell_id.y != cell_id.y) {
+                if (is_dry_cell(get_water_depth(Hm_ptr, Hm_pitch, new_cell_id))) {
+                    // Stranded
+                    drifter_depth = set_stranded(t);
+                }
+            }
+
+            if (!is_stranded(drifter_depth)) {
+                // Add horizontal diffusion
+                // If a particle is randomly displaced onto land, put it back where it came from
+                const float no_diffusion_rel_pos_x = rel_pos_x;
+                const float no_diffusion_rel_pos_y = rel_pos_y;
+                rel_pos_x += rand_n1.x*sqrtf(2*horizontal_diffusivity*dt);
+                rel_pos_y += rand_n1.y*sqrtf(2*horizontal_diffusivity*dt);
+
+                const int2 diffusion_cell_id = get_cell_indices(rel_pos_x + ref_pos_x, 
+                                                                  rel_pos_y + ref_pos_y, dx, dy);
+                if (diffusion_cell_id.x != cell_id.x || diffusion_cell_id.y != cell_id.y) {
+                    if (is_dry_cell(get_water_depth(Hm_ptr, Hm_pitch, diffusion_cell_id))) {
+                        rel_pos_x = no_diffusion_rel_pos_x;
+                        rel_pos_y = no_diffusion_rel_pos_y;
+                    }
+                }
+            }
+
             // Assuming periodic boundary conditions
             boundary_conditions(rel_pos_x, rel_pos_y, 
                                 ref_pos_x, ref_pos_y, 
                                 nx, ny, dx, dy);
-            
+
             // Write to global memory
             // Write seed back to global memory
             seed_row[0] = seed;
