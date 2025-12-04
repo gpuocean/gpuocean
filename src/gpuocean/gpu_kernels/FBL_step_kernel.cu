@@ -64,6 +64,10 @@ __global__ void fblStepKernel(
         int wall_bc_,
         
         // Wind stress parameters
+        const float* wind_stress_x_current_arr,
+        const float* wind_stress_x_next_arr,
+        const float* wind_stress_y_current_arr,
+        const float* wind_stress_y_next_arr,
         float wind_stress_t_) {
         
     __shared__ float H_shared[block_height+2][block_width+2];
@@ -168,7 +172,7 @@ __global__ void fblStepKernel(
             //FIXME Check coordinates (ti_, tj_) here!!!
             //TODO Check coordinates (ti_, tj_) here!!!
             //WARNING Check coordinates (ti_, tj_) here!!!
-            float X = windStressX(wind_stress_t_, k, l+0.5, nx_, ny_);
+            float X = windStress(wind_stress_x_current_arr, wind_stress_x_next_arr, wind_stress_t_, k, l+0.5, nx_, ny_, WIND_STRESS_X_NX, WIND_STRESS_X_NY);
 
             //Compute the U at the next timestep
             float U_next = B*(U_current + dt_*(fV_m + P + X) );
@@ -216,7 +220,7 @@ __global__ void fblStepKernel(
             //FIXME Check coordinates (k, l) here!!!
             //TODO Check coordinates (k, l) here!!!
             //WARNING Check coordinates (k, l) here!!!
-            float Y = windStressY(wind_stress_t_, k+0.5, l, nx_, ny_);
+            float Y = windStress(wind_stress_y_current_arr, wind_stress_y_next_arr,wind_stress_t_, k+0.5, l, nx_, ny_, WIND_STRESS_Y_NX, WIND_STRESS_Y_NY);
 
             //Compute the V at the next timestep
             float V_next = B*(V_current + dt_*(-fU_m + P + Y) );

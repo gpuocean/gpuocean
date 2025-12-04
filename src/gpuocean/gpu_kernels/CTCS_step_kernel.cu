@@ -61,6 +61,10 @@ __global__ void ctcsStepKernel(
         float* V1_ptr_, const int V1_pitch_, // V^n 
     
         // Wind stress parameters
+        const float* wind_stress_x_current_arr,
+        const float* wind_stress_x_next_arr,
+        const float* wind_stress_y_current_arr,
+        const float* wind_stress_y_next_arr,
         const float wind_stress_t_) {
         
     __shared__ float H_shared[block_height+2][block_width+2];
@@ -274,7 +278,7 @@ __global__ void ctcsStepKernel(
         //FIXME Check coordinates (ti_, tj_) here!!!
         //TODO Check coordinates (ti_, tj_) here!!!
         //WARNING Check coordinates (ti_, tj_) here!!!
-        const float X = windStressX(wind_stress_t_, ti, tj+0.5, nx_, ny_);
+        const float X = windStress(wind_stress_x_current_arr, wind_stress_x_next_arr, wind_stress_t_, ti, tj+0.5, nx_, ny_, WIND_STRESS_X_NX, WIND_STRESS_X_NY);
 
         //Compute the V at the next timestep
         float U2 = (U0 + 2.0f*dt_*(fV_bar + (N + P_x)/dx_ + X + A_*E) ) / C;
@@ -379,7 +383,7 @@ __global__ void ctcsStepKernel(
         //FIXME Check coordinates (ti_, tj_) here!!!
         //TODO Check coordinates (ti_, tj_) here!!!
         //WARNING Check coordinates (ti_, tj_) here!!!
-        const float Y = windStressY(wind_stress_t_, ti+0.5, tj, nx_, ny_);
+        const float Y = windStress(wind_stress_y_current_arr, wind_stress_y_next_arr,wind_stress_t_, ti+0.5, tj, nx_, ny_, WIND_STRESS_Y_NX, WIND_STRESS_Y_NY);
         
         //Compute the V at the next timestep
         float V2 = (V0 + 2.0f*dt_*(-fU_bar + (N + P_y)/dy_ + Y + A_*E) ) / C;

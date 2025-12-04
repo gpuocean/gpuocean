@@ -68,20 +68,40 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
                                                  self.driftersHost)
         
         self.drift_kernels = gpu_ctx.get_kernel("driftKernels.cu", \
-                                                defines={'block_width': self.block_width, 'block_height': self.block_height
+                                                defines={'block_width': self.block_width, 'block_height': self.block_height,
+                                                         'WIND_X_NX': int(self.wind.wind_u[0].shape[1]),
+                                                         'WIND_X_NY': int(self.wind.wind_u[0].shape[0]),
+                                                         'WIND_Y_NX': int(self.wind.wind_v[0].shape[1]),
+                                                         'WIND_Y_NY': int(self.wind.wind_v[0].shape[0])
                                                        })
+        #Define wind arrays
+        t = 0  # TODO: check if this is correct
+        t_max_index = len(self.wind.t)-1
+        t0_index = max(0, np.searchsorted(self.wind.t, t)-1)
+        t1_index = min(t_max_index, np.searchsorted(self.wind.t,t))
+        self.wind_x_current_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind.wind_u[t0_index].shape[1], self.wind.wind_u[t0_index].shape[0], 0, 0,
+                                self.wind.wind_u[t0_index])
+        self.wind_y_current_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind.wind_v[t0_index].shape[1], self.wind.wind_v[t0_index].shape[0], 0, 0,
+                                self.wind.wind_v[t0_index])
+        self.wind_x_next_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind.wind_u[t1_index].shape[1], self.wind.wind_u[t1_index].shape[0], 0, 0,
+                                self.wind.wind_u[t1_index])
+        self.wind_y_next_arr = Common.CUDAArray2D(self.gpu_stream,
+                                self.wind.wind_v[t1_index].shape[1], self.wind.wind_v[t1_index].shape[0], 0, 0,
+                                self.wind.wind_v[t1_index])
 
         # Get CUDA functions and define data types for prepared_{async_}call()
         self.passiveDrifterKernel = self.drift_kernels.get_function("passiveDrifterKernel")
-        self.passiveDrifterKernel.prepare("iifffiiPiPiPiPiiiiPifff")
+        self.passiveDrifterKernel.prepare("iifffiiPiPiPiPiiiiPifPPPPff")
         self.enforceBoundaryConditionsKernel = self.drift_kernels.get_function("enforceBoundaryConditions")
         self.enforceBoundaryConditionsKernel.prepare("ffiiiPi")
         if self.wind_drift_factor:
             #Initialize wind parameters
-            self.wind_textures = {}
             self.wind_timestamps = {}
             
-            self.update_wind(self.drift_kernels, self.passiveDrifterKernel, 0.0)
+            self.update_wind(self.drift_kernels, 0.0)
         
         
         self.local_size = (self.block_width, self.block_height, 1)
@@ -114,7 +134,7 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
         
         return copyOfSelf
     
-    def update_wind(self, kernel_module, kernel_function, t):
+    def update_wind(self, kernel_module, t):
         #Key used to access the hashmaps
         key = str(kernel_module)
 
@@ -124,7 +144,7 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
         t1_index = min(t_max_index, np.searchsorted(self.wind.t,t))
         new_t0 = self.wind.t[t0_index]
         new_t1 = self.wind.t[t1_index]
-        
+    
         #Find the old (and update)
         old_t0 = None
         old_t1 = None
@@ -132,56 +152,29 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
             old_t0 = self.wind_timestamps[key][0]
             old_t1 = self.wind_timestamps[key][1]
         self.wind_timestamps[key] = [new_t0, new_t1]
-                
-        #Get texture references
-        if (key in self.wind_textures):
-            X0_texref, X1_texref, Y0_texref, Y1_texref = self.wind_textures[key];
-        else:
-            X0_texref = kernel_module.get_texref("wind_X_current")
-            Y0_texref = kernel_module.get_texref("wind_Y_current")
-            X1_texref = kernel_module.get_texref("wind_X_next")
-            Y1_texref = kernel_module.get_texref("wind_Y_next")
-        
-        #Helper function to upload data to the GPU as a texture
-        def setTexture(texref, numpy_array):       
-            #Upload data to GPU and bind to texture reference
-            texref.set_array(cuda.np_to_array(numpy_array, order="C"))
-            
-            # Set texture parameters
-            texref.set_filter_mode(cuda.filter_mode.LINEAR) #bilinear interpolation
-            texref.set_address_mode(0, cuda.address_mode.CLAMP) #no indexing outside domain
-            texref.set_address_mode(1, cuda.address_mode.CLAMP)
-            texref.set_flags(cuda.TRSF_NORMALIZED_COORDINATES) #Use [0, 1] indexing
-            
+
         #If time interval has changed, upload new data
         if (new_t0 != old_t0):
             self.gpu_stream.synchronize()
             self.gpu_ctx.synchronize()
-            setTexture(X0_texref, self.wind.wind_u[t0_index])
-            setTexture(Y0_texref, self.wind.wind_v[t0_index])
-            kernel_function.param_set_texref(X0_texref)
-            kernel_function.param_set_texref(Y0_texref)
+            self.wind_x_current_arr.upload(self.gpu_stream, self.wind.wind_u[t0_index])
+            self.wind_y_current_arr.upload(self.gpu_stream, self.wind.wind_v[t0_index])
             self.gpu_ctx.synchronize()
 
         if (new_t1 != old_t1):
             self.gpu_stream.synchronize()
             self.gpu_ctx.synchronize()
-            setTexture(X1_texref, self.wind.wind_u[t1_index])
-            setTexture(Y1_texref, self.wind.wind_v[t1_index])
-            kernel_function.param_set_texref(X1_texref)
-            kernel_function.param_set_texref(Y1_texref)
+            self.wind_x_next_arr.upload(self.gpu_stream, self.wind.wind_u[t1_index])
+            self.wind_y_next_arr.upload(self.gpu_stream, self.wind.wind_v[t1_index])
             self.gpu_ctx.synchronize()
-                
-        # Store texture references (they are deleted if collected by python garbage collector)
-        self.wind_textures[key] = [X0_texref, X1_texref, Y0_texref, Y1_texref]
-      
+
         # Compute the wind_stress_t linear interpolation coefficient
         wind_t = 0.0
         elapsed_since_t0 = (t-new_t0)
         time_interval = max(1.0e-10, (new_t1-new_t0))
         wind_t = max(0.0, min(1.0, elapsed_since_t0 / time_interval))
-        
-        return wind_t   
+
+        return wind_t
     
     def setDrifterPositions(self, newDrifterPositions):
         ### Need to attache the observation to the newDrifterPositions, and then upload
@@ -217,7 +210,7 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
     def drift(self, eta, hu, hv, Hm, nx, ny, t, dx, dy, dt, \
               x_zero_ref, y_zero_ref):
         if self.wind_drift_factor:
-            wind_t = np.float32(self.update_wind(self.drift_kernels, self.passiveDrifterKernel,t))
+            wind_t = np.float32(self.update_wind(self.drift_kernels, t))
         else:
             wind_t = np.float32(0.0)
         self.passiveDrifterKernel.prepared_async_call(self.global_size, self.local_size, self.gpu_stream, \
@@ -232,6 +225,10 @@ class GPUDrifterCollection(BaseDrifterCollection.BaseDrifterCollection):
                                                self.driftersDevice.data.gpudata, \
                                                self.driftersDevice.pitch, \
                                                np.float32(self.sensitivity),\
+                                               self.wind_x_current_arr.data.gpudata, \
+                                               self.wind_x_next_arr.data.gpudata, \
+                                               self.wind_y_current_arr.data.gpudata, \
+                                               self.wind_y_next_arr.data.gpudata, \
                                                wind_t, self.wind_drift_factor)
         
                                  

@@ -482,7 +482,12 @@ __global__ void swe_2D(
 
         // Boundary conditions (1: wall, 2: periodic, 3: numerical sponge)
         int bc_north_, int bc_east_, int bc_south_, int bc_west_,
-	
+
+        // Wind stress
+        const float* wind_stress_x_current_arr,
+        const float* wind_stress_x_next_arr,
+        const float* wind_stress_y_current_arr,
+        const float* wind_stress_y_next_arr,
         float wind_stress_t_) {
         
     //Index of thread within block
@@ -587,8 +592,8 @@ __global__ void swe_2D(
         // Find bottom topography source terms: S3
         const float ST3 = bottomSourceTerm3_kp(Q, Qx, Hi, g_, i, j);
         
-        const float X = windStressX(wind_stress_t_, ti+0.5f, tj+0.5f, nx_, ny_);
-        const float Y = windStressY(wind_stress_t_, ti+0.5f, tj+0.5f, nx_, ny_);
+        const float X = windStress(wind_stress_x_current_arr, wind_stress_x_next_arr, wind_stress_t_, ti+0.5f, tj+0.5f, nx_, ny_, WIND_STRESS_X_NX, WIND_STRESS_X_NY);
+        const float Y = windStress(wind_stress_y_current_arr, wind_stress_y_next_arr, wind_stress_t_, ti+0.5f, tj+0.5f, nx_, ny_, WIND_STRESS_Y_NX, WIND_STRESS_Y_NY);
 
         // Coriolis parameter
         float global_thread_y = tj-2; // Global id including ghost cells

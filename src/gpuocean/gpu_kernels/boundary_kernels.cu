@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "common.cu"
+#include "interpolation.cu"
 
 
 
@@ -400,13 +401,6 @@ __global__ void linearInterpolation_EW(
  */
 
 
-texture<float4, cudaTextureType2D> bc_tex_NS_current;
-texture<float4, cudaTextureType2D> bc_tex_NS_next;
-
-texture<float4, cudaTextureType2D> bc_tex_EW_current;
-texture<float4, cudaTextureType2D> bc_tex_EW_next;
-
-
 
  extern "C" {
 __global__ void flowRelaxationScheme_NS(
@@ -421,7 +415,11 @@ __global__ void flowRelaxationScheme_NS(
         float* h_ptr_, int h_pitch_,
         float* u_ptr_, int u_pitch_,
         float* v_ptr_, int v_pitch_,
-        
+
+        // Boundary condition data arrays
+        const float* bc_NS_current_arr,
+        const float* bc_NS_next_arr,
+
         //Boundary condition time ([0, 1])
         float t_) {
 
@@ -448,12 +446,12 @@ __global__ void flowRelaxationScheme_NS(
 	const float alpha = 1.0f - tanh(fmaxf(0.0f, j)/2.0f);
 	
     //Normalize coordinates (to [0, 1])
-    const float s = ti / float(nx_);
+    const float s = ti / float(nx_ + 2*halo_x_);
     const float t = (tj < ny_ / 2.0) ? 0.25f : 0.75f; // choose north/south
 	
 	// Get exterior value
-    const float4 current = tex2D(bc_tex_NS_current, s, t);
-    const float4 next = tex2D(bc_tex_NS_next, s, t);
+    const float3 current = bilinear_interpolation_3channels(bc_NS_current_arr, BC_NS_NX, BC_NS_NY, s, t);
+    const float3 next = bilinear_interpolation_3channels(bc_NS_next_arr, BC_NS_NX, BC_NS_NY, s, t);
     
     //Compute interpolated exterior value
 	const float exterior_value_h = t_*next.x + (1.0f - t_)*current.x;
@@ -488,7 +486,11 @@ __global__ void flowRelaxationScheme_EW(
         float* h_ptr_, int h_pitch_,
         float* u_ptr_, int u_pitch_,
         float* v_ptr_, int v_pitch_,
-        
+
+        // Boundary condition data arrays
+        const float* bc_EW_current_arr,
+        const float* bc_EW_next_arr,
+
         //Boundary condition time ([0, 1])
         float t_) {
     
@@ -515,11 +517,11 @@ __global__ void flowRelaxationScheme_EW(
 
         //Normalize coordinates (to [0, 1])
         const float s = (ti < nx_ / 2.0) ? 0.25f : 0.75f; // choose east/west
-        const float t = tj / float(ny_);
+        const float t = tj / float(ny_ + 2*halo_y_);
 
         // Get exterior value
-        const float4 current = tex2D(bc_tex_EW_current, s, t);
-        const float4 next = tex2D(bc_tex_EW_next, s, t);
+        const float3 current = bilinear_interpolation_3channels(bc_EW_current_arr, BC_EW_NX, BC_EW_NY, s, t);
+        const float3 next = bilinear_interpolation_3channels(bc_EW_next_arr, BC_EW_NX, BC_EW_NY, s, t);
 
         //Compute interpolated exterior value
         const float exterior_value_h = t_*next.x + (1.0f - t_)*current.x;
