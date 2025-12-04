@@ -30,11 +30,23 @@ class ImportTests(unittest.TestCase):
     def test_import_utils_ParticleInfo(self):
         from gpuocean.utils import ParticleInfo
         
+    def test_import_utils_InitMapper(self):
+        from gpuocean.utils import InitMapper
+        
+    def test_import_utils_NetCDFInitialization4Combined(self):
+        from gpuocean.utils import NetCDFInitialization4Combined
+        
     def test_import_utils_OceanographicUtilities(self):
         from gpuocean.utils import OceanographicUtilities
         
     def test_import_utils_DoubleJetCase(self):
         from gpuocean.utils import DoubleJetCase
+        
+    def test_import_utils_BarentsInitializer(self):
+        from gpuocean.utils import BarentsInitializer
+        
+    def test_import_utils_RandomNumbers(self):
+        from gpuocean.utils import RandomNumbers
         
     def test_import_utils_AtmosphericPressure(self):
         from gpuocean.utils import AtmosphericPressure
@@ -60,6 +72,9 @@ class ImportTests(unittest.TestCase):
     def test_import_utils_SkillScore(self):
         from gpuocean.utils import SkillScore
         
+    def test_import_utils_MultiLevelScore(self):
+        from gpuocean.utils import MultiLevelScore
+        
     def test_import_utils_EnsemblePlot(self):
         from gpuocean.utils import EnsemblePlot
         
@@ -68,6 +83,9 @@ class ImportTests(unittest.TestCase):
         
     def test_import_ensembles_OceanNoiseEnsemble(self):
         from gpuocean.ensembles import OceanNoiseEnsemble
+        
+    def test_import_ensembles_MultiLevelOceanEnsemble(self):
+        from gpuocean.ensembles import MultiLevelOceanEnsemble
         
     def test_import_ensembles_EnsembleFromFiles(self):
         from gpuocean.ensembles import EnsembleFromFiles
@@ -102,6 +120,9 @@ class ImportTests(unittest.TestCase):
     def test_import_SWEsimulators_FBL(self):
         from gpuocean.SWEsimulators import FBL
         
+    def test_import_SWEsimulators_ModelErrorKL(self):
+        from gpuocean.SWEsimulators import ModelErrorKL
+        
     def test_import_SWEsimulators_CTCS(self):
         from gpuocean.SWEsimulators import CTCS
         
@@ -114,6 +135,9 @@ class ImportTests(unittest.TestCase):
     def test_import_SWEsimulators_Simulator(self):
         from gpuocean.SWEsimulators import Simulator
         
+    def test_import_SWEsimulators_GPUOceanSim(self):
+        from gpuocean.SWEsimulators import GPUOceanSim
+        
     def test_import_SWEsimulators_OceanStateNoise(self):
         from gpuocean.SWEsimulators import OceanStateNoise
         
@@ -123,8 +147,14 @@ class ImportTests(unittest.TestCase):
     def test_import_dataassimilation_DataAssimilationUtils(self):
         from gpuocean.dataassimilation import DataAssimilationUtils
         
+    def test_import_dataassimilation_MLEnKFOcean(self):
+        from gpuocean.dataassimilation import MLEnKFOcean
+        
     def test_import_dataassimilation_IEWPFOcean(self):
         from gpuocean.dataassimilation import IEWPFOcean
+        
+    def test_import_drifters_MLDrifterCollection(self):
+        from gpuocean.drifters import MLDrifterCollection
         
     def test_import_drifters_GPUDrifterCollection(self):
         from gpuocean.drifters import GPUDrifterCollection
@@ -134,4 +164,7 @@ class ImportTests(unittest.TestCase):
         
     def test_import_drifters_BaseDrifterCollection(self):
         from gpuocean.drifters import BaseDrifterCollection
+        
+    def test_import_drifters_LagrangianUtils(self):
+        from gpuocean.drifters import LagrangianUtils
         
