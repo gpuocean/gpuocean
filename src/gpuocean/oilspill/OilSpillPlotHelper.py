@@ -77,6 +77,7 @@ def plotOilWithVerticalDistribution(sim, domain=[0, None, 0, None],
                                     submerged_particles_max=30000,
                                     include_stranding=None, classifier=None,
                                     stranding_start=0, midpoint_gs=7,
+                                    hist_ymax=None,
                                     close_plot=False):
     
     vertical_plots = 1
@@ -129,6 +130,8 @@ def plotOilWithVerticalDistribution(sim, domain=[0, None, 0, None],
         if hist_labels[0] is not None:
             ax3.legend()
         ax3.set_xlim([stranding_start, 24.5])
+        if hist_ymax is not None:
+            ax3.set_ylim([1, hist_ymax])
         frac_stranded = len(stranded_times)/sim.drifters.num_active_drifters
         ax3.set_title('Stranding times ('+str(int(frac_stranded*1000)/10)+"%)")
         ax3.set_ylabel("num particles")
