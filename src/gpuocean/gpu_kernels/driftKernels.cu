@@ -22,13 +22,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 
-/**
-  * Kernel that evolves drifter positions along u and v.
-  */
-  
-//Code relating to wind-data
-
-
 #include "interpolation.cu"
 
 

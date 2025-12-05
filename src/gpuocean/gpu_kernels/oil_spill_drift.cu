@@ -2,8 +2,9 @@
 This software is part of GPU Ocean. 
 
 Copyright (C) 2024 SINTEF Digital
+Copyright (C) 2024 SINTEF Ocean
 
-Super simple drift kernel.
+GPU kernels implementing a simplified oil spill model.
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
