@@ -141,6 +141,15 @@ class ImportTests(unittest.TestCase):
     def test_import_SWEsimulators_OceanStateNoise(self):
         from gpuocean.SWEsimulators import OceanStateNoise
         
+    def test_import_oilspill_OilDrift(self):
+        from gpuocean.oilspill import OilDrift
+        
+    def test_import_oilspill_OilSpillPlotHelper(self):
+        from gpuocean.oilspill import OilSpillPlotHelper
+        
+    def test_import_oilspill_OilSpillIO(self):
+        from gpuocean.oilspill import OilSpillIO
+        
     def test_import_dataassimilation_LEnKFOcean(self):
         from gpuocean.dataassimilation import LEnKFOcean
         
