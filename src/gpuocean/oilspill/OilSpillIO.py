@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-import OilDrift
+from gpuocean.oilspill import OilDrift
 
 class OilSpillIO:
     """

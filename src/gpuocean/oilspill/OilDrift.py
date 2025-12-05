@@ -138,20 +138,19 @@ class OilDrift:
         self.windage = np.float32(windage)
 
         # To do that, we need to provide the absolute path along with the corresponding flag
-        self.kernel_filename = os.path.join("..", "gpu_kernels", "super_simple_drift_kernel.cu")
-        self.kernel_filename = os.path.abspath(self.kernel_filename)
-        self.drift_kernels = gpu_ctx.get_kernel(self.kernel_filename, \
+        # self.kernel_filename = os.path.join("..", "gpu_kernels", "oil_spill_drift.cu")
+        # self.kernel_filename = os.path.abspath(self.kernel_filename)
+        self.drift_kernels = gpu_ctx.get_kernel("oil_spill_drift.cu", \
                                                 defines={'block_width': self.block_width, 'block_height': self.block_height,
                                                          'ENABLE_ENTRAINMENT': int(enable_entrainment),
                                                          'WIND_X_NX': int(self.wind.wind_u[0].shape[1]),
                                                          'WIND_X_NY': int(self.wind.wind_u[0].shape[0]),
                                                          'WIND_Y_NX': int(self.wind.wind_v[0].shape[1]),
                                                          'WIND_Y_NY': int(self.wind.wind_v[0].shape[0])
-                                                       },
-                                                is_abs_path=True)
+                                                       })
         
         # Get CUDA functions and define data types for prepared_{async_}call()
-        self.superSimpleDriftKernel = self.drift_kernels.get_function("superSimpleDrift")
+        self.superSimpleDriftKernel = self.drift_kernels.get_function("oilSpillDrift")
         self.superSimpleDriftKernel.prepare("iifffPiPiPiPiiiPiPiPiffPifffffffPPPPfff")
         # The input string to prepare defines the data type for each input parameter in order
         # Example: prepare("ifPi") means that the kernel parameters have type signature (int, float, pointer, int)

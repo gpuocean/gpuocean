@@ -397,7 +397,7 @@ __device__ inline float set_stranded(const float t) {
 }
 
 extern "C" {
-__global__ void superSimpleDrift(
+__global__ void oilSpillDrift(
         const int nx, const int ny,
         const float dx, const float dy, const float dt,
 
