@@ -15,7 +15,7 @@ dependencies:
 - netcdf4
 - pytest
 - xmlrunner
-- scipy
+- scipy<1.14.0
 - pandas
 - pytables
 - nbdime
