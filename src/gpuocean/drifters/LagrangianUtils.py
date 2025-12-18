@@ -25,7 +25,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import numpy as np
 
 def lagrangian2concentration(positions, nx, ny, dx, dy, 
-                             total_concentration=1.0):
+                             total_concentration=1.0,
+                             weight_per_particle=1):
     """
     Maps a list of lagrangian positions to a np.array of shape (ny, nx) with relative concentration of particles within each cell 
     """
@@ -35,12 +36,21 @@ def lagrangian2concentration(positions, nx, ny, dx, dy,
         idx = int(positions[i, 0] // dx)
         idy = int(positions[i, 1] // dy)
         c[idy, idx] += 1
+    if weight_per_particle is not None:
+        # Return as weight/m^2
+        return c*weight_per_particle/(dx*dy)
     return (c/n)*total_concentration
     
-def concentrationFromSim(sim, dx=None, dy=None, 
-                         total_concentration=1.0):
+def concentrationFromSim(sim, 
+                         total_concentration=1.0,
+                         weight_per_particle=1,
+                         apply_landmask = True):
     c =  lagrangian2concentration(sim.drifters.getDrifterPositions(), 
                                   sim.nx, sim.ny, sim.dx, sim.dy,
-                                  total_concentration=total_concentration)
-    eta, _, _ = sim.download(interior_domain_only=True)
-    return np.ma.masked_array(c, eta.mask)
+                                  total_concentration=total_concentration,
+                                  weight_per_particle=weight_per_particle)
+    if apply_landmask:
+        eta, _, _ = sim.download(interior_domain_only=True)
+        return np.ma.masked_array(c, eta.mask)
+    else:
+        return c

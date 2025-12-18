@@ -41,7 +41,7 @@ from gpuocean.utils import OceanographicUtilities
 # BACKGROUND CANVASES
 
 def background_from_netcdf(source_url, ax=None, figsize=None, t_idx=0, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
-                           background_type="velocity", cmap=None, vmax=None, cbar=True, lonlat_diff=None, **kwargs):
+                           background_type="velocity", cmap=None, vmax=None, cbar=True, lonlat_diff=None, return_extent=False, **kwargs):
     """
     Creating a background canvas from netCDF files
     
@@ -49,7 +49,7 @@ def background_from_netcdf(source_url, ax=None, figsize=None, t_idx=0, domain=[0
     t_idx       - time index (int) in netCDF file
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the netCDF file
     drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
-    background_type -  any of the following strings: [eta, velocity*, velocity_variance, velocity_stddev, landmask] (* default)
+    background_type -  any of the following strings: [eta, velocity*, velocity_variance, velocity_stddev, landmask, depth] (* default)
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
     cbar        - boolean for adding colorbar or not
@@ -93,46 +93,44 @@ def background_from_netcdf(source_url, ax=None, figsize=None, t_idx=0, domain=[0
     finally:
         ncfile.close()
 
+    # Loading lat-lon if available
+    lat, lon = None, None
+    try:
+        nc = netCDF4.Dataset(source_url)
+        lat = np.array(nc.variables["lat"])[y0:y1, x0:x1]
+        lon = np.array(nc.variables["lon"])[y0:y1, x0:x1]
+
+    except Exception as e:
+        assert(lonlat_diff is None), "lonlat_diff given but failed to read lon and lat from netcdf"
+        raise e
+    finally:
+        ncfile.close()
+
     ax, extent = make_generic_background(dx, dy, ax=ax,
                                          eta=eta, hu=hu, hv=hv, landmask=np.isnan(eta), H_m=H_m,
                                          u=None, v=None, u_var=None, v_var=None,
                                          figsize=figsize, cmap=cmap, vmax=vmax,
                                          background_type=background_type,
                                          return_extent=True,
+                                         lon=lon, lat=lat, lonlat_diff=lonlat_diff,
                                          **kwargs) 
-
-    set_drifter_zoom(ax, extent, drifter_domain, dx, dy)
-
-    # Grid 
-    if lonlat_diff is not None:
-        try:
-            nc = netCDF4.Dataset(source_url)
-            lat = np.array(nc.variables["lat"])
-            lon = np.array(nc.variables["lon"])
-
-            spec_lat = lat[y0:y1, x0:x1]
-            spec_lon = lon[y0:y1, x0:x1]
-
-            cont_lon_case = ax.contour(spec_lon, levels = np.arange(0, 90, lonlat_diff), extent=extent, colors='k', alpha=0.2, linewidths=0.8, zorder=1)
-            cont_lat_case = ax.contour(spec_lat, levels = np.arange(0, 90, lonlat_diff), extent=extent, colors='k', alpha=0.2, linewidths=0.8, zorder=1)
-
-        except Exception as e:
-            raise e
         
     set_drifter_zoom(ax, extent, drifter_domain, dx, dy)
-
+    
+    if return_extent:
+        return ax, extent
     return ax
 
 
 def background_from_sim(sim, ax=None, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
-                        background_type="velocity", cmap=None, vmax=None, cbar=True, **kwargs):
+                        background_type="velocity", cmap=None, vmax=None, cbar=True, return_extent=False, **kwargs):
     """
     Creating a background canvas from sim
     
     sim - CDKLM simulator
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
     drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
-    background_type -  any of the following strings: [eta, velocity*, velocity_variance, velocity_stddev, landmask] (* default)
+    background_type -  any of the following strings: [eta, velocity*, velocity_variance, velocity_stddev, landmask, depth] (* default)
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
     cbar        - boolean for adding colorbar or not
@@ -163,18 +161,20 @@ def background_from_sim(sim, ax=None, figsize=None, domain=[0, None, 0, None], d
 
     set_drifter_zoom(ax, extent, drifter_domain, dx, dy)
 
+    if return_extent:
+        return ax, extent
     return ax
 
 
 
 def background_from_ensemble(ensemble, ax=None, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
-                             background_type="landmask", cmap=None, vmax=None, **kwargs):
+                             background_type="landmask", cmap=None, vmax=None, return_extent=False, **kwargs):
     """
     Creating a background canvas from ensemble
     
     ensemble    - OceanModelEnsemble
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
-    background_type -  any of the following strings: [eta, velocity, velocity_variance, velocity_stddev, landmask*] (* default)
+    background_type -  any of the following strings: [eta, velocity, velocity_variance, velocity_stddev, landmask*, depth] (* default)
     drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
@@ -211,16 +211,18 @@ def background_from_ensemble(ensemble, ax=None, figsize=None, domain=[0, None, 0
 
     set_drifter_zoom(ax, extent, drifter_domain, dx, dy)
 
+    if return_extent:
+        return ax, extent
     return ax
 
 def background_from_mlensemble(mlensemble, ax=None, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
-                               background_type="velocity_variance", cmap=None, vmax=None, **kwargs):
+                               background_type="velocity_variance", cmap=None, vmax=None, return_extent=False, **kwargs):
     """
     Creating a background canvas from multi-level ensemble
     
     ensemble    - MultiLevelOceanEnsemble
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
-    background_type -  any of the following strings: [eta, velocity, velocity_variance*, velocity_stddev, landmask] (* default)
+    background_type -  any of the following strings: [eta, velocity, velocity_variance*, velocity_stddev, landmask, depth] (* default)
     drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
@@ -254,9 +256,57 @@ def background_from_mlensemble(mlensemble, ax=None, figsize=None, domain=[0, Non
                                          **kwargs)  
     set_drifter_zoom(ax, extent, drifter_domain, dx, dy)
 
+    if return_extent:
+        return ax, extent
     return ax
 
-def background_from_grid_parameters(nx, ny, dx, dy, ax=None, figsize=None, drifter_domain=[0, None, 0, None], **kwargs):
+def background_from_sim_args(sim_args, ax=None, figsize=None, domain=[0, None, 0, None], drifter_domain=[0, None, 0, None],
+                               background_type="velocity", return_extent=False, **kwargs):
+    """
+    Creating a background canvas from simulator arguments
+    
+    sim_args    - dict with simulator arguments as obtained from, e.g., NetCDFInitialization
+    domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
+    background_type -  any of the following strings: [eta, velocity*, velocity_variance, velocity_stddev, landmask, depth] (* default)
+    drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
+    **kwargs: keyword arguments passed on the make_generic_background
+
+    Note: `domain` sets the x/y axis extent and is therefore different from `drifter_domain`
+    """
+    # Defining extent
+    x0, x1, y0, y1 = domain
+    dx = sim_args["dx"]
+    dy = sim_args["dy"]
+    plot_args = {
+        "eta" : sim_args["eta0"][y0:y1, x0:x1],
+        "hu" : sim_args["hu0"][y0:y1,   x0:x1],
+        "hv" : sim_args["hv0"][y0:y1,   x0:x1],
+        "ny" : sim_args["eta0"][y0:y1,  x0:x1].shape[0],
+        "nx" : sim_args["eta0"][y0:y1,  x0:x1].shape[1],
+        "H_m" : sim_args["Hm"][y0:y1,   x0:x1]
+    }
+    if "lon" in sim_args:
+        plot_args["lon"] = sim_args["lon"][y0:y1, x0:x1]
+    if "lat" in sim_args:
+        plot_args["lat"] = sim_args["lat"][y0:y1, x0:x1]
+    
+
+    ax, extent = make_generic_background(dx, dy, ax=ax,  landmask=None,
+                            **plot_args,
+                            figsize=figsize, 
+                            background_type=background_type,
+                            return_extent=True,
+                            **kwargs)
+
+    set_drifter_zoom(ax, extent, drifter_domain, dx, dy)
+
+    if return_extent:
+        return ax, extent
+    return ax
+
+
+def background_from_grid_parameters(nx, ny, dx, dy, ax=None, figsize=None, 
+                                    drifter_domain=[0, None, 0, None], return_extent=False, **kwargs):
     
 
     ax, extent = make_generic_background(dx, dy, ax=ax, nx=nx, ny=ny,
@@ -266,6 +316,8 @@ def background_from_grid_parameters(nx, ny, dx, dy, ax=None, figsize=None, drift
     
     set_drifter_zoom(ax, extent, drifter_domain, dx, dy)
 
+    if return_extent:
+        return ax, extent
     return ax
 
 def make_generic_background(dx, dy, ax=None, nx=None, ny=None,
@@ -274,13 +326,14 @@ def make_generic_background(dx, dy, ax=None, nx=None, ny=None,
                             figsize=None, cmap=None, vmax=None, cbar=True,
                             background_type='landmask',
                             return_extent=False,
+                            lat=None, lon=None, lonlat_diff=None, lonlat_label=True,
                             **kwargs):
     """
     Creating a background canvas with values directly from np.arrays
     
     dx, dy      - grid cell sizes
     domain      - [x0, x1, y0, y1] indices (int) spanning a frame in the grid of the simulator
-    background_type -  any of the following strings: [eta, velocity, velocity_variance, velocity_stddev, landmask*, empty] (* default)
+    background_type -  any of the following strings: [eta, velocity, velocity_variance, velocity_stddev, landmask*, depth, empty] (* default)
     drifter_domain - [x0, x1, y0, y1] indices (int) spanning a frame inside of the plotting frame
     cmap        - plt.colormap for velocities
     vmax        - maximal velocity 
@@ -297,10 +350,15 @@ def make_generic_background(dx, dy, ax=None, nx=None, ny=None,
             cmap = plt.cm.BrBG
         elif background_type in ["velocity_variance", "velocity_stddev"]:
             cmap = plt.cm.Reds
+        elif background_type == "depth":
+            cmap = plt.cm.terrain_r
         else: # "landmask" or "velocity"
             cmap = plt.cm.Oranges
+        
     cmap = copy.copy(cmap)
     cmap.set_bad("grey", alpha=0.5)
+    # if background_type == "depth":
+    #     cmap.set_bad("darkgray")
     
     nx, ny = nx, ny
     if eta is not None:
@@ -309,6 +367,9 @@ def make_generic_background(dx, dy, ax=None, nx=None, ny=None,
         ny, nx = u.shape
     elif u_var is not None:
         ny, nx = u_var.shape
+    elif H_m is not None:
+        ny, nx = H_m.shape
+
     extent = [0, nx*dx/1000, 0, ny*dy/1000]
 
     # Make the different backgrounds
@@ -328,6 +389,12 @@ def make_generic_background(dx, dy, ax=None, nx=None, ny=None,
         if vmax is None:
             vmax = np.max(np.abs(eta))
         im = ax.imshow(eta, origin="lower", cmap=cmap, vmin=-vmax, vmax=vmax, extent=extent, **kwargs)
+
+    elif background_type == 'depth':
+        assert(H_m is not None), "require H_m to make depth background"
+        if isinstance(eta, np.ma.MaskedArray):
+            H_m = np.ma.array(H_m.data, mask=copy.copy(eta.mask))
+        im = ax.imshow(H_m, origin="lower", cmap=cmap, vmin = 0.0, extent=extent, interpolation=None, **kwargs)
         
     elif background_type == 'velocity':
         if u is None or v is None:
@@ -376,13 +443,29 @@ def make_generic_background(dx, dy, ax=None, nx=None, ny=None,
             cb.set_label(label="velocity variance [$(m/s^2)^2$]")
         elif background_type == 'velocity_stddev':
             cb.set_label(label="velocity std.dev. [$m/s^2$]")
+        elif background_type == "depth":
+            cb.set_label(label="depth [m]")
+
+    # Lat-lon grid
+    if lonlat_diff is not None:
+        if not isinstance(lonlat_diff, list):
+            lonlat_diff = [lonlat_diff, lonlat_diff]
+        assert(lat is not None), "lonlat_diff provided, but 'lat' parameter is missing"
+        assert(lon is not None), "lonlat_diff provided, but 'lon' parameter is missing"
+
+        cont_lon_case = ax.contour(lon, levels = np.arange(0, 90, lonlat_diff[0]), extent=extent, colors="gray", alpha=0.5, linewidths=0.8, zorder=1)
+        cont_lat_case = ax.contour(lat, levels = np.arange(0, 90, lonlat_diff[1]), extent=extent, colors="gray", alpha=0.5, linewidths=0.8, zorder=1)
+
+
+        ax.clabel(cont_lon_case, inline=True, fontsize=8, fmt='%g°E', colors='k')
+        ax.clabel(cont_lat_case, inline=True, fontsize=8, fmt='%g°N', colors="k")
 
     if return_extent:
         return ax, extent
     return ax
 
 def _check_background_type(background_type):
-    valid_background_types = ["eta", "velocity", "velocity_variance", "velocity_stddev", "landmask", "empty"]
+    valid_background_types = ["eta", "velocity", "velocity_variance", "velocity_stddev", "landmask", "empty", "depth"]
     assert(background_type in valid_background_types), "'"+str(background_type)+"' is an invalid background_type. Valid background_type values are "+str(valid_background_types)
         
 ##################################################3

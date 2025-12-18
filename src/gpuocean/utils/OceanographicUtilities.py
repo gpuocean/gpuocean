@@ -126,7 +126,8 @@ def midpointsToIntersections(a_m, iterations=20, tolerance=5e-3, use_minmod=Fals
         values[count>0] = (a_a[count>0] + a_b[count>0] + a_c[count>0] + a_d[count>0]) / count[count>0]
 
         #Create mask
-        out_mask = (count == 0)
+        # out_mask = (count == 0)
+        out_mask = (count < 4)
         
         return np.ma.array(values, mask=out_mask, fill_value=midpoints.fill_value)
     
@@ -281,12 +282,18 @@ def rescaleMidpoints(data, nx1, ny1, **kwargs):
         
     else:
         # Minmod reconstruction of slopes (can be volume preserving)
+        orig_mask = None
+        if np.ma.is_masked(data):
+            orig_mask = np.copy(data.mask)
+            data = data.filled(0)
+
         dx = minmodX(data)
         dy = minmodY(data)
         
         dx1 = nx0 / nx1
         dy1 = ny0 / ny1
         
+
         x1 = np.linspace(0.5*dx1, nx0-0.5*dx1, nx1)
         y1 = np.linspace(0.5*dy1, ny0-0.5*dy1, ny1)
 
@@ -299,8 +306,11 @@ def rescaleMidpoints(data, nx1, ny1, **kwargs):
         t = y1 - (j+0.5)
         
         out_data = data[j, i] + s * dx[j, i] + t * dy[j, i]
-        if np.ma.is_masked(data):
-            out_mask = data.mask[y1.astype(np.int32), x1.astype(np.int32)]
+        # if np.ma.is_masked(data):
+        #     out_mask = data.mask[y1.astype(np.int32), x1.astype(np.int32)]
+        #     out_data = np.ma.array(out_data, mask=out_mask)
+        if orig_mask is not None:
+            out_mask = orig_mask[y1.astype(np.int32), x1.astype(np.int32)]
             out_data = np.ma.array(out_data, mask=out_mask)
         
         return nx0/nx1, ny0/ny1, out_data
@@ -332,11 +342,16 @@ def rescaleIntersections(data, nx1, ny1, **kwargs):
         # Rescales using bilinear interpolation        
         x1 = np.linspace(0, nx0-1, nx1)
         y1 = np.linspace(0, ny0-1, ny1)
-        
+
+        input_mask = None
+        if np.ma.is_masked(data):
+            input_mask = np.copy(data.mask)
+            data = data.filled(5.0)
         x1, y1 = np.meshgrid(x1, y1)
         
         #Get indices of four nearest neighbors
         i = np.int32(x1)
+        
         j = np.int32(y1)
         k = np.minimum(i+1, nx0-1)
         l = np.minimum(j+1, ny0-1)
@@ -347,10 +362,14 @@ def rescaleIntersections(data, nx1, ny1, **kwargs):
         
         out_data = (1.0-t) * ((1.0-s)*data[j, i] + s*data[j, k]) \
                        + t * ((1.0-s)*data[l, i] + s*data[l, k])
-        if np.ma.is_masked(data):
-            out_mask = data.mask[y1.round().astype(np.int32), x1.round().astype(np.int32)]
-            out_data = np.ma.array(out_data, mask=out_mask)
+
+        # if np.ma.is_masked(data):
+        #     out_mask = data.mask[y1.round().astype(np.int32), x1.round().astype(np.int32)]
+        #     out_data = np.ma.array(out_data, mask=out_mask)
         
+        if input_mask is not None:
+            out_data = np.ma.array(out_data, mask=out_data==5)
+
         return (nx0-1)/(nx1-1), (ny0-1)/(ny1-1), out_data
     
     
